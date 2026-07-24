@@ -8,7 +8,7 @@ on:
 
 jobs:
   build-windows:
-    name: Build Windows exe
+    name: Build Windows (exe + installer NSIS)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,17 +24,31 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Build executable
+      - name: Build executable (one-file)
         run: pyinstaller NutriCoach.spec --noconfirm --clean
 
-      - name: Upload artifact
+      - name: Install NSIS
+        run: choco install nsis --no-progress -y
+
+      - name: Build installer (NutriCoach-Setup-<ver>.exe)
+        run: |
+          $ver = "${{ github.ref_name }}".TrimStart("v")
+          makensis /DVERSION=$ver installer.nsi
+
+      - name: Upload exe artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NutriCoach-Windows
+          name: NutriCoach-Windows-exe
           path: dist/NutriCoach.exe
 
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NutriCoach-Windows-setup
+          path: NutriCoach-Setup-*.exe
+
   build-macos:
-    name: Build macOS app
+    name: Build macOS (app + dmg)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,20 +64,40 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Build executable
+      - name: Build executable (one-file)
         run: pyinstaller NutriCoach.spec --noconfirm --clean
 
-      - name: Prepare macOS bundle (zip)
+      - name: Prepare .app bundle
         run: |
-          cd dist
-          mv NutriCoach NutriCoach-macOS || true
-          zip -r NutriCoach-macOS.zip NutriCoach-macOS
+          APP_DIR="dist/NutriCoach.app"
+          mkdir -p "$APP_DIR/Contents/MacOS"
+          mkdir -p "$APP_DIR/Contents/Resources"
+          cp dist/NutriCoach "$APP_DIR/Contents/MacOS/NutriCoach"
+          chmod +x "$APP_DIR/Contents/MacOS/NutriCoach"
+          cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleName</key><string>NutriCoach</string>
+            <key>CFBundleDisplayName</key><string>NutriCoach</string>
+            <key>CFBundleIdentifier</key><string>com.nutricoach.app</string>
+            <key>CFBundleVersion</key><string>${{ github.ref_name }}</string>
+            <key>CFBundleShortVersionString</key><string>${{ github.ref_name }}</string>
+            <key>CFBundleExecutable</key><string>NutriCoach</string>
+            <key>LSMinimumSystemVersion</key><string>11.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict></plist>
+          PLIST
 
-      - name: Upload artifact
+      - name: Build .dmg
+        run: |
+          hdiutil create -volname "NutriCoach" -srcfolder dist/NutriCoach.app -ov -format UDZO "dist/NutriCoach-${{ github.ref_name }}.dmg"
+
+      - name: Upload dmg artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NutriCoach-macOS
-          path: dist/NutriCoach-macOS.zip
+          name: NutriCoach-macOS-dmg
+          path: dist/NutriCoach-*.dmg
 
   release:
     name: Create GitHub Release
@@ -88,16 +122,22 @@ jobs:
           body: |
             ## NutriCoach ${{ github.ref_name }}
 
-            Gestionale nutrizione **100% locale** per nutrizionisti.
+            Gestionale nutrizione **100% locale** per nutrizionisti. Nessun cloud, nessun account remoto.
 
             ### Download
-            - **Windows**: `NutriCoach-Windows.exe`
-            - **macOS**: `NutriCoach-macOS.zip` (estrai → `NutriCoach-macOS`)
+            - **Windows (installer)**: `NutriCoach-Setup-${{ github.ref_name }}.exe` — doppio click, installa in Program Files + scorciatoie.
+            - **Windows (solo exe)**: `NutriCoach.exe` — portatile, estrai e avvia.
+            - **macOS (dmg)**: `NutriCoach-${{ github.ref_name }}.dmg` — apri, trascina `NutriCoach.app` in Applicazioni.
 
-            Al primo avvio imposta il tuo account nutrizionista.
-            I dati restano nel tuo computer (`~/.nutricoach/`).
+            Al primo avvio imposta il tuo account nutrizionista (username + password).
+            I dati restano nel tuo computer (`~/.nutricoach/` su entrambi i sistemi).
+
+            > **macOS**: l'app non è firmata/notarizzata da Apple. Al primo avvio, se compare
+            > "app non può essere aperta", fai click destro → **Apri**, oppure da Terminale:
+            > `xattr -dr com.apple.quarantine /Applications/NutriCoach.app`
           files: |
-            artifacts/NutriCoach-Windows/NutriCoach.exe
-            artifacts/NutriCoach-macOS/NutriCoach-macOS.zip
+            artifacts/NutriCoach-Windows-setup/NutriCoach-Setup-*.exe
+            artifacts/NutriCoach-Windows-exe/NutriCoach.exe
+            artifacts/NutriCoach-macOS-dmg/NutriCoach-*.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
