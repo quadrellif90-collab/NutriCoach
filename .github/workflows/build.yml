@@ -27,13 +27,11 @@ jobs:
       - name: Build executable (one-file)
         run: pyinstaller NutriCoach.spec --noconfirm --clean
 
-      - name: Install NSIS
-        run: choco install nsis --no-progress -y
-
       - name: Build installer (NutriCoach-Setup-<ver>.exe)
-        run: |
-          $ver = "${{ github.ref_name }}".TrimStart("v")
-          makensis /DVERSION=$ver installer.nsi
+        uses: joshua-rice/nsis-action@v1
+        with:
+          script: installer.nsi
+          args: /DVERSION=${{ github.ref_name }}
 
       - name: Upload exe artifact
         uses: actions/upload-artifact@v4
