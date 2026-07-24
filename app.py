@@ -1,0 +1,659 @@
+"""NutriCoach — Backend FastAPI (localhost, nessun cloud)."""
+
+import os
+import sys
+import json
+import shutil
+import tempfile
+import datetime
+from fastapi import FastAPI, UploadFile, File, Request, HTTPException
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+
+# risoluzione percorso risorse: funziona sia da sorgente che da EXE (PyInstaller)
+def resource_path(rel):
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, rel)
+
+import db as database
+import diet_parser
+import bia_parser
+import nutrition_engine
+import anthropometry as ant
+import charts
+import pdf_export
+import auth
+import notifications
+import nutrition_db as ndb
+import meal_planner
+
+UPLOAD_DIR = os.path.join(database.DATA_DIR, "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+app = FastAPI(title="NutriCoach", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], allow_credentials=True,
+    allow_methods=["*"], allow_headers=["*"],
+)
+
+STATIC = os.path.join(os.path.dirname(__file__), "static")
+os.makedirs(STATIC, exist_ok=True)
+
+
+# ---------------- UI ----------------
+@app.get("/")
+def api_root():
+    return FileResponse(resource_path(os.path.join("templates", "dashboard.html")))
+
+
+# ---------------- Alimenti (ricerca + custom) ----------------
+@app.get("/api/foods/search")
+def api_food_search(q: str = "", limit: int = 25):
+    return ndb.search_foods(q, limit)
+
+@app.get("/api/foods/custom")
+def api_custom_foods():
+    return database.list_custom_foods()
+
+@app.post("/api/foods/custom")
+async def api_custom_food_add(request: Request):
+    b = await request.json()
+    fid = database.add_custom_food(b.get("name", ""), b.get("per_100g", {}))
+    return {"ok": True, "id": fid}
+
+@app.delete("/api/foods/custom/{fid}")
+def api_custom_food_del(fid: int):
+    database.delete_custom_food(fid)
+    return {"ok": True}
+
+
+# ---------------- Diet builder (diario) ----------------
+@app.post("/api/clients/{cid}/diet-item")
+async def api_diet_item_add(cid: int, request: Request):
+    b = await request.json()
+    iid = database.add_diet_item(cid, b.get("day", ""), b.get("meal", ""),
+                                 b.get("food", ""), b.get("grams", 0),
+                                 int(bool(b.get("custom", 0))))
+    return {"ok": True, "id": iid}
+
+@app.get("/api/clients/{cid}/diet-items")
+def api_diet_items(cid: int, day: str = None):
+    return database.list_diet_items(cid, day)
+
+@app.delete("/api/clients/{cid}/diet-item/{iid}")
+def api_diet_item_del(cid: int, iid: int):
+    database.delete_diet_item(iid)
+    return {"ok": True}
+
+@app.get("/api/clients/{cid}/diary/totals")
+def api_diary_totals(cid: int, day: str = None):
+    return meal_planner.diary_totals(cid, day)
+
+@app.post("/api/clients/{cid}/plan/generate")
+async def api_plan_generate(cid: int, request: Request):
+    b = await request.json()
+    targets = b.get("targets", {})
+    options = b.get("options", {})
+    plan = meal_planner.generate_plan(targets, options)
+    return plan
+
+
+# ---------------- Messaggi (thread locale) ----------------
+@app.post("/api/clients/{cid}/message")
+async def api_message_add(cid: int, request: Request):
+    b = await request.json()
+    mid = database.add_message(cid, b.get("direction", "nutri->client"), b.get("text", ""),
+                                b.get("date"))
+    return {"ok": True, "id": mid}
+
+@app.get("/api/clients/{cid}/messages")
+def api_messages(cid: int):
+    return database.list_messages(cid)
+
+
+# ---------------- Appuntamenti ----------------
+@app.post("/api/appointments")
+async def api_appt_add(request: Request):
+    b = await request.json()
+    aid = database.add_appointment(b.get("client_id"), b.get("title", ""),
+                                   b.get("note", ""), b.get("appt_date"))
+    return {"ok": True, "id": aid}
+
+@app.get("/api/appointments")
+def api_appointments(client_id: int = None):
+    return database.list_appointments(client_id)
+
+@app.put("/api/appointments/{aid}/done")
+async def api_appt_done(aid: int, request: Request):
+    b = await request.json()
+    database.set_appointment_done(aid, int(b.get("done", 1)))
+    return {"ok": True}
+
+
+# ---------------- Acqua ----------------
+@app.post("/api/clients/{cid}/water")
+async def api_water_add(cid: int, request: Request):
+    b = await request.json()
+    wid = database.add_water(cid, b.get("date", _today()), b.get("ml", 0))
+    return {"ok": True, "id": wid}
+
+@app.get("/api/clients/{cid}/water")
+def api_water_get(cid: int, date: str = None):
+    if date:
+        return {"ml": database.get_water(cid, date)}
+    return database.list_water(cid)
+
+
+# ---------------- Note di progresso ----------------
+@app.post("/api/clients/{cid}/progress-note")
+async def api_prognote_add(cid: int, request: Request):
+    b = await request.json()
+    nid = database.add_progress_note(cid, b.get("date", _today()), b.get("text", ""))
+    return {"ok": True, "id": nid}
+
+@app.get("/api/clients/{cid}/progress-notes")
+def api_prognote_list(cid: int):
+    return database.list_progress_notes(cid)
+
+
+# ---------------- Clients ----------------
+@app.get("/api/clients")
+def api_clients():
+    return database.list_clients()
+
+
+@app.post("/api/clients")
+async def api_client_create(request: Request):
+    body = await request.json()
+    cid = database.add_client(
+        name=body.get("name", "Senza nome"),
+        dob=body.get("dob", ""),
+        sex=body.get("sex", ""),
+        age=body.get("age"),
+        height_cm=body.get("height_cm"),
+        activity=body.get("activity", "moderato"),
+        athlete=int(bool(body.get("athlete", False))),
+        email=body.get("email", ""),
+        phone=body.get("phone", ""),
+        goal=body.get("goal", ""),
+        allergies=body.get("allergies", ""),
+        pathologies=body.get("pathologies", ""),
+        preferences=body.get("preferences", ""),
+        notes=body.get("notes", ""),
+    )
+    return {"id": cid}
+
+
+@app.put("/api/clients/{cid}")
+async def api_client_update(cid: int, request: Request):
+    body = await request.json()
+    database.update_client(cid, **body)
+    return {"ok": True}
+
+
+@app.post("/api/clients/{cid}/profile")
+async def api_client_profile(cid: int, request: Request):
+    """Aggiorna profilo anagrafico + anamnesi + misura antropometrica in un colpo solo."""
+    body = await request.json()
+    prof = {k: body.get(k) for k in
+            ("name", "dob", "sex", "age", "height_cm", "activity", "athlete",
+             "email", "phone", "goal", "allergies", "pathologies", "preferences", "notes")}
+    prof = {k: v for k, v in prof.items() if v is not None}
+    if prof:
+        database.update_client(cid, **prof)
+    m = body.get("measurement", {})
+    if m:
+        date = m.get("date") or datetime.date.today().isoformat()
+        database.add_measurement(cid, date, **m)
+    return {"ok": True}
+
+
+@app.get("/api/clients/{cid}/anthropometry")
+def api_anthropometry(cid: int):
+    res = database.compute_anthropometry(cid)
+    if not res:
+        raise HTTPException(404, "cliente non trovato")
+    return res
+
+
+@app.get("/api/clients/{cid}/charts")
+def api_charts(cid: int, metric: str = "weight"):
+    """Trend SVG per peso/%grassa/phA. metric: weight|fat|pha|all."""
+    ms = database.list_measurements(cid)
+    bias = database.list_bia(cid)
+    labels = [m.get("date", "") for m in ms]
+    weight = [m.get("weight_kg") for m in ms if m.get("weight_kg")]
+    # % grassa ricavata da antropometria se hai le pieghe; qui usa BIA se presente
+    fat, pha = [], []
+    for b in bias:
+        d = b.get("data", {})
+        if "bodyFat" in d or "fat_pct" in d:
+            fat.append(d.get("bodyFat") or d.get("fat_pct"))
+        if "pha" in d or "phA" in d:
+            pha.append(d.get("pha") or d.get("phA"))
+    if metric == "weight":
+        return Response(charts.line_chart(weight, labels, title="Peso (kg)", color="#0d9488"), media_type="image/svg+xml")
+    if metric == "fat":
+        return Response(charts.line_chart(fat, labels, title="% grassa", color="#f59e0b"), media_type="image/svg+xml")
+    if metric == "pha":
+        return Response(charts.line_chart(pha, labels, title="PhA (°)", color="#6366f1"), media_type="image/svg+xml")
+    return Response(charts.trend_block(weight, fat, pha, labels), media_type="image/svg+xml")
+
+
+@app.get("/api/clients/{cid}/export-pdf")
+async def api_export_pdf(cid: int, diet_id: int = None, selections: str = "{}"):
+    try:
+        sel = json.loads(selections) if isinstance(selections, str) else selections
+    except Exception:
+        sel = {}
+    path = os.path.join(tempfile.gettempdir(), f"report_{cid}.pdf")
+    pdf_export.build_report_pdf(cid, diet_id, sel, path)
+    return FileResponse(path, media_type="application/pdf", filename=f"report_{database.get_client(cid).get('name','cliente')}.pdf")
+
+
+# ---------------- Auth (login nutrizionista, locale) ----------------
+@app.get("/api/auth/status")
+def api_auth_status():
+    return {"has_account": auth.has_account(), "username": auth.get_username()}
+
+
+@app.post("/api/auth/setup")
+async def api_auth_setup(request: Request):
+    if auth.has_account():
+        raise HTTPException(403, "account gia' creato")
+    b = await request.json()
+    user = (b.get("username") or "").strip()
+    pw = b.get("password", "")
+    if len(user) < 2:
+        raise HTTPException(400, "username troppo corto (min 2)")
+    if len(pw) < 4:
+        raise HTTPException(400, "password troppo corta (min 4)")
+    auth.set_account(user, pw)
+    return {"ok": True}
+
+
+@app.post("/api/auth/login")
+async def api_auth_login(request: Request):
+    if not auth.has_account():
+        raise HTTPException(400, "crea prima un account")
+    b = await request.json()
+    if auth.verify_password(b.get("username", ""), b.get("password", "")):
+        return {"ok": True}
+    raise HTTPException(401, "credenziali errate")
+
+
+@app.post("/api/auth/change")
+async def api_auth_change(request: Request):
+    b = await request.json()
+    if not auth.verify_password(b.get("current_user", ""), b.get("current", "")):
+        raise HTTPException(401, "credenziali attuali errate")
+    user = (b.get("username") or "").strip() or auth.get_username()
+    pw = b.get("password", "")
+    if len(pw) < 4:
+        raise HTTPException(400, "password troppo corta (min 4)")
+    auth.set_account(user, pw)
+    return {"ok": True}
+
+
+@app.post("/api/auth/reset")
+def api_auth_reset():
+    """Reset delle credenziali (lascia intatti i dati dei clienti)."""
+    auth.clear_account()
+    return {"ok": True}
+
+
+# ---------------- Reminders ----------------
+@app.get("/api/reminders")
+def api_reminders_list(client_id: int = None):
+    return database.list_reminders(client_id)
+
+
+@app.post("/api/clients/{cid}/reminders")
+async def api_reminder_create(cid: int, request: Request):
+    b = await request.json()
+    rid = database.add_reminder(cid, b.get("title", ""), b.get("note", ""),
+                                b.get("due_date"), b.get("channel", "app"))
+    return {"id": rid}
+
+
+@app.put("/api/reminders/{rid}/done")
+async def api_reminder_done(rid: int, request: Request):
+    b = await request.json()
+    database.set_reminder_done(rid, int(b.get("done", 1)))
+    return {"ok": True}
+
+
+@app.delete("/api/reminders/{rid}")
+def api_reminder_delete(rid: int):
+    database.delete_reminder(rid)
+    return {"ok": True}
+
+
+# ---------------- Notifiche (config per cliente + coda) ----------------
+@app.get("/api/clients/{cid}/notification-prefs")
+def api_notif_prefs_get(cid: int):
+    prefs = database.get_notification_prefs(cid)
+    from_db = {p["type"]: p for p in prefs}
+    out = []
+    for t, label in notifications.TYPES.items():
+        if t in from_db:
+            p = from_db[t]; p["label"] = label
+        else:
+            p = {"type": t, "label": label, "enabled": False, "channel": "app", "freq": "weekly"}
+        out.append(p)
+    return out
+
+
+@app.post("/api/clients/{cid}/notification-prefs")
+async def api_notif_prefs_set(cid: int, request: Request):
+    b = await request.json()
+    database.set_notification_prefs(cid, b.get("prefs", []))
+    return {"ok": True}
+
+
+@app.post("/api/clients/{cid}/notifications/generate")
+def api_notif_generate(cid: int):
+    ids = notifications.generate_due(cid, database)
+    return {"created": ids, "count": len(ids)}
+
+
+@app.get("/api/notifications")
+def api_notif_list(status: str = "pending", client_id: int = None):
+    return database.list_notifications(client_id, status)
+
+
+@app.put("/api/notifications/{nid}/sent")
+async def api_notif_sent(nid: int, request: Request):
+    b = await request.json()
+    database.set_notification_sent(nid, bool(b.get("sent", True)))
+    return {"ok": True}
+
+
+# ---------------- Confronto clienti ----------------
+@app.get("/api/clients/compare")
+def api_compare(ids: str = ""):
+    """ids = "1,3,5". Ritorna snapshot per confronto."""
+    try:
+        idlist = [int(x) for x in ids.split(",") if x.strip()]
+    except Exception:
+        idlist = []
+    return database.compare_clients(idlist)
+
+
+@app.get("/api/diets/{did}/export-diet-pdf")
+async def api_export_diet_pdf(did: int, selections: str = "{}"):
+    try:
+        sel = json.loads(selections) if isinstance(selections, str) else selections
+    except Exception:
+        sel = {}
+    d = database.get_diet(did)
+    if not d:
+        raise HTTPException(404, "dieta non trovata")
+    path = os.path.join(tempfile.gettempdir(), f"dieta_{did}.pdf")
+    pdf_export.build_diet_pdf(d["diet"], sel, path)
+    return FileResponse(path, media_type="application/pdf", filename=f"dieta_{did}.pdf")
+
+
+@app.get("/api/clients/{cid}")
+def api_client_get(cid: int):
+    c = database.get_client(cid)
+    if not c:
+        raise HTTPException(404, "Cliente non trovato")
+    return c
+
+
+@app.put("/api/clients/{cid}")
+async def api_client_update(cid: int, request: Request):
+    body = await request.json()
+    database.update_client(cid, **body)
+    return {"ok": True}
+
+
+@app.delete("/api/clients/{cid}")
+def api_client_delete(cid: int):
+    database.delete_client(cid)
+    return {"ok": True}
+
+
+# ---------------- Measurements ----------------
+@app.post("/api/clients/{cid}/measurements")
+async def api_measurement_add(cid: int, request: Request):
+    body = await request.json()
+    database.add_measurement(cid, body.get("date", _today()), **body)
+    return {"ok": True}
+
+
+@app.get("/api/clients/{cid}/measurements")
+def api_measurements(cid: int):
+    return database.list_measurements(cid)
+
+
+# ---------------- BIA ----------------
+@app.post("/api/clients/{cid}/bia/upload")
+async def api_bia_upload(cid: int, file: UploadFile = File(...)):
+    path = os.path.join(UPLOAD_DIR, f"bia_{cid}_{_timestamp()}_{file.filename}")
+    with open(path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    res = bia_parser.parse_bia_pdf(path)
+    if res.get("scanned"):
+        return {"scanned": True, "pages": res.get("pages", []), "file": path}
+    # salva direttamente
+    bid = database.add_bia(cid, _today(), res["fields"], source=file.filename)
+    return {"scanned": False, "bia_id": bid, "fields": res["fields"]}
+
+
+@app.post("/api/clients/{cid}/bia/paste")
+async def api_bia_paste(cid: int, request: Request):
+    body = await request.json()
+    text = body.get("text", "")
+    parsed = bia_parser.parse_bia_pasted(text)
+    date = body.get("date", _today())
+    bid = database.add_bia(cid, date, parsed["fields"], source="paste-ocr")
+    return {"ok": True, "bia_id": bid, "fields": parsed["fields"]}
+
+
+@app.get("/api/clients/{cid}/bia")
+def api_bia_list(cid: int):
+    return database.list_bia(cid)
+
+
+# ---------------- Diets ----------------
+@app.post("/api/clients/{cid}/diet/upload")
+async def api_diet_upload(cid: int, file: UploadFile = File(...)):
+    path = os.path.join(UPLOAD_DIR, f"diet_{cid}_{_timestamp()}_{file.filename}")
+    with open(path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    res = diet_parser.parse_diet_pdf(path)
+    if res.get("scanned"):
+        return {"scanned": True, "text": "", "file": path}
+    did = database.add_diet(cid, res["diet"], title=res["diet"].get("title", ""),
+                            date=res["diet"].get("date", ""), source_file=file.filename)
+    return {"scanned": False, "diet_id": did, "diet": res["diet"]}
+
+
+@app.post("/api/clients/{cid}/diet/text")
+async def api_diet_text(cid: int, request: Request):
+    body = await request.json()
+    text = body.get("text", "")
+    parsed = diet_parser.parse_diet_text(text)
+    did = database.add_diet(cid, parsed, title=body.get("title", "Dieta incollata"),
+                            date=body.get("date", ""), source_file="paste")
+    return {"diet_id": did, "diet": parsed}
+
+
+@app.get("/api/clients/{cid}/diets")
+def api_diets(cid: int):
+    return database.list_diets(cid)
+
+
+@app.get("/api/diets/{did}")
+def api_diet_get(did: int):
+    d = database.get_diet(did)
+    if not d:
+        raise HTTPException(404, "Dieta non trovata")
+    return d
+
+
+# ---------------- Computed: piano / spesa / riepilogo ----------------
+@app.post("/api/diets/{did}/compute")
+async def api_diet_compute(did: int, request: Request):
+    d = database.get_diet(did)
+    if not d:
+        raise HTTPException(404, "Dieta non trovata")
+    body = await request.json()
+    selections = body.get("selections", {})
+    comp = nutrition_engine.compute_diet(d["diet"], selections)
+    return comp
+
+
+@app.post("/api/diets/{did}/shopping-list")
+async def api_shopping(did: int, request: Request):
+    d = database.get_diet(did)
+    if not d:
+        raise HTTPException(404, "Dieta non trovata")
+    body = await request.json()
+    sl = nutrition_engine.build_shopping_list(d["diet"], body.get("selections", {}))
+    return {"shopping": sl}
+
+
+@app.post("/api/diets/{did}/summary")
+async def api_summary(did: int, request: Request):
+    d = database.get_diet(did)
+    if not d:
+        raise HTTPException(404, "Dieta non trovata")
+    body = await request.json()
+    cid = body.get("client_id")
+    client = database.get_client(cid) if cid else None
+    bia = database.list_bia(cid)[0]["data"] if (cid and database.list_bia(cid)) else None
+    summ = nutrition_engine.weekly_summary(d["diet"], body.get("selections", {}), client, bia)
+    return summ
+
+
+@app.post("/api/diets/{did}/plan/save")
+async def api_plan_save(did: int, request: Request):
+    body = await request.json()
+    pid = database.save_plan(body.get("client_id"), body.get("selections", {}),
+                             diet_id=did, title=body.get("title", ""), week_start=body.get("week_start", ""))
+    return {"plan_id": pid}
+
+
+# ---------------- Recipes ----------------
+@app.get("/api/recipes")
+def api_recipes():
+    return database.list_recipes()
+
+
+@app.post("/api/recipes")
+async def api_recipe_create(request: Request):
+    body = await request.json()
+    rid = database.add_recipe(
+        title=body.get("title", "Ricetta"),
+        description=body.get("description", ""),
+        ingredients=body.get("ingredients", []),
+        steps=body.get("steps", []),
+        nutrients=body.get("nutrients", {}),
+        author=body.get("author", "nutrizionista"),
+    )
+    return {"id": rid}
+
+
+# ---------------- Export HTML piano cliente ----------------
+@app.post("/api/diets/{did}/export-html")
+async def api_export_html(did: int, request: Request):
+    d = database.get_diet(did)
+    if not d:
+        raise HTTPException(404, "Dieta non trovata")
+    body = await request.json()
+    cid = body.get("client_id")
+    client = database.get_client(cid) if cid else None
+    bia = database.list_bia(cid)[0]["data"] if (cid and database.list_bia(cid)) else None
+    html = build_plan_html(d["diet"], client, bia, body.get("selections", {}))
+    out = os.path.join(UPLOAD_DIR, f"piano_{cid or did}_{_timestamp()}.html")
+    with open(out, "w", encoding="utf-8") as f:
+        f.write(html)
+    return FileResponse(out, media_type="text/html", filename=os.path.basename(out))
+
+
+# ---------------- Helpers ----------------
+def _today():
+    return datetime.date.today().isoformat()
+
+
+def _timestamp():
+    return datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+def build_plan_html(diet, client, bia, selections):
+    """Genera HTML responsive del piano nutrizionale cliente."""
+    comp = nutrition_engine.compute_diet(diet, selections)
+    rows = []
+    for day in comp["days"]:
+        for meal in day["meals"]:
+            opts_html = []
+            for gi, grp in enumerate(meal["groups"]):
+                for oi, o in enumerate(grp["options"]):
+                    active = o.get("active")
+                    opts_html.append(
+                        f"<li class='{'active' if active else 'opt'}'>"
+                        f"<b>{o['food']}</b> {o['grams']:.0f} g "
+                        f"<span class='kcal'>{o['kcal']:.0f} kcal</span>"
+                        f"{'' if o['matched'] else ' <span class=unmatched>?</span>'}"
+                        f"{' ✓' if active else ''}</li>")
+            rows.append(f"""
+            <div class="meal">
+              <h4>{day['day']} — {meal['meal']} <span class="mtot">{meal['totals']['kcal']:.0f} kcal</span></h4>
+              <ul>{''.join(opts_html)}</ul>
+            </div>""")
+    client_html = ""
+    if client:
+        client_html = f"<p><b>Cliente:</b> {client.get('name')} &nbsp; <b>Obiettivo:</b> {client.get('goal')}</p>"
+    bia_html = ""
+    if bia:
+        bia_html = "<p class='bia'>" + " &nbsp; ".join(f"{k}: {v}" for k, v in bia.items()) + "</p>"
+    w = comp["week"]
+    return f"""<!DOCTYPE html>
+<html lang="it"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Piano Nutrizionale — {client.get('name') if client else 'Cliente'}</title>
+<style>
+  *{{box-sizing:border-box}}
+  body{{font-family:system-ui,Segoe UI,Arial,sans-serif;margin:0;background:#f5f7fa;color:#1a2332}}
+  .wrap{{max-width:900px;margin:auto;padding:24px}}
+  h1{{color:#0d9488}}
+  .kpi{{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0}}
+  .kpi div{{background:#fff;border-left:4px solid #0d9488;padding:10px 16px;border-radius:8px;flex:1;min-width:120px}}
+  .kpi b{{display:block;font-size:1.4em;color:#0d9488}}
+  .meal{{background:#fff;border-radius:10px;padding:12px 16px;margin:10px 0;box-shadow:0 1px 3px rgba(0,0,0,.08)}}
+  .meal h4{{margin:0 0 6px;color:#334155}}
+  .mtot{{float:right;color:#f59e0b;font-weight:600}}
+  ul{{margin:4px 0;padding-left:18px}}
+  li{{margin:2px 0}}
+  li.opt{{color:#64748b}}
+  li.active{{color:#0f172a;font-weight:600}}
+  .kcal{{color:#94a3b8;font-size:.85em}}
+  .unmatched{{color:#ef4444}}
+  .bia{{background:#fff7ed;padding:8px 12px;border-radius:8px;color:#9a3412;font-size:.9em}}
+  @media(max-width:600px){{.kpi div{{min-width:45%}}}}
+</style></head>
+<body><div class="wrap">
+  <h1>Piano Nutrizionale Settimanale</h1>
+  {client_html}
+  {bia_html}
+  <div class="kpi">
+    <div><b>{w['avg_day']['kcal']:.0f}</b>kcal/media giorno</div>
+    <div><b>{w['avg_day']['p']:.0f} g</b>proteine</div>
+    <div><b>{w['avg_day']['c']:.0f} g</b>carboidrati</div>
+    <div><b>{w['avg_day']['f']:.0f} g</b>grassi</div>
+    <div><b>{w['avg_day']['fib']:.0f} g</b>fibre</div>
+  </div>
+  {''.join(rows)}
+  <p style="margin-top:24px;color:#94a3b8;font-size:.8em">Generato con NutriCoach — valori stimati da database alimenti di riferimento.</p>
+</div></body></html>"""
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8090)

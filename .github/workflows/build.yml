@@ -1,0 +1,103 @@
+name: Build NutriCoach (Windows + macOS)
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    name: Build Windows exe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build executable
+        run: pyinstaller NutriCoach.spec --noconfirm --clean
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NutriCoach-Windows
+          path: dist/NutriCoach.exe
+
+  build-macos:
+    name: Build macOS app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build executable
+        run: pyinstaller NutriCoach.spec --noconfirm --clean
+
+      - name: Prepare macOS bundle (zip)
+        run: |
+          cd dist
+          mv NutriCoach NutriCoach-macOS || true
+          zip -r NutriCoach-macOS.zip NutriCoach-macOS
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NutriCoach-macOS
+          path: dist/NutriCoach-macOS.zip
+
+  release:
+    name: Create GitHub Release
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List downloaded
+        run: ls -R artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: NutriCoach ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          body: |
+            ## NutriCoach ${{ github.ref_name }}
+
+            Gestionale nutrizione **100% locale** per nutrizionisti.
+
+            ### Download
+            - **Windows**: `NutriCoach-Windows.exe`
+            - **macOS**: `NutriCoach-macOS.zip` (estrai → `NutriCoach-macOS`)
+
+            Al primo avvio imposta il tuo account nutrizionista.
+            I dati restano nel tuo computer (`~/.nutricoach/`).
+          files: |
+            artifacts/NutriCoach-Windows/NutriCoach.exe
+            artifacts/NutriCoach-macOS/NutriCoach-macOS.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

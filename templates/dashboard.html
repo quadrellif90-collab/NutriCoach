@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NutriCoach — Gestione Nutrizione per Nutrizionisti</title>
+<script>try{ if(localStorage.getItem('nc-theme')==='light'){ document.documentElement.classList.add('light'); } }catch(e){}</script>
+<style>
+:root{
+  --bg:#0a0e14; --surface:#131a24; --surface2:#1a2332; --border:#2d3f52;
+  --text:#e6edf3; --text2:#aab6c4; --text3:#6b7a8d;
+  /* NutriCoach palette: teal/cyan (primary) + amber (secondary) */
+  --accent:#0d9488; --accent2:#f59e0b; --accent3:#14b8a6;
+  --danger:#ef4444; --ok:#22c55e; --card:#1f2a3a;
+}
+/* Tema chiaro */
+body.light{
+  --bg:#f4f6f9; --surface:#ffffff; --surface2:#eef2f6; --border:#d6dee6;
+  --text:#0f172a; --text2:#475569; --text3:#94a3b8;
+  --card:#ffffff;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
+a{color:var(--accent3);text-decoration:none}
+.app-shell{display:flex;min-height:100vh}
+.sidebar-tabs{width:200px;background:var(--surface);border-right:1px solid var(--border);padding:14px 8px;display:flex;flex-direction:column;gap:4px}
+.sidebar-tabs h1{font-size:18px;color:var(--accent);margin:6px 8px 14px;display:flex;align-items:center;gap:6px}
+.sidebar-tabs .tab{padding:9px 12px;border-radius:8px;color:var(--text2);cursor:pointer;font-size:14px;border:1px solid transparent}
+.sidebar-tabs .tab:hover{background:var(--surface2)}
+.sidebar-tabs .tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.main-content{flex:1;padding:24px;overflow-y:auto}
+h2{color:var(--text);margin-top:0}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px}
+.btn{background:var(--accent);color:#fff;border:none;padding:9px 16px;border-radius:8px;cursor:pointer;font-size:14px}
+.btn:hover{background:var(--accent3)}
+.btn.amber{background:var(--accent2)}
+.btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
+.btn.danger{background:var(--danger)}
+input,select,textarea{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:7px;width:100%;margin:4px 0;font-size:14px}
+label{font-size:12px;color:var(--text3);display:block;margin-top:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.client-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;cursor:pointer;transition:.15s}
+.client-card:hover{border-color:var(--accent)}
+.client-card h3{margin:0 0 4px;font-size:15px}
+.client-card .goal{font-size:12px;color:var(--accent2)}
+.tag{display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:11px;color:var(--text2);margin:2px}
+.kpi{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+.kpi .k{background:var(--card);border-left:3px solid var(--accent);border-radius:8px;padding:10px 14px;flex:1;min-width:110px}
+.kpi .k b{display:block;font-size:1.5em;color:var(--accent)}
+.meal{background:var(--card);border-radius:10px;padding:12px 14px;margin:10px 0}
+.meal h4{margin:0 0 6px;color:var(--text)}
+.meal .mtot{float:right;color:var(--accent2);font-weight:600}
+.food{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)}
+.food .grams{color:var(--text3);font-size:13px;min-width:70px}
+.food .kcal{margin-left:auto;color:var(--text3);font-size:12px}
+.food.alt{opacity:.7;padding-left:14px;border-left:2px solid var(--accent2)}
+.food input[type=radio]{accent-color:var(--accent)}
+.unmatched{color:var(--danger);font-size:11px}
+.shop-item{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)}
+.hidden{display:none}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--accent);color:#fff;padding:12px 18px;border-radius:10px;opacity:0;transition:.3s;z-index:300}
+.toast.show{opacity:1}
+.preview-img{max-width:100%;border:1px solid var(--border);border-radius:8px;margin:6px 0}
+.section-note{font-size:13px;color:var(--text2);margin:6px 0 14px}
+.bia-fields{display:flex;flex-wrap:wrap;gap:8px}
+.bia-fields .f{background:var(--card);border-radius:8px;padding:8px 12px;font-size:13px}
+.bia-fields .f b{color:var(--accent)}
+/* --- flusso lista/cliente --- */
+#client-header{display:none;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 16px;margin-bottom:16px}
+#client-header .cname{font-size:18px;font-weight:600;color:var(--accent)}
+#client-header .cmeta{font-size:12px;color:var(--text3)}
+#list-overlay{position:fixed;inset:0;background:var(--bg);z-index:50;padding:28px;overflow-y:auto}
+#list-overlay h1{color:var(--accent)}
+.cmp-table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
+.cmp-table th,#cmp-table td{border:1px solid var(--border);padding:8px 10px;text-align:left}
+.cmp-table th{background:var(--surface2);color:var(--text2)}
+.cmp-table td.name{color:var(--accent3);font-weight:600}
+.client-card .pick{position:absolute;top:8px;right:8px}
+.client-card{position:relative}
+.reminder{display:flex;align-items:flex-start;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin:8px 0}
+.reminder.done{opacity:.5}
+.reminder .rd{font-size:12px;color:var(--text3)}
+
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="sidebar-tabs">
+    <h1>🥗 NutriCoach</h1>
+    <button class="btn ghost" style="position:fixed;top:10px;right:10px;z-index:300;margin:0" onclick="toggleTheme()">🌓 Tema</button>
+    <div class="tab" data-tab="clients" id="tab-clients">👥 Clienti / Esci</div>
+    <div class="tab" data-tab="import">📥 Importa</div>
+    <div class="tab" data-tab="anthro">📐 Antropometria</div>
+    <div class="tab" data-tab="plan">📋 Piano</div>
+    <div class="tab" data-tab="shopping">🛒 Spesa</div>
+    <div class="tab" data-tab="summary">📊 Riepilogo</div>
+    <div class="tab" data-tab="reminders">🔔 Promemoria</div>
+    <div class="tab" data-tab="agenda">📅 Agenda</div>
+    <div class="tab" data-tab="notif">📨 Notifiche</div>
+    <div class="tab" data-tab="recipes">🍲 Ricette</div>
+    <div class="tab" data-tab="diario">🍽️ Diario</div>
+    <div class="tab" data-tab="pianifica">🤖 Pianifica</div>
+    <div class="tab" data-tab="messaggi">💬 Messaggi</div>
+    <div class="tab" data-tab="acqua">💧 Acqua</div>
+    <div class="tab" data-tab="progressi">📈 Progressi</div>
+  </div>
+
+  <div class="main-content">
+    <!-- HEADER CLIENTE (visibile solo dentro il cliente) -->
+    <div id="client-header">
+      <div>
+        <div class="cname" id="ch-name">—</div>
+        <div class="cmeta" id="ch-meta"></div>
+      </div>
+      <button class="btn ghost" onclick="exitClient()">⟵ Esci (vedi tutti)</button>
+    </div>
+
+    <!-- OVERLAY LOGIN NUTRIZIONISTA -->
+    <div id="login-overlay" style="position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;align-items:center;justify-content:center">
+      <div class="card" style="width:340px;max-width:92vw;text-align:center">
+        <h1 style="color:var(--accent);margin-top:0">🥗 NutriCoach</h1>
+        <p id="login-sub" class="section-note">Accesso riservato al nutrizionista</p>
+        <div id="login-msg" style="color:var(--danger);font-size:13px;min-height:18px;margin:6px 0"></div>
+        <div id="login-setup" style="display:none">
+          <label>Utente</label>
+          <input id="lp-user" type="text" placeholder="nome utente" autocomplete="username">
+          <label>Crea una password (min 4 caratteri)</label>
+          <input id="lp-new" type="password" placeholder="nuova password" autocomplete="new-password">
+          <button class="btn" style="width:100%;margin-top:8px" onclick="doSetup()">Crea account</button>
+        </div>
+        <div id="login-in" style="display:none">
+          <label>Utente</label>
+          <input id="lp-user2" type="text" placeholder="nome utente" autocomplete="username">
+          <input id="lp-pass" type="password" placeholder="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+          <button class="btn" style="width:100%;margin-top:8px" onclick="doLogin()">Accedi</button>
+          <button class="btn ghost" style="width:100%;margin-top:8px;font-size:12px" onclick="resetAccount()">Password dimenticata? Reimposta account</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- OVERLAY LISTA CLIENTI (vista "fuori") -->
+    <div id="list-overlay" style="display:none">
+      <h1>🥗 NutriCoach — I tuoi clienti</h1>
+      <p class="section-note">Seleziona i clienti (tick) per confrontarli, oppure entra in uno per vederne i dettagli. Database locale, nessun cloud.</p>
+      <div class="row" style="margin-bottom:14px">
+        <div style="flex:1"><label>Nuovo cliente</label><input id="c-name" placeholder="Nome cliente"></div>
+        <div style="width:120px"><label>Sesso</label><input id="c-sex" placeholder="M/F"></div>
+        <div style="width:140px"><label>Obiettivo</label><input id="c-goal" placeholder="Dimagrimento"></div>
+        <button class="btn" onclick="addClient()">+ Aggiungi</button>
+        <button class="btn amber" onclick="showCompare()">⚖ Confronta selezionati</button>
+      </div>
+      <div class="grid" id="client-grid"></div>
+      <div id="compare-result"></div>
+      <div class="card" style="margin-top:20px">
+        <h3>📨 Coda nutrizionista — cosa inviare ai clienti</h3>
+        <p class="section-note">Promemoria per il nutrizionista: i messaggi in attesa di invio verso i clienti. (Invio via WhatsApp/Email verrà attivato in seguito con i client di sistema.)</p>
+        <div id="nutri-queue"></div>
+      </div>
+    </div>
+
+    <!-- CLIENTS (section legacy, nascosta di default) -->
+    <section id="clients" class="tabpane hidden"></section>
+
+    <!-- IMPORT -->
+    <section id="import" class="tabpane hidden">
+      <h2>Importa dati cliente</h2>
+      <div class="card">
+        <label>Seleziona cliente</label>
+        <select id="imp-client"></select>
+        <h3 style="margin-top:16px;color:var(--accent3)">📄 Dieta (PDF)</h3>
+        <p class="section-note">Carica il PDF dieta (es. "Filippo estate.pdf"). Estrae giorni, pasti, alimenti, grammi e alternative.</p>
+        <input type="file" id="imp-diet" accept=".pdf">
+        <button class="btn" onclick="uploadDiet()">Carica dieta</button>
+        <div id="diet-result"></div>
+        <h3 style="margin-top:16px;color:var(--accent3)">🧪 BIA / Antropometria (PDF)</h3>
+        <p class="section-note">Carica il report BIA. Se scansionato, incolla qui il testo OCR:</p>
+        <input type="file" id="imp-bia" accept=".pdf">
+        <button class="btn" onclick="uploadBia()">Carica BIA</button>
+        <div id="bia-images"></div>
+        <textarea id="bia-paste" rows="5" placeholder="Incolla qui il testo OCR del report BIA..."></textarea>
+        <button class="btn amber" onclick="pasteBia()">Estrai da testo incollato</button>
+        <div id="bia-result"></div>
+      </div>
+    </section>
+
+    <!-- ANTHRO -->
+    <section id="anthro" class="tabpane hidden">
+      <h2>Scheda antropometrica & fabbisogno</h2>
+      <div class="row">
+        <div style="flex:1"><label>Cliente</label><select id="anthro-client" onchange="loadAnthro()"></select></div>
+        <button class="btn" onclick="loadAnthro()">↻ Calcola</button>
+        <button class="btn amber" onclick="exportPdf()">⬇ Report PDF</button>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;color:var(--accent3)">Dati anagrafici & anamnesi</h3>
+        <div class="row">
+          <div style="width:90px"><label>Età</label><input id="a-age" type="number" placeholder="35"></div>
+          <div style="width:100px"><label>Sesso</label><input id="a-sex" placeholder="M/F"></div>
+          <div style="width:110px"><label>Altezza cm</label><input id="a-h" type="number"></div>
+          <div style="width:130px"><label>Attività</label>
+            <select id="a-act"><option value="sedentario">Sedentario</option><option value="leggero">Leggero</option><option value="moderato" selected>Moderato</option><option value="intenso">Intenso</option><option value="atleta">Atleta</option></select></div>
+          <div style="width:90px"><label>Atleta</label><input id="a-ath" type="checkbox"></div>
+        </div>
+        <div class="row">
+          <div style="flex:1"><label>Allergie</label><input id="a-all"></div>
+          <div style="flex:1"><label>Patologie</label><input id="a-pat"></div>
+        </div>
+        <div class="row"><div style="flex:1"><label>Preferenze</label><input id="a-pref"></div></div>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;color:var(--accent3)">Misure (peso, circonferenze, pieghe)</h3>
+        <div class="row">
+          <div style="width:100px"><label>Peso kg</label><input id="m-w" type="number"></div>
+          <div style="width:100px"><label>Vita cm</label><input id="m-waist"></div>
+          <div style="width:100px"><label>Fianchi cm</label><input id="m-hip"></div>
+          <div style="width:100px"><label>Tricipite mm</label><input id="m-sf1"></div>
+          <div style="width:100px"><label>Bicipite mm</label><input id="m-sf2"></div>
+          <div style="width:120px"><label>Sottoscap. mm</label><input id="m-sf3"></div>
+          <div style="width:110px"><label>Sovrailiac. mm</label><input id="m-sf4"></div>
+        </div>
+        <button class="btn" onclick="saveAnthro()">💾 Salva misura & calcola</button>
+      </div>
+      <div id="anthro-result"></div>
+    </section>
+
+    <!-- PLAN -->
+    <section id="plan" class="tabpane hidden">
+      <h2>Piano nutrizionale settimanale</h2>
+      <div class="row">
+        <div style="flex:1"><label>Cliente</label><select id="plan-client" onchange="loadClientDiets()"></select></div>
+        <div style="flex:1"><label>Dieta importata</label><select id="plan-diet" onchange="computePlan()"></select></div>
+        <button class="btn amber" onclick="computePlan()">↻ Ricalcola</button>
+        <button class="btn" onclick="savePlan()">💾 Salva piano</button>
+        <button class="btn ghost" onclick="exportHtml()">⬇ Esporta HTML</button>
+      </div>
+      <div id="plan-kpis"></div>
+      <div id="plan-days"></div>
+      <p class="section-note">Seleziona le <b>alternative</b> (radio) per ogni alimento: i conteggi si aggiornano live. Tutto è calcolato dal database alimenti (single source of truth).</p>
+    </section>
+
+    <!-- SHOPPING -->
+    <section id="shopping" class="tabpane hidden">
+      <h2>Lista della spesa</h2>
+      <div class="row">
+        <div style="flex:1"><label>Cliente</label><select id="shop-client" onchange="loadClientDiets2()"></select></div>
+        <div style="flex:1"><label>Dieta</label><select id="shop-diet" onchange="computeShopping()"></select></div>
+        <button class="btn" onclick="computeShopping()">Genera lista</button>
+      </div>
+      <div class="card" id="shop-list"></div>
+    </section>
+
+    <!-- SUMMARY -->
+    <section id="summary" class="tabpane hidden">
+      <h2>Riepilogo esportabile</h2>
+      <div class="row">
+        <div style="flex:1"><label>Cliente</label><select id="sum-client" onchange="loadClientDiets3()"></select></div>
+        <div style="flex:1"><label>Dieta</label><select id="sum-diet" onchange="computeSummary()"></select></div>
+        <button class="btn" onclick="computeSummary()">Genera riepilogo</button>
+        <button class="btn ghost" onclick="exportHtmlSummary()">⬇ Esporta HTML</button>
+      </div>
+      <div id="sum-content"></div>
+    </section>
+
+    <!-- REMINDERS (solo dentro il cliente) -->
+    <section id="reminders" class="tabpane hidden">
+      <h2>🔔 Promemoria & follow-up</h2>
+      <div class="card">
+        <div class="row">
+          <div style="flex:2"><label>Titolo</label><input id="r-title" placeholder="Es. Richiamare per controllo peso"></div>
+          <div style="width:160px"><label>Scadenza</label><input id="r-due" type="date"></div>
+          <div style="width:150px"><label>Canale (futuro)</label>
+            <select id="r-chan"><option value="app">App</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select></div>
+        </div>
+        <label>Nota</label><textarea id="r-note" rows="2" placeholder="Dettagli..."></textarea>
+        <button class="btn" onclick="addReminder()">+ Aggiungi promemoria</button>
+        <p class="section-note">Oggi solo locale (badge nell'app). L'invio via WhatsApp/Email sarà attivato con i rispettivi client installati sul PC del nutrizionista.</p>
+      </div>
+      <div id="reminder-list"></div>
+    </section>
+
+    <!-- NOTIFICHE (solo dentro il cliente) -->
+    <section id="notif" class="tabpane hidden">
+      <h2>📨 Notifiche al cliente</h2>
+      <p class="section-note">Scegli quali messaggi inviare al cliente, su quale canale e con che frequenza. Il nutrizionista riceve una notifica per ricordarsi di inviarli.</p>
+      <div class="card" id="notif-config"></div>
+      <div style="margin:12px 0">
+        <button class="btn" onclick="generateNotif()">⚡ Genera notifiche dovute ora</button>
+        <span id="notif-result" style="margin-left:10px;color:var(--accent)"></span>
+      </div>
+      <h3>Coda da inviare (questo cliente)</h3>
+      <div id="notif-queue"></div>
+    </section>
+
+    <!-- RECIPES -->
+    <section id="recipes" class="tabpane hidden">
+      <h2>Ricette del nutrizionista</h2>
+      <div class="card">
+        <label>Titolo</label><input id="r-title" placeholder="Es. Bowl proteico">
+        <label>Descrizione</label><textarea id="r-desc" rows="2"></textarea>
+        <label>Ingredienti (JSON o testo)</label><textarea id="r-ing" rows="3" placeholder='["100g avena","200ml latte"]'></textarea>
+        <label>Passaggi</label><textarea id="r-steps" rows="2" placeholder='["Cuoci","Servi"]'></textarea>
+        <button class="btn" onclick="addRecipe()">+ Salva ricetta</button>
+      </div>
+      <div class="grid" id="recipe-grid"></div>
+    </section>
+
+    <!-- AGENDA (calendario appuntamenti, globale) -->
+    <section id="agenda" class="tabpane hidden">
+      <h2>📅 Agenda appuntamenti</h2>
+      <p class="section-note">Vista mensile degli appuntamenti (locali). Clicca un giorno per aggiungerne uno. Fatto per cliente o generale.</p>
+      <div class="card">
+        <div class="row" style="align-items:center">
+          <button class="btn ghost" onclick="agendaShift(-1)">◀</button>
+          <div id="agenda-month" style="font-weight:600;min-width:160px;text-align:center"></div>
+          <button class="btn ghost" onclick="agendaShift(1)">▶</button>
+          <div style="flex:1"></div>
+          <div style="width:200px"><label>Cliente (opz.)</label><select id="agenda-client"><option value="">— generale —</option></select></div>
+        </div>
+        <div id="agenda-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:10px"></div>
+      </div>
+      <div class="card" style="margin-top:10px">
+        <h3>Nuovo appuntamento</h3>
+        <div class="row">
+          <div style="width:160px"><label>Data</label><input id="ap-date" type="date"></div>
+          <div style="flex:2"><label>Titolo</label><input id="ap-title" placeholder="Es. Controllo peso"></div>
+          <div style="flex:2"><label>Nota</label><input id="ap-note" placeholder="Dettagli..."></div>
+          <div style="display:flex;align-items:flex-end"><button class="btn" onclick="addAppt()">+ Aggiungi</button></div>
+        </div>
+        <div id="agenda-list" style="margin-top:8px"></div>
+      </div>
+    </section>
+
+    <!-- DIARIO (builder manuale + aggregazione motore) -->
+    <section id="diario" class="tabpane hidden">
+      <h2>🍽️ Diario alimentare (builder)</h2>
+      <p class="section-note">Costruisci il diario del cliente voce per voce. I totali (macro + micro) sono calcolati dal motore centrale.</p>
+      <div class="card">
+        <div class="row">
+          <div style="width:120px"><label>Giorno</label><input id="d-day" placeholder="lun"></div>
+          <div style="width:140px"><label>Pasto</label>
+            <select id="d-meal"><option>colazione</option><option>spuntino</option><option>pranzo</option><option>spuntino2</option><option>cena</option></select></div>
+          <div style="flex:2"><label>Alimento (cerca)</label><input id="d-food" placeholder="es. petto di pollo" oninput="searchFoods(this.value)"></div>
+          <div style="width:110px"><label>Grammi</label><input id="d-grams" type="number" value="100"></div>
+          <div style="display:flex;align-items:flex-end"><button class="btn" onclick="addDietItem()">+ Aggiungi</button></div>
+        </div>
+        <div id="food-search" style="margin:6px 0;font-size:13px;color:var(--accent)"></div>
+        <div id="diet-items"></div>
+        <h3>Totali giorno <span id="d-tot-day">lun</span></h3>
+        <div id="diet-totals" class="kpis"></div>
+      </div>
+    </section>
+
+    <!-- PIANIFICA (generatore automatico da target) -->
+    <section id="pianifica" class="tabpane hidden">
+      <h2>🤖 Pianificatore automatico</h2>
+      <p class="section-note">Genera un diario settimanale bilanciato partendo dai target (stile EatThisMuch). Valori dal motore unico.</p>
+      <div class="card">
+        <div class="row">
+          <div style="width:120px"><label>kcal/giorno</label><input id="p-kcal" type="number" value="2000"></div>
+          <div style="width:100px"><label>Proteine g</label><input id="p-p" type="number" value="150"></div>
+          <div style="width:100px"><label>Carboidrati g</label><input id="p-c" type="number" value="200"></div>
+          <div style="width:100px"><label>Grassi g</label><input id="p-f" type="number" value="67"></div>
+        </div>
+        <button class="btn" onclick="generatePlan()">⚡ Genera settimana</button>
+        <span id="plan-gen-result" style="margin-left:10px;color:var(--accent)"></span>
+      </div>
+      <div id="plan-week"></div>
+    </section>
+
+    <!-- MESSAGGI (thread locale) -->
+    <section id="messaggi" class="tabpane hidden">
+      <h2>💬 Messaggi (thread locale)</h2>
+      <div class="card">
+        <div id="msg-thread" style="max-height:320px;overflow:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:10px"></div>
+        <div class="row">
+          <div style="flex:2"><input id="msg-text" placeholder="Scrivi al cliente..."></div>
+          <div><button class="btn" onclick="sendMsg('nutri->client')">Invia (tu)</button></div>
+          <div><button class="btn ghost" onclick="sendMsg('client->nutri')">Simula cliente</button></div>
+        </div>
+        <p class="section-note">Thread locale (nessun cloud). L'invio reale via app/WhatsApp sarà attivato con i client sul PC.</p>
+      </div>
+    </section>
+
+    <!-- ACQUA -->
+    <section id="acqua" class="tabpane hidden">
+      <h2>💧 Idratazione</h2>
+      <div class="card">
+        <div class="row">
+          <div style="width:150px"><label>Data</label><input id="w-date" type="date"></div>
+          <div style="width:130px"><label>ml</label><input id="w-ml" type="number" value="250"></div>
+          <div style="display:flex;align-items:flex-end"><button class="btn" onclick="addWater()">+ Aggiungi</button></div>
+        </div>
+        <div id="water-list"></div>
+      </div>
+    </section>
+
+    <!-- PROGRESSI -->
+    <section id="progressi" class="tabpane hidden">
+      <h2>📈 Note di progresso</h2>
+      <div class="card">
+        <div class="row">
+          <div style="width:150px"><label>Data</label><input id="pn-date" type="date"></div>
+          <div style="flex:2"><input id="pn-text" placeholder="Es. settimana 3: -1.2 kg, piu' energia"></div>
+          <div><button class="btn" onclick="addProgNote()">+ Salva</button></div>
+        </div>
+        <div id="prog-notes"></div>
+      </div>
+    </section>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const API = "";
+let STATE = { selections:{}, clientId:null, picked:new Set() };
+
+// ---- tabs (con guardia: fuori dal cliente si puo' solo tornare alla lista) ----
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  const tab = t.dataset.tab;
+  if (tab === 'clients') { exitClient(); return; }
+  if (STATE.clientId == null && !['reminders','agenda'].includes(tab)) { toast('Entra in un cliente prima'); return; }
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  document.querySelectorAll('.tabpane').forEach(s=>s.classList.add('hidden'));
+  document.getElementById(tab).classList.remove('hidden');
+  if (tab === 'reminders') loadReminders();
+  if (tab === 'agenda') loadAgenda();
+  if (tab === 'anthro') loadAnthro();
+  if (tab === 'notif') loadNotifPrefs();
+  if (tab === 'summary') computeSummary();
+  if (tab === 'diario') loadDiario();
+  if (tab === 'pianifica') loadPlan();
+  if (tab === 'messaggi') loadMessages();
+  if (tab === 'acqua') loadWater();
+  if (tab === 'progressi') loadProgNotes();
+});
+
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);}
+function jget(u){return fetch(API+u).then(r=>r.json());}
+function jpost(u,b){return fetch(API+u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json());}
+function jput(u,b){return fetch(API+u,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json());}
+function jdel(u){return fetch(API+u,{method:'DELETE'}).then(r=>r.json());}
+
+// ---- vista lista / cliente ----
+function showList(){
+  STATE.clientId = null;
+  document.getElementById('list-overlay').style.display = 'block';
+  document.getElementById('client-header').style.display = 'none';
+  document.querySelectorAll('.tabpane').forEach(s=>s.classList.add('hidden'));
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  loadNutriQueue();
+}
+function enterClient(id){
+  STATE.clientId = id;
+  document.getElementById('list-overlay').style.display = 'none';
+  document.getElementById('client-header').style.display = 'flex';
+  // popola tutti i select cliente
+  for(const sel of ['imp-client','plan-client','shop-client','sum-client','anthro-client']){
+    const el=document.getElementById(sel); if(el) el.value=id;
+  }
+  // header
+  const c = (window.__clients||[]).find(x=>x.id==id) || {};
+  document.getElementById('ch-name').textContent = c.name || ('Cliente #'+id);
+  document.getElementById('ch-meta').textContent = [c.sex, (c.age?('età '+c.age):''), c.goal].filter(Boolean).join(' · ');
+  loadClientDiets(); loadClientDiets2(); loadClientDiets3();
+  // vai sulla prima tab utile
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelector('.tab[data-tab="anthro"]').classList.add('active');
+  document.querySelectorAll('.tabpane').forEach(s=>s.classList.add('hidden'));
+  document.getElementById('anthro').classList.remove('hidden');
+  loadAnthro(); loadReminders();
+  toast('Cliente: '+(c.name||id));
+}
+function exitClient(){ showList(); loadClients(); }
+
+// ---- clients (griglia lista con multiselect + entra) ----
+async function loadClients(){
+  const cs = await jget('/api/clients');
+  window.__clients = cs;
+  const grid = document.getElementById('client-grid');
+  grid.innerHTML = cs.map(c=>`<div class="client-card" onclick="enterClient(${c.id})">
+    <input class="pick" type="checkbox" onchange="togglePick(${c.id},this.checked)" onclick="event.stopPropagation()">
+    <h3>${c.name}</h3><div class="goal">${c.goal||'—'}</div>
+    <div style="margin-top:8px"><span class="tag">${c.sex||''}</span></div></div>`).join('');
+  for(const sel of ['imp-client','plan-client','shop-client','sum-client']){
+    const el=document.getElementById(sel); if(!el)continue;
+    const cur=el.value;
+    el.innerHTML='<option value="">— seleziona —</option>'+cs.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+    if(cur)el.value=cur;
+  }
+  const ael=document.getElementById('anthro-client'); if(ael){ael.innerHTML='<option value="">— seleziona —</option>'+cs.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');}
+}
+function togglePick(id,on){ if(on)STATE.picked.add(id); else STATE.picked.delete(id); }
+async function showCompare(){
+  const ids=[...STATE.picked];
+  if(ids.length<2){toast('Seleziona almeno 2 clienti da confrontare');return;}
+  const data=await jget('/api/clients/compare?ids='+ids.join(','));
+  if(!data.length){document.getElementById('compare-result').innerHTML='<p>Nessun dato.</p>';return;}
+  const rows=data.map(c=>`<tr><td class="name">${c.name}</td><td>${c.sex||''}</td><td>${c.age??''}</td><td>${c.weight_kg??'—'}</td><td>${c.bmi??'—'}</td><td>${c.fat_pct??'—'}</td><td>${c.tdee??'—'}</td><td>${c.ffmi??'—'}</td><td>${c.lean_mass_kg??'—'}</td><td>${c.protein_g??'—'}</td></tr>`).join('');
+  document.getElementById('compare-result').innerHTML=`<h3>Confronto (${data.length} clienti)</h3>
+    <table class="cmp-table"><thead><tr><th>Cliente</th><th>Sesso</th><th>Età</th><th>Peso</th><th>BMI</th><th>%grassa</th><th>TDEE</th><th>FFMI</th><th>Massa magra</th><th>Proteine</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+async function addClient(){
+  const name=document.getElementById('c-name').value.trim();
+  if(!name){toast('Inserisci un nome');return;}
+  const cid=await jpost('/api/clients',{name,sex:document.getElementById('c-sex').value,goal:document.getElementById('c-goal').value});
+  document.getElementById('c-name').value='';
+  await loadClients(); toast('Cliente aggiunto');
+  // entra direttamente nel nuovo cliente
+  enterClient(cid.id);
+}
+function openClient(id){ enterClient(id); }
+
+// ---- reminders ----
+async function addReminder(){
+  const cid=STATE.clientId; if(!cid){toast('Entra in un cliente');return;}
+  const title=document.getElementById('r-title').value.trim();
+  if(!title){toast('Titolo promemoria');return;}
+  await jpost('/api/clients/'+cid+'/reminders',{title,note:document.getElementById('r-note').value,due_date:document.getElementById('r-due').value,channel:document.getElementById('r-chan').value});
+  document.getElementById('r-title').value=''; document.getElementById('r-note').value='';
+  loadReminders(); toast('Promemoria salvato');
+}
+async function loadReminders(){
+  const cid=STATE.clientId; if(!cid)return;
+  const rs=await jget('/api/reminders?client_id='+cid);
+  document.getElementById('reminder-list').innerHTML = rs.length? rs.map(r=>`<div class="reminder ${r.done?'done':''}">
+    <input type="checkbox" ${r.done?'checked':''} onchange="doneRem(${r.id},this.checked)">
+    <div style="flex:1"><b>${r.title}</b>${r.note?`<div style="font-size:12px;color:var(--text2)">${r.note}</div>`:''}
+      <div class="rd">${r.due_date||'senza scadenza'} · canale: ${r.channel}</div></div>
+    <button class="btn danger" onclick="delRem(${r.id})">✕</button></div>`).join('')
+    : '<p class="section-note">Nessun promemoria.</p>';
+}
+async function doneRem(id,on){ await jput('/api/reminders/'+id+'/done',{done:on?1:0}); loadReminders(); }
+async function delRem(id){ await jdel('/api/reminders/'+id); loadReminders(); }
+
+// ---- notifiche (config per cliente + coda) ----
+const NOTIF_TYPES = ["riscontro","report","followup","peso","misura"];
+const NOTIF_LABELS = {riscontro:"Check-in / riscontro",report:"Invio report / dieta",followup:"Follow-up peso & misurazioni",peso:"Promemoria pesata",misura:"Promemoria misurazioni"};
+const FREQS = [["daily","Giornaliera"],["weekly","Settimanale"],["biweekly","Quindicinale"],["monthly","Mensile"]];
+const CHANS = [["app","App"],["whatsapp","WhatsApp"],["email","Email"]];
+let _notifPrefs = [];
+async function loadNotifPrefs(){
+  const cid=STATE.clientId; if(!cid)return;
+  const prefs=await jget('/api/clients/'+cid+'/notification-prefs');
+  _notifPrefs=prefs;
+  document.getElementById('notif-config').innerHTML = prefs.map((p,i)=>`
+    <div class="row" style="align-items:center;margin:6px 0">
+      <input type="checkbox" ${p.enabled?'checked':''} onchange="_notifPrefs[${i}].enabled=this.checked">
+      <b style="min-width:220px">${p.label}</b>
+      <select onchange="_notifPrefs[${i}].channel=this.value">${CHANS.map(c=>`<option value="${c[0]}" ${p.channel==c[0]?'selected':''}>${c[1]}</option>`).join('')}</select>
+      <select onchange="_notifPrefs[${i}].freq=this.value">${FREQS.map(f=>`<option value="${f[0]}" ${p.freq==f[0]?'selected':''}>${f[1]}</option>`).join('')}</select>
+    </div>`).join('') + '<button class="btn" style="margin-top:10px" onclick="saveNotifPrefs()">💾 Salva preferenze</button>';
+  loadNotifQueue();
+}
+async function saveNotifPrefs(){
+  const cid=STATE.clientId; if(!cid)return;
+  await jpost('/api/clients/'+cid+'/notification-prefs',{prefs:_notifPrefs.map(p=>({type:p.type,enabled:p.enabled,channel:p.channel,freq:p.freq}))});
+  toast('Preferenze notifiche salvate');
+}
+async function generateNotif(){
+  const cid=STATE.clientId; if(!cid)return;
+  const r=await jpost('/api/clients/'+cid+'/notifications/generate',{});
+  document.getElementById('notif-result').textContent = r.count? `${r.count} notifica(e) generata(e)` : 'Nessuna dovuta ora';
+  loadNotifQueue(); loadNutriQueue();
+}
+async function loadNotifQueue(){
+  const cid=STATE.clientId; if(!cid)return;
+  const ns=await jget('/api/notifications?client_id='+cid+'&status=pending');
+  document.getElementById('notif-queue').innerHTML = ns.length? ns.map(n=>`<div class="reminder">
+    <div style="flex:1"><b>${NOTIF_LABELS[n.type]||n.type}</b> · <span class="tag">${n.channel}</span> · scadenza ${n.due_date||'oggi'}
+      <div class="rd">${n.note||''}</div></div>
+    <button class="btn" onclick="markNotifSent(${n.id})">✓ Inviato</button></div>`).join('') : '<p class="section-note">Nessuna notifica in attesa.</p>';
+}
+async function markNotifSent(id){ await jput('/api/notifications/'+id+'/sent',{sent:true}); loadNotifQueue(); loadNutriQueue(); }
+async function loadNutriQueue(){
+  const ns=await jget('/api/notifications?status=pending');
+  // arricchisce col nome cliente
+  const cs=window.__clients||[];
+  const nameOf=id=>{const c=cs.find(x=>x.id==id);return c?c.name:('#'+id);};
+  document.getElementById('nutri-queue').innerHTML = ns.length? ns.map(n=>`<div class="reminder">
+    <div style="flex:1"><b>${nameOf(n.client_id)}</b> — ${NOTIF_LABELS[n.type]||n.type} <span class="tag">${n.channel}</span>
+      <div class="rd">scadenza ${n.due_date||'oggi'} · ${n.note||''}</div></div>
+    <button class="btn" onclick="markNotifSent(${n.id})">✓ Inviato</button></div>`).join('') : '<p class="section-note">Coda vuota: nessun invio in attesa.</p>';
+}
+
+// ---- diet upload ----
+async function uploadDiet(){
+  const cid=document.getElementById('imp-client').value;
+  if(!cid){toast('Seleziona cliente');return;}
+  const f=document.getElementById('imp-diet').files[0];
+  if(!f){toast('Scegli un PDF');return;}
+  const fd=new FormData();fd.append('file',f);
+  const r=await fetch(API+`/api/clients/${cid}/diet/upload`,{method:'POST',body:fd}).then(r=>r.json());
+  if(r.scanned){document.getElementById('diet-result').innerHTML='<p class="section-note">PDF scansionato: incolla il testo qui sotto.</p><textarea id="diet-paste" rows="4"></textarea><button class="btn amber" onclick="pasteDiet()">Estrai da testo</button>';}
+  else{ renderDietResult(r.diet); toast('Dieta importata ('+ (r.diet.days||[]).length +' giorni)'); }
+}
+async function pasteDiet(){
+  const cid=document.getElementById('imp-client').value;
+  const text=document.getElementById('diet-paste').value;
+  const r=await jpost(`/api/clients/${cid}/diet/text`,{text});
+  renderDietResult(r.diet); toast('Dieta da testo importata');
+}
+function renderDietResult(diet){
+  const days=(diet.days||[]).slice(0,2).map(d=>{
+    const meals=d.meals.slice(0,2).map(m=>m.meal+': '+m.items.slice(0,3).map(i=>i.food+' '+i.grams+'g').join(', ')).join(' | ');
+    return `<div class="food"><b>${d.day}</b><span class="grams">${meals}</span></div>`;
+  }).join('');
+  document.getElementById('diet-result').innerHTML=`<div class="card"><b>${diet.title||'Dieta'}</b> — ${diet.days?diet.days.length:0} giorni<div style="margin-top:8px">${days}</div></div>`;
+}
+
+// ---- BIA ----
+async function uploadBia(){
+  const cid=document.getElementById('imp-client').value;
+  if(!cid){toast('Seleziona cliente');return;}
+  const f=document.getElementById('imp-bia').files[0];
+  if(!f){toast('Scegli un PDF');return;}
+  const fd=new FormData();fd.append('file',f);
+  const r=await fetch(API+`/api/clients/${cid}/bia/upload`,{method:'POST',body:fd}).then(r=>r.json());
+  if(r.scanned){
+    document.getElementById('bia-images').innerHTML=r.pages.slice(0,2).map(p=>`<img class="preview-img" src="data:image/png;base64,${p}">`).join('');
+    toast('PDF scansionato: incolla il testo OCR');
+  } else {
+    renderBia(r.fields); toast('BIA importata');
+  }
+}
+async function pasteBia(){
+  const cid=document.getElementById('imp-client').value;
+  const text=document.getElementById('bia-paste').value;
+  const r=await jpost(`/api/clients/${cid}/bia/paste`,{text,date:new Date().toISOString().slice(0,10)});
+  renderBia(r.fields); toast('BIA da testo importata');
+}
+function renderBia(fields){
+  const fs=Object.entries(fields).map(([k,v])=>`<div class="f"><b>${k}</b>: ${v}</div>`).join('');
+  document.getElementById('bia-result').innerHTML=`<div class="card"><h4>Misure estratte</h4><div class="bia-fields">${fs}</div></div>`;
+}
+
+// ---- plan ----
+async function loadClientDiets(){
+  const cid=document.getElementById('plan-client').value;
+  if(!cid)return;
+  const ds=await jget(`/api/clients/${cid}/diets`);
+  document.getElementById('plan-diet').innerHTML='<option value="">—</option>'+ds.map(d=>`<option value="${d.id}">${d.title||'Dieta'} (${d.date||''})</option>`).join('');
+}
+async function computePlan(){
+  const did=document.getElementById('plan-diet').value;
+  if(!did)return;
+  const r=await jpost(`/api/diets/${did}/compute`,{selections:STATE.selections});
+  renderPlan(r);
+}
+function renderPlan(comp){
+  const k=comp.week.avg_day;
+  document.getElementById('plan-kpis').innerHTML=`<div class="kpi">
+    <div class="k"><b>${k.kcal}</b>kcal/giorno</div>
+    <div class="k"><b>${k.p} g</b>proteine</div>
+    <div class="k"><b>${k.c} g</b>carboidrati</div>
+    <div class="k"><b>${k.f} g</b>grassi</div>
+    <div class="k"><b>${k.fib} g</b>fibre</div></div>`;
+  let html='';
+  comp.days.forEach((day,di)=>{
+    day.meals.forEach((meal,mi)=>{
+      const groups=meal.groups.map((grp,gi)=>{
+        const opts=grp.options.map((o,oi)=>{
+          const checked = o.active ? 'checked' : '';
+          const cls = o.active ? 'food' : 'food alt';
+          return `<div class="${cls}">
+            <input type="radio" name="grp-${di}-${mi}-${gi}" ${checked} onchange="chooseAlt(${di},${mi},${gi},${oi})">
+            <span><b>${o.food}</b> ${o.grams?o.grams.toFixed(0)+' g':''}</span>
+            <span class="kcal">${o.kcal} kcal ${o.matched?'':'<span class="unmatched">?</span>'}</span>
+          </div>`;
+        }).join('');
+        return opts;
+      }).join('');
+      html+=`<div class="meal"><h4>${day.day} — ${meal.meal}<span class="mtot">${meal.totals.kcal} kcal</span></h4>${groups}</div>`;
+    });
+  });
+  document.getElementById('plan-days').innerHTML=html;
+}
+function chooseAlt(di,mi,gi,oi){
+  if(!STATE.selections[di])STATE.selections[di]={};
+  if(!STATE.selections[di][mi])STATE.selections[di][mi]={};
+  STATE.selections[di][mi][gi]=oi;   // sceglie l'opzione oi nel gruppo gi
+  computePlan();
+}
+async function savePlan(){
+  const did=document.getElementById('plan-diet').value;
+  const cid=document.getElementById('plan-client').value;
+  if(!did||!cid){toast('Seleziona cliente e dieta');return;}
+  await jpost(`/api/diets/${did}/plan/save`,{client_id:cid,selections:STATE.selections,title:'Piano settimanale'});
+  toast('Piano salvato');
+}
+async function exportHtml(){
+  const did=document.getElementById('plan-diet').value;
+  const cid=document.getElementById('plan-client').value;
+  const r=await fetch(API+`/api/diets/${did}/export-html`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id:cid,selections:STATE.selections})});
+  const blob=await r.blob();const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='piano_nutrizionale.html';a.click();
+  toast('HTML esportato');
+}
+
+// ---- shopping ----
+async function loadClientDiets2(){
+  const cid=document.getElementById('shop-client').value;if(!cid)return;
+  const ds=await jget(`/api/clients/${cid}/diets`);
+  document.getElementById('shop-diet').innerHTML='<option value="">—</option>'+ds.map(d=>`<option value="${d.id}">${d.title||'Dieta'}</option>`).join('');
+}
+async function computeShopping(){
+  const did=document.getElementById('shop-diet').value;if(!did)return;
+  const r=await jpost(`/api/diets/${did}/shopping-list`,{selections:STATE.selections});
+  document.getElementById('shop-list').innerHTML='<h3>Lista ('+r.shopping.length+' voci)</h3>'+r.shopping.map(s=>`<div class="shop-item"><span>${s.food} ${s.matched?'':'<span class="unmatched">?</span>'}</span><b>${s.grams.toFixed(0)} g</b></div>`).join('');
+}
+
+// ---- summary ----
+async function loadClientDiets3(){
+  const cid=document.getElementById('sum-client').value;if(!cid)return;
+  const ds=await jget(`/api/clients/${cid}/diets`);
+  document.getElementById('sum-diet').innerHTML='<option value="">—</option>'+ds.map(d=>`<option value="${d.id}">${d.title||'Dieta'}</option>`).join('');
+}
+async function computeSummary(){
+  const did=document.getElementById('sum-diet').value;const cid=document.getElementById('sum-client').value;
+  if(!did)return;
+  const r=await jpost(`/api/diets/${did}/summary`,{client_id:cid,selections:STATE.selections});
+  const w=r.week.avg_day;
+  let html=`<div class="card"><h3>${r.client?r.client.name:'Cliente'}</h3>`;
+  html+=`<div class="kpi"><div class="k"><b>${w.kcal}</b>kcal/giorno</div><div class="k"><b>${w.p} g</b>proteine</div><div class="k"><b>${w.c} g</b>carboidrati</div><div class="k"><b>${w.f} g</b>grassi</div><div class="k"><b>${w.fib} g</b>fibre</div></div>`;
+  if(r.bia)html+=`<div class="bia-fields">${Object.entries(r.bia).map(([k,v])=>`<div class="f"><b>${k}</b>: ${v}</div>`).join('')}</div>`;
+  html+='</div>';
+  document.getElementById('sum-content').innerHTML=html;
+}
+async function exportHtmlSummary(){
+  const did=document.getElementById('sum-diet').value;const cid=document.getElementById('sum-client').value;
+  if(!did)return;
+  const r=await fetch(API+`/api/diets/${did}/export-html`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id:cid,selections:STATE.selections})});
+  const blob=await r.blob();const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='riepilogo_nutrizionale.html';a.click();
+}
+function exportHtmlSummary(){return exportHtml();}
+
+// ---- recipes ----
+async function loadRecipes(){
+  const rs=await jget('/api/recipes');
+  document.getElementById('recipe-grid').innerHTML=rs.map(r=>`<div class="client-card"><h3>${r.title}</h3><div class="goal">${r.author}</div><p style="font-size:12px;color:var(--text2)">${r.description||''}</p></div>`).join('');
+}
+async function addRecipe(){
+  const title=document.getElementById('r-title').value.trim();if(!title){toast('Titolo ricetta');return;}
+  let ing=[];try{ing=JSON.parse(document.getElementById('r-ing').value||'[]');}catch(e){ing=document.getElementById('r-ing').value.split('\n');}
+  let steps=[];try{steps=JSON.parse(document.getElementById('r-steps').value||'[]');}catch(e){steps=document.getElementById('r-steps').value.split('\n');}
+  await jpost('/api/recipes',{title,description:document.getElementById('r-desc').value,ingredients:ing,steps});
+  document.getElementById('r-title').value='';loadRecipes();toast('Ricetta salvata');
+}
+
+// ---- antropometria ----
+function fillSelect(sel, clients){
+  sel.innerHTML='<option value="">— seleziona —</option>'+clients.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+}
+async function loadClientsAnthro(){
+  const cs=await jget('/api/clients');
+  fillSelect(document.getElementById('anthro-client'), cs);
+  // ripopola anche gli altri select cliente
+  for(const s of ['imp-client','plan-client','shop-client','sum-client']){
+    const el=document.getElementById(s);const cur=el.value;
+    el.innerHTML='<option value="">— seleziona —</option>'+cs.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+    if(cur)el.value=cur;
+  }
+}
+async function loadAnthro(){
+  const cid=document.getElementById('anthro-client').value;if(!cid){document.getElementById('anthro-result').innerHTML='';return;}
+  const c=await jget('/api/clients/'+cid);
+  // riempi campi profilo
+  document.getElementById('a-age').value=c.age||'';
+  document.getElementById('a-sex').value=c.sex||'';
+  document.getElementById('a-h').value=c.height_cm||'';
+  document.getElementById('a-act').value=c.activity||'moderato';
+  document.getElementById('a-ath').checked=!!c.athlete;
+  document.getElementById('a-all').value=c.allergies||'';
+  document.getElementById('a-pat').value=c.pathologies||'';
+  document.getElementById('a-pref').value=c.preferences||'';
+  const r=await jget('/api/clients/'+cid+'/anthropometry');
+  renderAnthro(r);
+}
+function renderAnthro(r){
+  const m=r.measurement||{};
+  const k=(k,v,u='')=>`<div class="f"><b>${k}</b>: ${v==null?'—':v}${u}</div>`;
+  const cards=`
+  <div class="kpi">
+    <div class="k"><b>${r.bmi??'—'}</b>BMI<br><span style="font-size:11px;color:var(--text3)">${r.bmi_class||''}</span></div>
+    <div class="k"><b>${r.bmr??'—'}</b>BMR (kcal)</div>
+    <div class="k"><b>${r.tdee??'—'}</b>TDEE (kcal)</div>
+    <div class="k"><b>${r.fat_pct??'—'}</b>% grassa</div>
+    <div class="k"><b>${r.lean_mass_kg??'—'}</b>Massa magra kg</div>
+  </div>
+  <div class="bia-fields">
+    ${k('Peso',m.weight_kg,' kg')}
+    ${k('Vita',m.waist_cm,' cm')}
+    ${k('Fianchi',m.hip_cm,' cm')}
+    ${k('WHR',r.whr)}
+    ${k('WHR rischio',r.whr_risk)}
+    ${k('FFMI',r.ffmi)}
+    ${k('Peso ideale',r.ideal_weight,' kg')}
+    ${k('Proteine',r.protein_g,' g/die')}
+  </div>`;
+  // grafico trend
+  const chart=`<img src="/api/clients/${r.client.id}/charts?metric=all" style="width:100%;margin-top:10px">`;
+  document.getElementById('anthro-result').innerHTML=`<div class="card">${cards}${chart}</div>`;
+}
+async function saveAnthro(){
+  const cid=document.getElementById('anthro-client').value;if(!cid){toast('Seleziona cliente');return;}
+  const num=(id)=>{const v=document.getElementById(id).value;return v===''||v==null?null:parseFloat(v);};
+  const body={
+    age:num('a-age'),sex:document.getElementById('a-sex').value,
+    height_cm:num('a-h'),activity:document.getElementById('a-act').value,
+    athlete:document.getElementById('a-ath').checked,
+    allergies:document.getElementById('a-all').value,pathologies:document.getElementById('a-pat').value,
+    preferences:document.getElementById('a-pref').value,
+    measurement:{
+      weight_kg:num('m-w'),waist_cm:num('m-waist'),hip_cm:num('m-hip'),
+      skinfold_triceps:num('m-sf1'),skinfold_biceps:num('m-sf2'),
+      skinfold_subscapular:num('m-sf3'),skinfold_suprailiac:num('m-sf4')
+    }
+  };
+  await jpost('/api/clients/'+cid+'/profile',body);
+  loadAnthro();toast('Salvato & calcolato');
+}
+async function exportPdf(){
+  const cid=STATE.clientId || document.getElementById('anthro-client').value || document.getElementById('plan-client').value;
+  if(!cid){toast('Seleziona cliente');return;}
+  const did=document.getElementById('plan-diet')?document.getElementById('plan-diet').value:null;
+  const url=`/api/clients/${cid}/export-pdf?diet_id=${did||''}&selections=${encodeURIComponent(JSON.stringify(STATE.selections))}`;
+  window.open(url,'_blank');
+  toast('Report PDF generato');
+}
+
+// ---- login nutrizionista ----
+async function doSetup(){
+  const user=document.getElementById('lp-user').value.trim();
+  const pw=document.getElementById('lp-new').value;
+  const r=await jpost('/api/auth/setup',{username:user,password:pw}).catch(e=>null);
+  if(r && r.ok){ toast('Account creato'); closeLogin(); }
+  else { const m=(r&&r.detail)||'Utente (min 2) e password (min 4) validi'; document.getElementById('login-msg').textContent=m; toast(m); }
+}
+async function doLogin(){
+  const user=document.getElementById('lp-user2').value.trim();
+  const pw=document.getElementById('lp-pass').value;
+  const r=await jpost('/api/auth/login',{username:user,password:pw}).catch(e=>null);
+  if(r && r.ok){ closeLogin(); }
+  else { const m='Credenziali errate. Ricontrolla utente e password.'; document.getElementById('login-msg').textContent=m; document.getElementById('lp-pass').value=''; toast(m); }
+}
+async function resetAccount(){
+  if(!confirm('Reimpostare l\'account? I dati dei clienti restano intatti, dovrai ricreare utente e password.')) return;
+  const r=await jpost('/api/auth/reset',{}).catch(e=>null);
+  if(r && r.ok){ toast('Account resettato: crea un nuovo utente'); initAuth(); }
+  else { document.getElementById('login-msg').textContent='Reset non riuscito'; }
+}
+function closeLogin(){
+  document.getElementById('login-overlay').style.display='none';
+  showList(); loadClients();
+}
+async function initAuth(){
+  const s=await jget('/api/auth/status');
+  if(s.has_account){ document.getElementById('login-in').style.display='block';
+    if(s.username) document.getElementById('lp-user2').value=s.username; }
+  else { document.getElementById('login-setup').style.display='block';
+         document.getElementById('login-sub').textContent='Primo avvio: crea il tuo account (utente + password)'; }
+  // tema salvato
+  if(localStorage.getItem('nc-theme')==='light'){ document.body.classList.add('light'); }
+}
+
+// ---- Diario / builder (VISTA del motore) ----
+function microRow(t){
+  return `kcal ${t.kcal} · P ${t.p}g · C ${t.c}g · F ${t.f}g · fib ${t.fib}g · Ca ${t.ca}mg · Fe ${t.fe}mg · VitC ${t.vitc}mg · K ${t.k}mg · Mg ${t.mg}mg`;
+}
+async function searchFoods(q){
+  if(!q || q.length<2){ document.getElementById('food-search').innerHTML=''; return; }
+  const r=await jget('/api/foods/search?q='+encodeURIComponent(q)+'&limit=8');
+  document.getElementById('food-search').innerHTML = (r||[]).map(f=>`<span style="cursor:pointer;text-decoration:underline" onclick="pickFood('${f.replace(/'/g,"\\'")}')">${f}</span>`).join(' · ');
+}
+function pickFood(f){ document.getElementById('d-food').value=f; document.getElementById('food-search').innerHTML=''; }
+async function addDietItem(){
+  const day=document.getElementById('d-day').value.trim()||'lun';
+  const food=document.getElementById('d-food').value.trim();
+  const grams=parseFloat(document.getElementById('d-grams').value)||0;
+  if(!food){ toast('Inserisci alimento'); return; }
+  await jpost(`/api/clients/${STATE.clientId}/diet-item`,{day,meal:document.getElementById('d-meal').value,food,grams});
+  await loadDiario();
+}
+async function loadDiario(){
+  const day=document.getElementById('d-day').value.trim()||'lun';
+  document.getElementById('d-tot-day').textContent=day;
+  const items=await jget(`/api/clients/${STATE.clientId}/diet-items?day=${day}`);
+  const html=(items||[]).map(i=>`<div class="shop-item"><span>${i.meal} · ${i.food} · ${i.grams}g</span><button class="btn ghost" onclick="delDietItem(${i.id})">✕</button></div>`).join('')||'<i>Nessuna voce</i>';
+  document.getElementById('diet-items').innerHTML=html;
+  const tot=await jget(`/api/clients/${STATE.clientId}/diary/totals?day=${day}`);
+  document.getElementById('diet-totals').innerHTML = tot? microRow(tot):'';
+}
+async function delDietItem(id){ await jdel(`/api/clients/${STATE.clientId}/diet-item/${id}`); await loadDiario(); }
+
+// ---- Pianificatore automatico ----
+async function generatePlan(){
+  const targets={kcal:+document.getElementById('p-kcal').value||2000,
+                 p:+document.getElementById('p-p').value||150,
+                 c:+document.getElementById('p-c').value||200,
+                 f:+document.getElementById('p-f').value||67};
+  const plan=await jpost(`/api/clients/${STATE.clientId}/plan/generate`,{targets});
+  if(plan && plan.days){
+    document.getElementById('plan-gen-result').textContent=`Generato: ${plan.days.length} giorni, ~${Math.round(plan.week_totals.kcal/7)} kcal/giorno`;
+    document.getElementById('plan-week').innerHTML = plan.days.map(d=>`
+      <div class="card" style="margin-top:10px"><h3>Giorno ${d.day} — ${Math.round(d.totals.kcal)} kcal</h3>
+      ${d.meals.map(m=>`<div style="margin:6px 0"><b>${m.meal}</b>: ${m.items.map(i=>i.food+' '+i.g+'g').join(', ')} <span style="color:var(--text3)">(${Math.round(m.totals.kcal)} kcal)</span></div>`).join('')}
+      </div>`).join('');
+  }
+}
+async function loadPlan(){ /* i target restano; si genera on-demand */ document.getElementById('plan-week').innerHTML=''; document.getElementById('plan-gen-result').textContent=''; }
+
+// ---- Messaggi (thread locale) ----
+async function sendMsg(dir){
+  const txt=document.getElementById('msg-text').value.trim();
+  if(!txt) return;
+  await jpost(`/api/clients/${STATE.clientId}/message`,{direction:dir,text:txt});
+  document.getElementById('msg-text').value='';
+  await loadMessages();
+}
+async function loadMessages(){
+  const msgs=await jget(`/api/clients/${STATE.clientId}/messages`);
+  document.getElementById('msg-thread').innerHTML=(msgs||[]).map(m=>{
+    const me=m.direction==='nutri->client';
+    return `<div style="align-self:${me?'flex-end':'flex-start'};max-width:75%;background:${me?'var(--accent)':'var(--surface2)'};color:${me?'#fff':'var(--text)'};padding:8px 12px;border-radius:10px">${m.text}<div style="font-size:10px;opacity:.6;margin-top:2px">${m.date||''}</div></div>`;
+  }).join('')||'<i>Nessun messaggio</i>';
+}
+
+// ---- Acqua ----
+async function addWater(){
+  const date=document.getElementById('w-date').value||_today();
+  const ml=parseInt(document.getElementById('w-ml').value)||0;
+  if(!ml) return;
+  await jpost(`/api/clients/${STATE.clientId}/water`,{date,ml});
+  await loadWater();
+}
+async function loadWater(){
+  if(!document.getElementById('w-date').value) document.getElementById('w-date').value=_today();
+  const list=await jget(`/api/clients/${STATE.clientId}/water`);
+  document.getElementById('water-list').innerHTML=(list||[]).map(w=>`<div class="shop-item"><span>${w.date}: ${w.ml} ml</span></div>`).join('')||'<i>Nessun dato</i>';
+}
+
+// ---- Note di progresso ----
+async function addProgNote(){
+  const date=document.getElementById('pn-date').value||_today();
+  const text=document.getElementById('pn-text').value.trim();
+  if(!text) return;
+  await jpost(`/api/clients/${STATE.clientId}/progress-note`,{date,text});
+  document.getElementById('pn-text').value='';
+  await loadProgNotes();
+}
+async function loadProgNotes(){
+  if(!document.getElementById('pn-date').value) document.getElementById('pn-date').value=_today();
+  const notes=await jget(`/api/clients/${STATE.clientId}/progress-notes`);
+  document.getElementById('prog-notes').innerHTML=(notes||[]).map(n=>`<div class="shop-item"><span><b>${n.date}</b> — ${n.text}</span></div>`).join('')||'<i>Nessuna nota</i>';
+}
+
+// ---- Agenda (calendario appuntamenti) ----
+let AGENDA = { y: 0, m: 0 };
+function pad(n){ return (n<10?'0':'')+n; }
+async function loadAgenda(){
+  // popola select clienti
+  const sel=document.getElementById('agenda-client');
+  if(sel.options.length<=1){
+    const cs=await jget('/api/clients');
+    (cs||[]).forEach(c=>{ const o=document.createElement('option'); o.value=c.id; o.textContent=c.name; sel.appendChild(o); });
+  }
+  if(!document.getElementById('ap-date').value) document.getElementById('ap-date').value=_today();
+  const now=new Date(); AGENDA.y=now.getFullYear(); AGENDA.m=now.getMonth();
+  await agendaRender();
+}
+async function agendaShift(d){ AGENDA.m+=d; if(AGENDA.m<0){AGENDA.m=11;AGENDA.y--;} if(AGENDA.m>11){AGENDA.m=0;AGENDA.y++;}
+  // riallinea la data del nuovo appuntamento al mese mostrato
+  const first=new Date(AGENDA.y,AGENDA.m,1); document.getElementById('ap-date').value=first.toISOString().slice(0,10);
+  await agendaRender();
+}
+async function agendaRender(){
+  const cid=document.getElementById('agenda-client').value||'';
+  const appts=await jget('/api/appointments'+(cid?'?client_id='+cid:''));
+  const map={};
+  (appts||[]).forEach(a=>{ if(a.appt_date){ (map[a.appt_date]=map[a.appt_date]||[]).push(a); } });
+  const y=AGENDA.y, m=AGENDA.m;
+  document.getElementById('agenda-month').textContent = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'][m]+' '+y;
+  const first=new Date(y,m,1), start=(first.getDay()+6)%7; // lun=0
+  const days=new Date(y,m+1,0).getDate();
+  const grid=document.getElementById('agenda-grid');
+  let html='<div style="text-align:center;font-size:12px;color:var(--text3)">Lun</div><div style="text-align:center;font-size:12px;color:var(--text3)">Mar</div><div style="text-align:center;font-size:12px;color:var(--text3)">Mer</div><div style="text-align:center;font-size:12px;color:var(--text3)">Gio</div><div style="text-align:center;font-size:12px;color:var(--text3)">Ven</div><div style="text-align:center;font-size:12px;color:var(--text3)">Sab</div><div style="text-align:center;font-size:12px;color:var(--text3)">Dom</div>';
+  for(let i=0;i<start;i++) html+='<div style="min-height:64px;background:var(--surface);border-radius:8px;opacity:.4"></div>';
+  for(let d=1;d<=days;d++){
+    const iso=y+'-'+pad(m+1)+'-'+pad(d);
+    const items=map[iso]||[];
+    const cell='<div style="min-height:64px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:4px;cursor:pointer" onclick="pickAgendaDay(\''+iso+'\')"><div style="font-size:11px;color:var(--text3)">'+d+'</div>'+items.map(a=>'<div style="font-size:11px;padding:1px 3px;margin-top:2px;border-radius:4px;background:'+(a.done?'#2a3a2a':'var(--accent)')+';color:'+(a.done?'#9f9':'#fff')+'">'+a.title+'</div>').join('')+'</div>';
+    html+=cell;
+  }
+  grid.innerHTML=html;
+  // lista aperti
+  const open=(appts||[]).filter(a=>!a.done).sort((a,b)=>(a.appt_date||'').localeCompare(b.appt_date||''));
+  document.getElementById('agenda-list').innerHTML = open.length? open.map(a=>'<div class="shop-item"><span><b>'+(a.appt_date||'?')+'</b> — '+a.title+(a.note?' ('+a.note+')':'')+'</span><button class="btn ghost" onclick="agendaDone('+a.id+')">fatto</button></div>').join('') : '<i>Nessun appuntamento aperto</i>';
+}
+function pickAgendaDay(iso){ document.getElementById('ap-date').value=iso; document.getElementById('ap-title').focus(); }
+async function addAppt(){
+  const date=document.getElementById('ap-date').value;
+  const title=document.getElementById('ap-title').value.trim();
+  if(!date||!title){ toast('Data e titolo obbligatori'); return; }
+  const cid=document.getElementById('agenda-client').value||'';
+  const note=document.getElementById('ap-note').value.trim();
+  await jpost('/api/appointments',{client_id: cid? parseInt(cid): null, title, note, appt_date:date});
+  document.getElementById('ap-title').value=''; document.getElementById('ap-note').value='';
+  await agendaRender();
+}
+async function agendaDone(aid){ await jput('/api/appointments/'+aid+'/done',{done:1}); await agendaRender(); }
+
+// ---- tema ----
+function toggleTheme(){
+  const light=document.body.classList.toggle('light');
+  localStorage.setItem('nc-theme', light?'light':'dark');
+}
+
+// init
+initAuth(); loadRecipes();
+</script>
+</body>
+</html>
