@@ -115,13 +115,48 @@ def open_browser():
 
 if __name__ == "__main__":
     log.info("NutriCoach avvio su porta %s (DB=%s)", PORT, DB_ENV or "default")
+
+    # Se una istanza e' gia' aperta sulla porta, prova le porte successive
+    # invece di morire silenziosamente (caso tipico: vecchia istanza ancora attiva).
+    import socket
+    def _port_free(p):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            s.bind(("127.0.0.1", p))
+            return True
+        except OSError:
+            return False
+        finally:
+            s.close()
+    used_port = None
+    for cand in range(PORT, PORT + 10):
+        if _port_free(cand):
+            used_port = cand
+            break
+    if used_port is None:
+        _msg = ("NutriCoach non puo' avviarsi: porte %d-%d occupate.\n"
+                "Chiudi eventuali altre istanze di NutriCoach e riprova." % (PORT, PORT + 9))
+        log.error(_msg)
+        try:
+            import tkinter.messagebox as _mb
+            _mb.showerror("NutriCoach", _msg)
+        except Exception:
+            try:
+                input(_msg)
+            except Exception:
+                time.sleep(6)
+        sys.exit(1)
+    if used_port != PORT:
+        log.warning("Porta %d occupata, uso porta %d", PORT, used_port)
+        PORT = used_port
+
     # check aggiornamenti non bloccante (logga se disponibile; la UI lo mostra)
     def _boot_update_check():
         try:
             info = app_module.get_update_info(force=False)
             if info.get("update_available"):
                 log.info("Aggiornamento disponibile: v%s (attuale v%s) — %s",
-                          info.get("latest"), info.get("current"), info.get("html_url"))
+                         info.get("latest"), info.get("current"), info.get("html_url"))
         except Exception as e:  # pragma: no cover
             log.debug("check aggiornamenti non disponibile: %s", e)
     threading.Thread(target=_boot_update_check, daemon=True).start()
@@ -132,8 +167,12 @@ if __name__ == "__main__":
                     log_level="info", log_config=UVICORN_LOG_CONFIG)
     except Exception as e:  # pragma: no cover
         log.exception("Errore di avvio: %s", e)
-        # In EXE console=False sys.stdin puo' essere None -> input() crasha.
+        _msg = "Errore di avvio: %s\nVedi %s" % (e, LOG_FILE)
         try:
-            input("Errore di avvio. Premi Invio per chiudere. (vedi ~/.nutricoach/nutricoach.log)")
+            import tkinter.messagebox as _mb
+            _mb.showerror("NutriCoach", _msg)
         except Exception:
-            time.sleep(5)
+            try:
+                input(_msg)
+            except Exception:
+                time.sleep(5)

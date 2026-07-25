@@ -15,8 +15,7 @@ a = Analysis(
     datas=[
         (os.path.join(src, 'templates', 'dashboard.html'), 'templates'),
         # Tesseract bundlato (se presente nella cartella sorgente) -> incluso nell'EXE
-        (os.path.join(src, 'tesseract'), 'tesseract') if os.path.isdir(os.path.join(src, 'tesseract')) else ('', ''),
-    ],
+    ] + ([(os.path.join(src, 'tesseract'), 'tesseract')] if os.path.isdir(os.path.join(src, 'tesseract')) else []),
     hiddenimports=[
         'db', 'diet_parser', 'bia_parser', 'nutrition_engine', 'anthropometry',
         'charts', 'pdf_export', 'auth', 'notifications', 'nutrition_db',

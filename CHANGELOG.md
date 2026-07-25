@@ -3,6 +3,17 @@
 Tutte le versioni significative del progetto. Formato basato su
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.1.3] — 2026-07-25
+
+### Fix (avvio EXE)
+- **EXE che "non parte" se la porta è occupata** (es. vecchia istanza ancora
+  aperta): `run.py` ora verifica la porta e, se occupata, prova le porte
+  successive (8090→8099) invece di morire silenziosamente.
+- **Errori di avvio ora visibili**: in caso di fallimento mostra un
+  `messagebox` (TK) invece di chiudersi senza messaggio.
+- **Spec PyInstaller robusto**: rimossa la tupla `datas` vuota `('', '')`
+  (causa di build fallito in locale) — `tesseract/` è aggiunto solo se esiste.
+
 ## [1.1.2] — 2026-07-25
 
 ### Fix (critico avvio EXE)
