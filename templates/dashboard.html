@@ -452,6 +452,7 @@ label{font-size:12px;color:var(--text3);display:block;margin-top:8px}
         </div>
         <div id="sci-fuel-out" style="margin-top:10px"></div>
         <button class="btn" onclick="sciApplyPlan()">⬇ Usa questi carb nel pianificatore</button>
+        <button class="btn ghost" onclick="sciExportPdf()">📄 Esporta report PDF (cliente)</button>
       </div>
 
       <div class="card" style="margin-top:12px">
@@ -1132,6 +1133,15 @@ async function sciApplyPlan(){
   document.getElementById('p-kcal').value=kcal;
   document.getElementById('p-c').value=d.carb_g;
   toast('Pianificatore aggiornato: '+kcal+' kcal, '+d.carb_g+' g carb');
+}
+async function sciExportPdf(){
+  const cid=STATE.clientId;
+  if(!cid){ toast('Entra in un cliente prima'); return; }
+  const day=document.getElementById('sci-day').value;
+  const inten=document.getElementById('sci-int').value||'race';
+  const w=document.getElementById('sci-weight').value||'';
+  const url=`${API}/api/clients/${cid}/sport-science-report?day_type=${day}&intensity=${inten}&weight_kg=${w}`;
+  window.open(url, '_blank');
 }
 
 // ---- Aggiornamenti (GitHub Releases) ----

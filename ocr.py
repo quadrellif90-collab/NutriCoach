@@ -1,15 +1,20 @@
 """NutriCoach — OCR per PDF scansionati (offline, Best-Effort).
 
 Se il PDF non ha testo selezionabile (scansionato), renderizziamo le pagine
-come immagini e, se e' installato Tesseract, ne estraiamo il testo via
-pytesseract. Se Tesseract NON e' presente, ritorniamo le immagini (base64)
-cosi' il frontend le mostra e l'utente puo' copiare/incollare il testo a mano.
+come immagini e, se e' disponibile Tesseract (bundlato nell'EXE o installato
+nel sistema), ne estraiamo il testo via pytesseract. Se Tesseract NON e'
+disponibile, ritorniamo le immagini (base64) cosi' il frontend le mostra e
+l'utente puo' copiare/incollare il testo a mano.
 
-Nessun dato lascia il computer: tutto locale.
+Tesseract bundlato: l'EXE include la cartella `tesseract/` (binario +
+tessdata). A runtime la rileviamo sia in dev (./tesseract) che nel bundle
+PyInstaller (sys._MEIPASS/tesseract). Nessun dato lascia il computer.
 """
 
 import base64
 import io
+import os
+import sys
 
 try:
     import pytesseract
@@ -26,15 +31,69 @@ except Exception:
 import fitz  # PyMuPDF
 
 
-def tesseract_available():
-    """True se pytesseract importato E il binario tesseract risponde."""
-    if not _HAVE_TESS:
+def _candidate_tesseract_dirs():
+    """Directory dove cercare il binario Tesseract bundlato."""
+    dirs = []
+    # 1) dentro il bundle PyInstaller
+    if getattr(sys, "frozen", False):
+        base = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+        dirs.append(os.path.join(base, "tesseract"))
+    # 2) directory corrente / sorgente
+    here = os.path.dirname(os.path.abspath(__file__))
+    dirs.append(os.path.join(here, "tesseract"))
+    dirs.append(os.path.join(os.getcwd(), "tesseract"))
+    return dirs
+
+
+def _find_tesseract():
+    """Ritorna (cmd_path, tessdata_dir) se Tesseract e' bundlato/disponibile."""
+    # se il binario di sistema e' gia' nel PATH, pytesseract lo usa da solo
+    if _HAVE_TESS:
+        try:
+            pytesseract.get_tesseract_version()
+            return (None, None)  # usa il default di sistema
+        except Exception:
+            pass
+    # altrimenti cerchiamo il bundle
+    for d in _candidate_tesseract_dirs():
+        if not os.path.isdir(d):
+            continue
+        # windows: tesseract.exe ; altre: tesseract
+        for name in ("tesseract.exe", "tesseract"):
+            cmd = os.path.join(d, name)
+            if os.path.isfile(cmd):
+                tessdata = os.path.join(d, "tessdata")
+                return (cmd, tessdata if os.path.isdir(tessdata) else None)
+    return (None, None)
+
+
+def _configure_tesseract():
+    """Configura pytesseract se troviamo un bundle; ritorna True se utilizzabile."""
+    if not _HAVE_TESS or not _HAVE_PIL:
         return False
+    cmd, tessdata = _find_tesseract()
     try:
+        if cmd:
+            pytesseract.pytesseract.tesseract_cmd = cmd
+        if tessdata:
+            os.environ["TESSDATA_PREFIX"] = tessdata
+        # verifica che risponda
         pytesseract.get_tesseract_version()
         return True
     except Exception:
         return False
+
+
+_TESS_OK = None  # cache lazy
+
+
+def tesseract_available():
+    """True se pytesseract+PIL importati e Tesseract (sistema o bundle) risponde."""
+    global _TESS_OK
+    if _TESS_OK is not None:
+        return _TESS_OK
+    _TESS_OK = _configure_tesseract()
+    return _TESS_OK
 
 
 def ocr_pdf(path, dpi=200, lang="ita+eng"):
@@ -45,11 +104,12 @@ def ocr_pdf(path, dpi=200, lang="ita+eng"):
     doc = fitz.open(path)
     pages = []
     texts = []
+    have_ocr = tesseract_available()
     for page in doc:
         pix = page.get_pixmap(dpi=dpi)
         b64 = base64.b64encode(pix.tobytes("png")).decode("ascii")
         pages.append(b64)
-        if _HAVE_TESS and _HAVE_PIL and tesseract_available():
+        if have_ocr:
             try:
                 img = Image.open(io.BytesIO(pix.tobytes("png")))
                 txt = pytesseract.image_to_string(img, lang=lang)
@@ -58,4 +118,4 @@ def ocr_pdf(path, dpi=200, lang="ita+eng"):
                 pass
     doc.close()
     text = "\n".join(t for t in texts if t.strip())
-    return {"text": text, "pages": pages, "ocr": bool(text.strip()) and tesseract_available()}
+    return {"text": text, "pages": pages, "ocr": bool(text.strip()) and have_ocr}

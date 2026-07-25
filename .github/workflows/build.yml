@@ -24,6 +24,20 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: Install Tesseract (bundled OCR)
+        run: choco install tesseract --no-progress -y
+
+      - name: Copy Tesseract into repo (for PyInstaller bundle)
+        shell: pwsh
+        run: |
+          $src = (Get-ChildItem -Path "C:\Program Files","C:\Program Files (x86)" -Recurse -Filter tesseract.exe -ErrorAction SilentlyContinue | Select-Object -First 1).DirectoryName
+          if (-not $src) { throw "tesseract.exe non trovato" }
+          $dst = "tesseract"
+          if (Test-Path $dst) { Remove-Item $dst -Recurse -Force }
+          Copy-Item $src $dst -Recurse
+          echo "Copiato Tesseract da $src -> $dst"
+          ls $dst
+
       - name: Build executable (one-file)
         run: pyinstaller NutriCoach.spec --noconfirm --clean
 
@@ -65,6 +79,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
+
+      - name: Install Tesseract (bundled OCR)
+        run: brew install tesseract
+
+      - name: Copy Tesseract into repo (for PyInstaller bundle)
+        run: |
+          SRC=$(brew --prefix tesseract)
+          rm -rf tesseract
+          mkdir -p tesseract
+          cp "$SRC/bin/tesseract" tesseract/
+          cp -R "$SRC/share/tessdata" tesseract/tessdata
+          echo "Copiato Tesseract da $SRC"
+          ls -R tesseract | head -20
 
       - name: Build executable (one-file)
         run: pyinstaller NutriCoach.spec --noconfirm --clean

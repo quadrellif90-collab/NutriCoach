@@ -32,6 +32,7 @@ import nutrition_db as ndb
 import meal_planner
 import diet_presets
 import sport_science
+import pdf_sport_science
 import version
 
 UPLOAD_DIR = os.path.join(database.DATA_DIR, "uploads")
@@ -146,6 +147,15 @@ async def api_sport_science_fueling(request: Request):
     if intensity:
         out["during"] = sport_science.fueling_during_targets(intensity)
     return out
+
+
+@app.get("/api/clients/{cid}/sport-science-report")
+def api_sport_science_report(cid: int, day_type: str = "race", intensity: str = "race", weight_kg: float = None):
+    client = database.get_client(cid) or {}
+    pdf = pdf_sport_science.build_sport_science_pdf(
+        client=client, day_type=day_type, intensity=intensity, weight_kg=weight_kg)
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f"attachment; filename=nutricoach_sport_science_{cid}.pdf"})
 
 
 # ---------------- Messaggi (thread locale) ----------------
