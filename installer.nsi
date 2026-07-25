@@ -12,23 +12,26 @@
 !endif
 !define INSTDIR "$PROGRAMFILES64\NutriCoach"
 
-Name "${APPNAMEFULL}"
+Name "NutriCoach - Gestione Nutrizione"
 OutFile "NutriCoach-Setup-${VERSION}.exe"
 InstallDir "${INSTDIR}"
 RequestExecutionLevel admin
+Icon "assets\icon.ico"
+UninstallIcon "assets\icon.ico"
 
 ; I dati utente vivono fuori da INSTDIR -> non li includiamo e non li cancelliamo.
 InstallDirRegKey HKLM "Software\NutriCoach" "InstallDir"
 
 Section "Install"
   SetOutPath "$INSTDIR"
-  ; File dell'app (EXE bundle da PyInstaller one-file) + icona eventuale.
+  ; File dell'app (EXE bundle da PyInstaller one-file) + icona.
   File "dist\NutriCoach.exe"
+  File "assets\icon.ico"
 
   ; Scorciatoia nel menu Start e sul desktop
   CreateDirectory "$SMPROGRAMS\${APPNAME}"
-  CreateShortCut "$SMPROGRAMS\${APPNAME}\${APPNAMEFULL}.lnk" "$INSTDIR\NutriCoach.exe" "" "$INSTDIR\NutriCoach.exe" 0
-  CreateShortCut "$DESKTOP\${APPNAMEFULL}.lnk" "$INSTDIR\NutriCoach.exe" "" "$INSTDIR\NutriCoach.exe" 0
+  CreateShortCut "$SMPROGRAMS\${APPNAME}\${APPNAMEFULL}.lnk" "$INSTDIR\NutriCoach.exe" "" "$INSTDIR\icon.ico" 0
+  CreateShortCut "$DESKTOP\${APPNAMEFULL}.lnk" "$INSTDIR\NutriCoach.exe" "" "$INSTDIR\icon.ico" 0
 
   ; Disinstallatore
   WriteUninstaller "$INSTDIR\Uninstall.exe"
