@@ -160,6 +160,32 @@ reale.
 
 ---
 
+## Scienza Sport (strategie pro → amatoriale)
+
+Tab **🔬 Scienza Sport**: raccoglie approcci documentati nel mondo elite e li
+rende applicabili dal nutrizionista su clienti amatoriali/semi-pro. Tutto
+ancorato a letteratura 2024-2026 (vedi fonti nel tab), **non è consulenza
+medica**.
+
+- **Fuel for the Work Required (FTWR):** periodizzazione dei carboidrati in
+  base alla seduta, non "train-low". `sport_science.fueling_daily_targets`
+  ritorna g carb/giorno per tipo di giorno (recupero/moderato/alto/gara) e
+  `fueling_during_targets` i g/h durante lo sforzo (30/60/90/120 g/h). Il
+  bottone "Usa nel pianificatore" imposta carb e kcal nel tab Pianifica.
+  - Riferimento pro: Tour de France 2025, fueling 100-120 g/h (fino a 200 in
+    fasi severe). Fonte: Outside/Velo, Olympics.com, EF Pro Cycling, Cao 2025.
+- **Recovery microcycle:** fondamenta (sonno 7-9h, nutrizione, idratazione)
+  prime; adjunct (cooling/compression/attivo/psicologico) sequenziati per
+  microciclo. Fonte: Aspetar "Emerging Challenges in Recovery for the Elite
+  Football Player" (FIFA World Cup 2026), Ranchordas 2017, Rackard 2025.
+- **Chetoni esogeni:** mostrati con **nota UCI 2024** che **sconsiglia** l'uso
+  (nessuna evidenza convincente su performance/recovery). Non proposti come
+  strategia.
+
+**Endpoint:** `/api/sport-science` (bundle), `/api/sport-science/fueling`.
+
+---
+
 ## Privacy & dati
 
 - Tutto in `~/.nutricoach/nutricoach.db` (SQLite). Nessun server, nessuna

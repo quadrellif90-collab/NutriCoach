@@ -31,6 +31,7 @@ import notifications
 import nutrition_db as ndb
 import meal_planner
 import diet_presets
+import sport_science
 import version
 
 UPLOAD_DIR = os.path.join(database.DATA_DIR, "uploads")
@@ -122,6 +123,29 @@ async def api_diet_preset_targets(request: Request):
     except Exception:
         weight_kg = None
     return diet_presets.preset_targets(key, kcal, weight_kg)
+
+
+@app.get("/api/sport-science")
+def api_sport_science():
+    return sport_science.science_bundle()
+
+
+@app.post("/api/sport-science/fueling")
+async def api_sport_science_fueling(request: Request):
+    b = await request.json()
+    day_type = b.get("day_type")
+    intensity = b.get("intensity")
+    weight_kg = b.get("weight_kg")
+    try:
+        weight_kg = float(weight_kg) if weight_kg else None
+    except Exception:
+        weight_kg = None
+    out = {}
+    if day_type:
+        out["daily"] = sport_science.fueling_daily_targets(day_type, weight_kg)
+    if intensity:
+        out["during"] = sport_science.fueling_during_targets(intensity)
+    return out
 
 
 # ---------------- Messaggi (thread locale) ----------------

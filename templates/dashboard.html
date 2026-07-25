@@ -104,6 +104,7 @@ label{font-size:12px;color:var(--text3);display:block;margin-top:8px}
     <div class="tab" data-tab="messaggi">💬 Messaggi</div>
     <div class="tab" data-tab="acqua">💧 Acqua</div>
     <div class="tab" data-tab="progressi">📈 Progressi</div>
+    <div class="tab" data-tab="scienza">🔬 Scienza Sport</div>
   </div>
 
   <div class="main-content">
@@ -421,6 +422,53 @@ label{font-size:12px;color:var(--text3);display:block;margin-top:8px}
         <div id="prog-notes"></div>
       </div>
     </section>
+
+    <!-- SCIENZA SPORT (strategie pro adattate) -->
+    <section id="scienza" class="tabpane hidden">
+      <h2>🔬 Scienza Sport — strategie pro adattate</h2>
+      <p class="section-note">Approcci documentati nel mondo elite (WorldTour ciclismo, calcio pro) resi applicabili ad amatoriale/semi-pro. Non e' consulenza medica. Fonti 2024-2026 in calce.</p>
+
+      <div class="card">
+        <h3>⛽ Fuel for the Work Required (periodizzazione carb)</h3>
+        <p id="sci-fuel-note" style="color:var(--text3);font-size:13px"></p>
+        <div class="row" style="margin-top:8px">
+          <div style="width:200px"><label>Tipo giorno</label><select id="sci-day">
+            <option value="low">Basso carico / recupero</option>
+            <option value="moderate">Allenamento moderato</option>
+            <option value="high">Alto carico / lungo</option>
+            <option value="race">Gara / evento</option>
+          </select></div>
+          <div style="width:120px"><label>Peso kg</label><input id="sci-weight" type="number" placeholder="es. 70"></div>
+          <button class="btn amber" onclick="sciFuel()">Calcola target carb</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <div style="width:220px"><label>Carb durante sforzo</label><select id="sci-int">
+            <option value="">—</option>
+            <option value="easy">Basso intensita' (30 g/h)</option>
+            <option value="tempo">Medio/intensita' (60 g/h)</option>
+            <option value="race">Gara/soglia (90 g/h)</option>
+            <option value="ultra">Ultradistanza (120 g/h)</option>
+          </select></div>
+        </div>
+        <div id="sci-fuel-out" style="margin-top:10px"></div>
+        <button class="btn" onclick="sciApplyPlan()">⬇ Usa questi carb nel pianificatore</button>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h3>🔄 Recovery microcycle (football pro → amatoriale)</h3>
+        <p id="sci-rec-note" style="color:var(--text3);font-size:13px"></p>
+        <h4 style="margin-top:10px">Fondamenta (priorita' 1)</h4>
+        <div id="sci-foundations"></div>
+        <h4 style="margin-top:10px">Microciclo</h4>
+        <div id="sci-micro"></div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h3>🧪 Chetoni esogeni</h3>
+        <p id="sci-ket-note" style="color:var(--text3);font-size:13px"></p>
+      </div>
+      <p class="section-note">Fonti: Cao W et al. (PMC 2025); Outside/Velo & Olympics.com (Tour de France 2025 fueling 100-120 g/h); Aspetar journal "Emerging Challenges in Recovery for the Elite Football Player" (FIFA World Cup 2026); Ranchordas MK et al. (PMC 2017); Rackard G et al. (2025); UCI declaration on ketone supplements (2024).</p>
+    </section>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -444,6 +492,7 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   if (tab === 'notif') loadNotifPrefs();
   if (tab === 'summary') computeSummary();
   if (tab === 'diario') loadDiario();
+  if (tab === 'scienza') loadScienza();
   if (tab === 'pianifica') loadPlan();
   if (tab === 'messaggi') loadMessages();
   if (tab === 'acqua') loadWater();
@@ -1049,6 +1098,41 @@ async function addAppt(){
   await agendaRender();
 }
 async function agendaDone(aid){ await jput('/api/appointments/'+aid+'/done',{done:1}); await agendaRender(); }
+
+// ---- Scienza Sport ----
+async function loadScienza(){
+  let d;
+  try { d = await jget('/api/sport-science'); } catch(e){ return; }
+  document.getElementById('sci-fuel-note').textContent = d.fueling.note || '';
+  document.getElementById('sci-rec-note').textContent = d.recovery.note || '';
+  document.getElementById('sci-ket-note').textContent = d.ketones.note || '';
+  document.getElementById('sci-foundations').innerHTML = (d.recovery.foundations||[]).map(f=>
+    `<div style="margin:6px 0"><b>${f.label}</b> — ${f.detail}</div>`).join('');
+  document.getElementById('sci-micro').innerHTML = Object.entries(d.recovery.microcycle||{}).map(([k,v])=>
+    `<div style="margin:6px 0"><b>${v.label}</b> <span style="color:var(--text3)">(${v.focus})</span> — ${v.adjunct.filter(a=>d.recovery.adjuncts[a]).map(a=>d.recovery.adjuncts[a]).join('; ')||'fondamenta'}</div>`).join('');
+}
+async function sciFuel(){
+  const day=document.getElementById('sci-day').value;
+  const w=+document.getElementById('sci-weight').value||'';
+  const inten=document.getElementById('sci-int').value;
+  const r=await jpost('/api/sport-science/fueling',{day_type:day,weight_kg:w,intensity:inten||null});
+  let html='';
+  if(r.daily) html+=`<div>Carb giornalieri (${r.daily.label}): <b>${r.daily.carb_g} g</b> (~${r.daily.g_per_kg} g/kg, ${r.daily.carb_pct}% kcal)</div>`;
+  if(r.during) html+=`<div>Carb durante sforzo (${r.during.label}): <b>${r.during.g_per_h} g/h</b></div>`;
+  document.getElementById('sci-fuel-out').innerHTML=html||'<i>Nessun valore</i>';
+  window._sciDaily = r.daily || null;
+}
+async function sciApplyPlan(){
+  if(!window._sciDaily){ toast('Calcola prima il target carb'); return; }
+  // imposta i carb nel pianificatore: ricalcola kcal mantenendo P/F, aumenta C
+  const cur=+document.getElementById('p-c').value||200;
+  const d=window._sciDaily;
+  // stima kcal da carb: g*4 / pct
+  const kcal=Math.round(d.carb_g*4 / (d.carb_pct/100.0));
+  document.getElementById('p-kcal').value=kcal;
+  document.getElementById('p-c').value=d.carb_g;
+  toast('Pianificatore aggiornato: '+kcal+' kcal, '+d.carb_g+' g carb');
+}
 
 // ---- Aggiornamenti (GitHub Releases) ----
 async function checkUpdate(){
