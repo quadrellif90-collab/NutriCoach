@@ -3,6 +3,14 @@
 Tutte le versioni significative del progetto. Formato basato su
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.1.1] — 2026-07-25
+
+### Fix
+- **Deep scan**: `meal_planner.generate_plan` robusto a chiavi target mancanti
+  (prima `KeyError 'p'` → HTTP 500 su `/api/clients/{cid}/plan/generate` quando
+  il payload era parziale). Ora normalizza `kcal/p/c/f` (accetta anche
+  `protein/carbs/fat`) e applica default. Verificato: 47/47 endpoint OK.
+
 ## [1.1.0] — 2026-07-25
 
 ### Aggiunto
