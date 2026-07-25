@@ -98,8 +98,16 @@ def generate_plan(targets, options=None):
     """Genera un diario settimanale a partire dai target.
 
     targets = {kcal, p, c, f}  (valori GIORNALIERI)
+    Accetta anche chiavi estese (protein/carbs/fat) per robustezza.
     Ritorna {days:[{day, meals:[{meal, items, totals}], totals}], week_totals}
     """
+    # normalizza chiavi (robusto a input parziale)
+    t = targets or {}
+    kcal = float(t.get("kcal") or t.get("kcal_target") or 2000)
+    p = float(t.get("p") or t.get("protein") or 150)
+    c = float(t.get("c") or t.get("carbs") or 200)
+    f = float(t.get("f") or t.get("fat") or 67)
+    targets = {"kcal": kcal, "p": p, "c": c, "f": f}
     options = options or {}
     days = options.get("days", ["lun", "mar", "mer", "gio", "ven", "sab", "dom"])
     import random
