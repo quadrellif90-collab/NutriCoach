@@ -149,6 +149,45 @@ async def api_sport_science_fueling(request: Request):
     return out
 
 
+@app.post("/api/sport-science/protein")
+async def api_sport_science_protein(request: Request):
+    b = await request.json()
+    w = b.get("weight_kg")
+    gpk = b.get("g_per_kg", 1.8)
+    meals = b.get("meals", 4)
+    try:
+        w = float(w) if w else None
+        gpk = float(gpk) if gpk else 1.8
+        meals = int(meals) if meals else 4
+    except Exception:
+        w, gpk, meals = None, 1.8, 4
+    return sport_science.protein_dist_targets(w, gpk, meals)
+
+
+@app.post("/api/sport-science/creatine")
+async def api_sport_science_creatine(request: Request):
+    b = await request.json()
+    w = b.get("weight_kg")
+    sex = b.get("sex", "M")
+    try:
+        w = float(w) if w else None
+    except Exception:
+        w = None
+    return sport_science.creatine_dose(w, sex)
+
+
+@app.post("/api/sport-science/block")
+async def api_sport_science_block(request: Request):
+    b = await request.json()
+    phase = b.get("phase")
+    kcal = b.get("kcal", 2000)
+    try:
+        kcal = float(kcal) if kcal else 2000
+    except Exception:
+        kcal = 2000
+    return sport_science.block_phase_target(phase, None, kcal) if not phase else sport_science.block_phase_target(phase, 70, kcal)
+
+
 @app.get("/api/clients/{cid}/sport-science-report")
 def api_sport_science_report(cid: int, day_type: str = "race", intensity: str = "race", weight_kg: float = None):
     client = database.get_client(cid) or {}

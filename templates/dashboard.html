@@ -468,7 +468,64 @@ label{font-size:12px;color:var(--text3);display:block;margin-top:8px}
         <h3>🧪 Chetoni esogeni</h3>
         <p id="sci-ket-note" style="color:var(--text3);font-size:13px"></p>
       </div>
-      <p class="section-note">Fonti: Cao W et al. (PMC 2025); Outside/Velo & Olympics.com (Tour de France 2025 fueling 100-120 g/h); Aspetar journal "Emerging Challenges in Recovery for the Elite Football Player" (FIFA World Cup 2026); Ranchordas MK et al. (PMC 2017); Rackard G et al. (2025); UCI declaration on ketone supplements (2024).</p>
+
+      <div class="card" style="margin-top:12px">
+        <h3>🥩 Distribuzione proteica (A)</h3>
+        <p id="sci-prot-note" style="color:var(--text3);font-size:13px"></p>
+        <p id="sci-prot-myth" style="color:var(--text3);font-size:12px;font-style:italic"></p>
+        <div class="row" style="margin-top:8px">
+          <div style="width:110px"><label>Peso kg</label><input id="sci-pw" type="number" placeholder="70"></div>
+          <div style="width:110px"><label>g/kg</label><input id="sci-pg" type="number" value="1.8" step="0.1"></div>
+          <div style="width:110px"><label>Pasti</label><input id="sci-pm" type="number" value="4"></div>
+          <button class="btn amber" onclick="sciProtein()">Calcola</button>
+        </div>
+        <div id="sci-prot-out" style="margin-top:8px"></div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h3>🚴 Gut training (B)</h3>
+        <p id="sci-gut-note" style="color:var(--text3);font-size:13px"></p>
+        <p id="sci-gut-ratio" style="color:var(--text3);font-size:12px"></p>
+        <div id="sci-gut-proto" style="margin-top:8px"></div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h3>📊 Periodizzazione a blocchi (C)</h3>
+        <p id="sci-block-note" style="color:var(--text3);font-size:13px"></p>
+        <div class="row" style="margin-top:8px">
+          <div style="width:200px"><label>Fase</label><select id="sci-phase">
+            <option value="base">Base (volume)</option>
+            <option value="build">Costruzione (intensita')</option>
+            <option value="peak">Picco (specifico)</option>
+            <option value="taper">Defaticamento</option>
+            <option value="race">Gara</option>
+            <option value="off">Off / recupero</option>
+          </select></div>
+          <div style="width:120px"><label>kcal</label><input id="sci-bkcal" type="number" value="2500"></div>
+          <button class="btn amber" onclick="sciBlock()">Calcola carb fase</button>
+        </div>
+        <div id="sci-block-out" style="margin-top:8px"></div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h3>💊 Creatina (D)</h3>
+        <p id="sci-creat-note" style="color:var(--text3);font-size:13px"></p>
+        <div class="row" style="margin-top:8px">
+          <div style="width:110px"><label>Peso kg</label><input id="sci-cw" type="number" placeholder="70"></div>
+          <div style="width:120px"><label>Sesso</label><select id="sci-csex"><option value="M">M</option><option value="F">F</option></select></div>
+          <button class="btn amber" onclick="sciCreatine()">Calcola dose</button>
+        </div>
+        <div id="sci-creat-out" style="margin-top:8px"></div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <h3>⌚ Wearable recovery (E)</h3>
+        <p id="sci-wear-note" style="color:var(--text3);font-size:13px"></p>
+        <div id="sci-wear-devices"></div>
+        <p id="sci-wear-bp" style="color:var(--text3);font-size:12px;margin-top:6px"></p>
+      </div>
+
+      <p class="section-note">Fonti: Cao W et al. (PMC 2025); Outside/Velo & Olympics.com (Tour de France 2025 fueling 100-120 g/h); Aspetar journal "Emerging Challenges in Recovery for the Elite Football Player" (FIFA World Cup 2026); Ranchordas MK et al. (PMC 2017); Rackard G et al. (2025); UCI declaration on ketone supplements (2024); Lak&Bagheri 2024 (Frontiers); Morton 2018; Mamerow 2014; Schoenfeld 2013/2017; EF Pro Cycling gut-training 2025; Rønnestad block periodization review; Issurin; Kreider 2025 (ISSN); Garcia 2025; Tam 2025; Topalidis 2024; Dasari 2024; Khawaja 2024; Schyvens 2025.</p>
     </section>
   </div>
 </div>
@@ -1111,6 +1168,54 @@ async function loadScienza(){
     `<div style="margin:6px 0"><b>${f.label}</b> — ${f.detail}</div>`).join('');
   document.getElementById('sci-micro').innerHTML = Object.entries(d.recovery.microcycle||{}).map(([k,v])=>
     `<div style="margin:6px 0"><b>${v.label}</b> <span style="color:var(--text3)">(${v.focus})</span> — ${v.adjunct.filter(a=>d.recovery.adjuncts[a]).map(a=>d.recovery.adjuncts[a]).join('; ')||'fondamenta'}</div>`).join('');
+  // A: proteine
+  if (d.protein){
+    document.getElementById('sci-prot-note').textContent = d.protein.note || '';
+    document.getElementById('sci-prot-myth').textContent = d.protein.myth || '';
+  }
+  // B: gut training
+  if (d.gut_training){
+    document.getElementById('sci-gut-note').textContent = d.gut_training.note || '';
+    document.getElementById('sci-gut-ratio').textContent = d.gut_training.ratio_note || '';
+    document.getElementById('sci-gut-proto').innerHTML = (d.gut_training.protocol_weeks||[]).map(p=>
+      `<div style="margin:4px 0"><b>Sett. ${p.week}</b>: ${p.g_per_h} g/h — ${p.note}</div>`).join('');
+  }
+  // C: block periodization
+  if (d.block_period) document.getElementById('sci-block-note').textContent = d.block_period.note || '';
+  // D: creatina
+  if (d.creatine) document.getElementById('sci-creat-note').textContent = d.creatine.note || '';
+  // E: wearable
+  if (d.wearable){
+    document.getElementById('sci-wear-note').textContent = d.wearable.note || '';
+    document.getElementById('sci-wear-devices').innerHTML = Object.entries(d.wearable.devices||{}).map(([k,v])=>
+      `<div style="margin:4px 0"><b>${k}</b>: ${v}</div>`).join('');
+    document.getElementById('sci-wear-bp').textContent = 'Best practice: ' + (d.wearable.best_practice||'');
+  }
+}
+async function sciProtein(){
+  const w=+document.getElementById('sci-pw').value||'';
+  const gpk=+document.getElementById('sci-pg').value||1.8;
+  const meals=+document.getElementById('sci-pm').value||4;
+  const r=await jpost('/api/sport-science/protein',{weight_kg:w,g_per_kg:gpk,meals:meals});
+  document.getElementById('sci-prot-out').innerHTML =
+    `<div>Target: <b>${r.total_g} g/giorno</b> (${r.g_per_kg} g/kg) in ${r.meals} pasti → <b>${r.per_meal_g} g/pasto</b></div>`+
+    `<div style="color:var(--text3);font-size:12px">Leucina ~${r.leucine_g_per_meal} g/pasto (soglia MPS)</div>`;
+}
+async function sciBlock(){
+  const phase=document.getElementById('sci-phase').value;
+  const kcal=+document.getElementById('sci-bkcal').value||2500;
+  const r=await jpost('/api/sport-science/block',{phase:phase,kcal:kcal});
+  document.getElementById('sci-block-out').innerHTML =
+    `<div><b>${r.label}</b> (${r.focus}): <b>${r.carb_g} g carb</b> (~${r.carb_pct}% kcal su ${r.kcal} kcal)</div>`;
+}
+async function sciCreatine(){
+  const w=+document.getElementById('sci-cw').value||'';
+  const sex=document.getElementById('sci-csex').value;
+  const r=await jpost('/api/sport-science/creatine',{weight_kg:w,sex:sex});
+  if(!r){ document.getElementById('sci-creat-out').innerHTML='<i>Inserisci peso</i>'; return; }
+  document.getElementById('sci-creat-out').innerHTML =
+    `<div>Loading: <b>${r.loading_g_per_day} g/die</b> x ${r.loading_days} g</div>`+
+    `<div>Mantenimento: <b>${r.maintenance_g_per_day} g/die</b></div>`;
 }
 async function sciFuel(){
   const day=document.getElementById('sci-day').value;

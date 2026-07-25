@@ -182,7 +182,25 @@ medica**.
   (nessuna evidenza convincente su performance/recovery). Non proposti come
   strategia.
 
-**Endpoint:** `/api/sport-science` (bundle), `/api/sport-science/fueling`.
+- **Distribuzione proteica (A):** totale giornaliero (1.6-2.2 g/kg) > timing. Calcolatore
+  `/api/sport-science/protein`: totale g, g/pasto (4-5 pasti), ~3 g leucina/pasto.
+  Nota "mito finestra anabolica 30'" inclusa. Fonti: Lak&Bagheri 2024, Morton 2018,
+  Mamerow 2014, Schoenfeld 2013/2017, meta MDPI 2025.
+- **Gut training (B):** assorbimento carb trainabile, protocollo 4 settimane
+  (30→60→90→120 g/h) con rapporto 2:1 glucosio:fruttosio oltre 60 g/h.
+  Fonti: Cao 2025, EF Pro Cycling gut-training 2025, Morton 2026.
+- **Periodizzazione a blocchi (C):** fasi (base/costruzione/picco/defaticamento/gara/off)
+  con target carb % coerente a FTWR. Calcolatore `/api/sport-science/block`.
+  Fonti: Rønnestad block periodization review, Issurin.
+- **Creatina (D):** sicura e benefica anche donne/atlete. Calcolatore
+  `/api/sport-science/creatine` (loading 0.3 g/kg × 5-7g, mant. 3-5 g/d).
+  Fonti: Kreider 2025 (ISSN), Garcia 2025, Tam 2025.
+- **Wearable recovery (E):** Oura/WHOOP/Garmin — seguire trend su settimane, non
+  giorno singolo; metriche valide RHR/HRV/durata sonno. Fonti: Topalidis 2024,
+  Dasari 2024, Khawaja 2024, Schyvens 2025.
+
+**Endpoint:** `/api/sport-science` (bundle), `/api/sport-science/fueling`,
+`/api/sport-science/protein`, `/api/sport-science/creatine`, `/api/sport-science/block`.
 
 ---
 
