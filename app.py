@@ -6,6 +6,9 @@ import json
 import shutil
 import tempfile
 import datetime
+import subprocess
+import urllib.request
+import urllib.error
 from fastapi import FastAPI, UploadFile, File, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -27,6 +30,8 @@ import auth
 import notifications
 import nutrition_db as ndb
 import meal_planner
+import diet_presets
+import version
 
 UPLOAD_DIR = os.path.join(database.DATA_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -99,6 +104,24 @@ async def api_plan_generate(cid: int, request: Request):
     options = b.get("options", {})
     plan = meal_planner.generate_plan(targets, options)
     return plan
+
+
+@app.get("/api/diet-presets")
+def api_diet_presets():
+    return {"presets": diet_presets.preset_list()}
+
+
+@app.post("/api/diet-presets/targets")
+async def api_diet_preset_targets(request: Request):
+    b = await request.json()
+    key = b.get("key", "personalizzato")
+    kcal = float(b.get("kcal", 2000) or 2000)
+    weight_kg = b.get("weight_kg")
+    try:
+        weight_kg = float(weight_kg) if weight_kg else None
+    except Exception:
+        weight_kg = None
+    return diet_presets.preset_targets(key, kcal, weight_kg)
 
 
 # ---------------- Messaggi (thread locale) ----------------
@@ -652,6 +675,116 @@ def build_plan_html(diet, client, bia, selections):
   {''.join(rows)}
   <p style="margin-top:24px;color:#94a3b8;font-size:.8em">Generato con NutriCoach — valori stimati da database alimenti di riferimento.</p>
 </div></body></html>"""
+
+
+# ---------------- Self-update (GitHub Releases) ----------------
+_GITHUB_RELEASES_LATEST = "https://api.github.com/repos/quadrellif90-collab/NutriCoach/releases/latest"
+_UPDATE_CACHE = {"ts": 0.0, "data": None}
+_UPDATE_TTL = 6 * 3600  # 6h
+
+
+def _parse_ver(v):
+    v = (v or "").lstrip("vV").strip()
+    try:
+        return tuple(int(x) for x in v.split("."))
+    except Exception:
+        return (0,)
+
+
+def _github_get(url):
+    req = urllib.request.Request(url, headers={"User-Agent": "NutriCoach", "Accept": "application/vnd.github+json"})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def get_update_info(force=False):
+    """Controlla releases/latest e ritorna info aggiornamento (cache 6h)."""
+    import time
+    now = time.time()
+    if not force and _UPDATE_CACHE["data"] and (now - _UPDATE_CACHE["ts"]) < _UPDATE_TTL:
+        return _UPDATE_CACHE["data"]
+    try:
+        rel = _github_get(_GITHUB_RELEASES_LATEST)
+    except Exception as e:
+        return {"update_available": False, "error": str(e), "current": version.VERSION}
+    tag = rel.get("tag_name", "")
+    latest = tag.lstrip("vV")
+    plat = sys.platform
+    # scegli l'asset per piattaforma
+    dl = None
+    asset_name = None
+    for a in rel.get("assets", []):
+        n = a.get("name", "")
+        if plat == "win32" and n.endswith(".exe") and "Setup" in n:
+            dl = a.get("browser_download_url"); asset_name = n; break
+        if plat == "darwin" and n.endswith(".dmg"):
+            dl = a.get("browser_download_url"); asset_name = n; break
+    # fallback: primo exe (Windows) / dmg (Mac) se non trovato quello "Setup"
+    if dl is None:
+        for a in rel.get("assets", []):
+            n = a.get("name", "")
+            if plat == "win32" and n.endswith(".exe"):
+                dl = a.get("browser_download_url"); asset_name = n; break
+            if plat == "darwin" and n.endswith(".dmg"):
+                dl = a.get("browser_download_url"); asset_name = n; break
+    info = {
+        "update_available": _parse_ver(latest) > _parse_ver(version.VERSION),
+        "current": version.VERSION,
+        "latest": latest,
+        "tag": tag,
+        "html_url": rel.get("html_url", ""),
+        "download_url": dl,
+        "asset_name": asset_name,
+        "platform": plat,
+    }
+    _UPDATE_CACHE["ts"] = now
+    _UPDATE_CACHE["data"] = info
+    return info
+
+
+@app.get("/api/version")
+def api_version():
+    return {"version": version.VERSION, "platform": sys.platform}
+
+
+@app.get("/api/self-update/check")
+def api_self_update_check():
+    return get_update_info(force=True)
+
+
+@app.post("/api/self-update/apply")
+def api_self_update_apply():
+    """Scarica l'installer della release latest e lo lancia (silenzioso su Win).
+    Ritorna prima di completare: l'app deve liberare i file (si chiude)."""
+    info = get_update_info(force=True)
+    dl = info.get("download_url")
+    if not dl:
+        return JSONResponse(status_code=400,
+                            content={"ok": False, "error": "Nessun asset scaricabile per questa piattaforma"})
+    plat = sys.platform
+    try:
+        td = tempfile.mkdtemp(prefix="nutricoach-update-")
+        fname = info.get("asset_name") or ("NutriCoach-Setup.exe" if plat == "win32" else "NutriCoach.dmg")
+        dest = os.path.join(td, fname)
+        req = urllib.request.Request(dl, headers={"User-Agent": "NutriCoach"})
+        with urllib.request.urlopen(req, timeout=300) as r:
+            with open(dest, "wb") as f:
+                f.write(r.read())
+        if plat == "win32" and fname.lower().endswith(".exe"):
+            subprocess.Popen([dest, "/S"], shell=False)
+            return {"ok": True, "launched": True, "mode": "windows-installer",
+                    "msg": "Installer avviato. L'app si chiudera' per aggiornarsi."}
+        elif plat == "darwin" and fname.lower().endswith(".dmg"):
+            subprocess.Popen(["open", dest])
+            return {"ok": True, "launched": True, "mode": "macos-dmg",
+                    "msg": "DMG aperta: trascina NutriCoach in Applicazioni per aggiornare."}
+        else:
+            import webbrowser
+            webbrowser.open(info.get("html_url") or dl)
+            return {"ok": True, "launched": True, "mode": "manual",
+                    "msg": "Aperta la pagina della release."}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
 
 
 if __name__ == "__main__":

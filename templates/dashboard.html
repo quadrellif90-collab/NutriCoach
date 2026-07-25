@@ -107,6 +107,12 @@ label{font-size:12px;color:var(--text3);display:block;margin-top:8px}
   </div>
 
   <div class="main-content">
+    <!-- BANNER AGGIORNAMENTO (globale) -->
+    <div id="update-banner" style="display:none;align-items:center;gap:10px;background:var(--accent);color:#fff;padding:8px 14px;border-radius:8px;margin-bottom:10px">
+      <span id="update-text">Aggiornamento disponibile</span>
+      <button class="btn" style="background:#fff;color:var(--accent)" onclick="applyUpdate()">Aggiorna ora</button>
+      <button class="btn ghost" style="color:#fff" onclick="document.getElementById('update-banner').style.display='none'">Più tardi</button>
+    </div>
     <!-- HEADER CLIENTE (visibile solo dentro il cliente) -->
     <div id="client-header">
       <div>
@@ -145,8 +151,8 @@ label{font-size:12px;color:var(--text3);display:block;margin-top:8px}
       <p class="section-note">Seleziona i clienti (tick) per confrontarli, oppure entra in uno per vederne i dettagli. Database locale, nessun cloud.</p>
       <div class="row" style="margin-bottom:14px">
         <div style="flex:1"><label>Nuovo cliente</label><input id="c-name" placeholder="Nome cliente"></div>
-        <div style="width:120px"><label>Sesso</label><input id="c-sex" placeholder="M/F"></div>
-        <div style="width:140px"><label>Obiettivo</label><input id="c-goal" placeholder="Dimagrimento"></div>
+        <div style="width:120px"><label>Sesso</label><select id="c-sex"><option value="M">Maschio</option><option value="F">Femmina</option></select></div>
+        <div style="width:200px"><label>Obiettivo</label><select id="c-goal"><option value="Dimagrimento">Dimagrimento</option><option value="Mantenimento">Mantenimento</option><option value="Massa">Aumento massa</option><option value="Ridefinizione">Ridefinizione</option><option value="Performance">Performance</option></select></div>
         <button class="btn" onclick="addClient()">+ Aggiungi</button>
         <button class="btn amber" onclick="showCompare()">⚖ Confronta selezionati</button>
       </div>
@@ -356,11 +362,19 @@ label{font-size:12px;color:var(--text3);display:block;margin-top:8px}
       <h2>🤖 Pianificatore automatico</h2>
       <p class="section-note">Genera un diario settimanale bilanciato partendo dai target (stile EatThisMuch). Valori dal motore unico.</p>
       <div class="card">
+        <div class="row" style="margin-bottom:8px">
+          <div style="flex:1"><label>Tipo di dieta (preset)</label><select id="p-preset" onchange="applyPreset()">
+            <option value="">— scegli un preset —</option>
+          </select></div>
+          <div style="width:110px"><label>Peso kg</label><input id="p-weight" type="number" placeholder="es. 75"></div>
+          <button class="btn amber" onclick="applyPreset()">Applica preset</button>
+        </div>
         <div class="row">
           <div style="width:120px"><label>kcal/giorno</label><input id="p-kcal" type="number" value="2000"></div>
           <div style="width:100px"><label>Proteine g</label><input id="p-p" type="number" value="150"></div>
           <div style="width:100px"><label>Carboidrati g</label><input id="p-c" type="number" value="200"></div>
           <div style="width:100px"><label>Grassi g</label><input id="p-f" type="number" value="67"></div>
+          <span id="p-preset-note" style="align-self:center;color:var(--text3);font-size:12px"></span>
         </div>
         <button class="btn" onclick="generatePlan()">⚡ Genera settimana</button>
         <span id="plan-gen-result" style="margin-left:10px;color:var(--accent)"></span>
@@ -603,7 +617,11 @@ async function pasteDiet(){
 }
 function renderDietResult(diet){
   const days=(diet.days||[]).slice(0,2).map(d=>{
-    const meals=d.meals.slice(0,2).map(m=>m.meal+': '+m.items.slice(0,3).map(i=>i.food+' '+i.grams+'g').join(', ')).join(' | ');
+    const meals=d.meals.slice(0,2).map(m=>{
+      const foods=[];
+      (m.groups||[]).forEach(g=>g.options.forEach(o=>foods.push(o.food+' '+(o.grams||'')+'g')));
+      return m.meal+': '+foods.slice(0,3).join(', ');
+    }).join(' | ');
     return `<div class="food"><b>${d.day}</b><span class="grams">${meals}</span></div>`;
   }).join('');
   document.getElementById('diet-result').innerHTML=`<div class="card"><b>${diet.title||'Dieta'}</b> — ${diet.days?diet.days.length:0} giorni<div style="margin-top:8px">${days}</div></div>`;
@@ -893,6 +911,29 @@ async function loadDiario(){
 async function delDietItem(id){ await jdel(`/api/clients/${STATE.clientId}/diet-item/${id}`); await loadDiario(); }
 
 // ---- Pianificatore automatico ----
+async function loadPresets(){
+  try{
+    const r=await jget('/api/diet-presets');
+    const sel=document.getElementById('p-preset');
+    sel.innerHTML='<option value="">— scegli un preset —</option>'+
+      (r.presets||[]).map(p=>`<option value="${p.key}">${p.label}</option>`).join('');
+  }catch(e){}
+}
+async function applyPreset(){
+  const key=document.getElementById('p-preset').value;
+  if(!key){document.getElementById('p-preset-note').textContent='';return;}
+  const kcal=+document.getElementById('p-kcal').value||2000;
+  const w=+document.getElementById('p-weight').value||'';
+  const r=await jpost('/api/diet-presets/targets',{key,kcal,weight_kg:w});
+  if(r && r.p!=null){
+    document.getElementById('p-p').value=r.p;
+    document.getElementById('p-c').value=r.c;
+    document.getElementById('p-f').value=r.f;
+    document.getElementById('p-preset-note').textContent=`Preset: ${r.p_pct}%P / ${r.c_pct}%C / ${r.f_pct}%F`;
+  } else if(r && r.manual){
+    document.getElementById('p-preset-note').textContent='Preset personalizzato: inserisci i valori a mano';
+  }
+}
 async function generatePlan(){
   const targets={kcal:+document.getElementById('p-kcal').value||2000,
                  p:+document.getElementById('p-p').value||150,
@@ -1009,6 +1050,31 @@ async function addAppt(){
 }
 async function agendaDone(aid){ await jput('/api/appointments/'+aid+'/done',{done:1}); await agendaRender(); }
 
+// ---- Aggiornamenti (GitHub Releases) ----
+async function checkUpdate(){
+  try {
+    const info = await jget('/api/self-update/check');
+    if(info && info.update_available){
+      document.getElementById('update-text').textContent =
+        'Aggiornamento disponibile: v'+info.latest+' (hai v'+info.current+')';
+      document.getElementById('update-banner').style.display='flex';
+    }
+  } catch(e){ /* rete assente: ignora */ }
+}
+async function applyUpdate(){
+  const b=document.getElementById('update-banner'); b.style.display='none';
+  toast('Download e installazione in corso...');
+  try {
+    const r=await jpost('/api/self-update/apply',{});
+    if(r && r.launched){
+      // su Windows l'installer silenzioso sostituisce l'exe e chiude l'app
+      setTimeout(()=>{ document.body.innerHTML='<div style="padding:40px;font-family:sans-serif">Aggiornamento in corso. Riavvia NutriCoach tra qualche secondo.</div>'; }, 1200);
+    } else if(r && r.error){
+      toast('Errore aggiornamento: '+r.error);
+    }
+  } catch(e){ toast('Errore aggiornamento: '+e.message); }
+}
+
 // ---- tema ----
 function toggleTheme(){
   const light=document.body.classList.toggle('light');
@@ -1016,7 +1082,7 @@ function toggleTheme(){
 }
 
 // init
-initAuth(); loadRecipes();
+initAuth(); loadRecipes(); checkUpdate(); loadPresets();
 </script>
 </body>
 </html>

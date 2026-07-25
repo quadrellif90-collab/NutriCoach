@@ -103,7 +103,8 @@ def parse_bia_text(text: str) -> dict:
 
 def parse_bia_pdf(path: str) -> dict:
     """Estrae BIA da PDF. Se testuale -> parse diretto. Se scansionato ->
-    ritorna le immagini delle pagine per OCR esterno."""
+    tenta OCR (se Tesseract installato); altrimenti ritorna le immagini per
+    OCR/copia manuale esterna."""
     doc = fitz.open(path)
     text = ""
     pages_b64 = []
@@ -119,7 +120,19 @@ def parse_bia_pdf(path: str) -> dict:
         parsed = parse_bia_text(text)
         parsed["scanned"] = False
         return parsed
-    return {"scanned": True, "pages": pages_b64, "fields": {}, "raw_lines": 0}
+    # PDF scansionato: tenta OCR
+    try:
+        import ocr
+        res = ocr.ocr_pdf(path)
+        if res["text"].strip():
+            parsed = parse_bia_text(res["text"])
+            parsed["scanned"] = False
+            parsed["ocr"] = True
+            return parsed
+        return {"scanned": True, "pages": res.get("pages", pages_b64),
+                "fields": {}, "raw_lines": 0, "ocr_available": ocr.tesseract_available()}
+    except Exception:
+        return {"scanned": True, "pages": pages_b64, "fields": {}, "raw_lines": 0}
 
 
 def parse_bia_pasted(pasted_text: str) -> dict:

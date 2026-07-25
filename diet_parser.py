@@ -27,6 +27,7 @@ in un dict serializzabile. Per PDF scansionati (0 testo) si usa
 
 import re
 import fitz  # PyMuPDF
+import ocr
 
 DAYS = ["lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica"]
 # Pasti riconosciuti (case-insensitive, substring)
@@ -153,17 +154,33 @@ def parse_diet_text(text: str) -> dict:
 
 
 def parse_diet_pdf(path: str) -> dict:
-    """Estrae testo dal PDF e parse. Se 0 testo -> ritorna flagged scanned."""
+    """Estrae testo dal PDF e parse. Se 0 testo -> tenta OCR (se Tesseract
+    installato); se anche cosi' 0 testo, ritorna flagged scanned con le immagini."""
     doc = fitz.open(path)
     text = ""
     for page in doc:
         text += page.get_text()
     doc.close()
-    if not text.strip():
-        return {"scanned": True, "text": "", "diet": None}
-    diet = parse_diet_text(text)
-    diet["scanned"] = False
-    return {"scanned": False, "text": text, "diet": diet}
+    if text.strip():
+        diet = parse_diet_text(text)
+        diet["scanned"] = False
+        return {"scanned": False, "text": text, "diet": diet}
+    # PDF scansionato: tenta OCR
+    try:
+        res = ocr.ocr_pdf(path)
+        if res["text"].strip():
+            diet = parse_diet_text(res["text"])
+            diet["scanned"] = False
+            diet["ocr"] = True
+            return {"scanned": False, "text": res["text"], "diet": diet, "ocr": True}
+    except Exception:
+        pass
+    # fallback: ritorna immagini per copia manuale
+    try:
+        res = ocr.ocr_pdf(path)
+        return {"scanned": True, "text": "", "diet": None, "pages": res.get("pages", []), "ocr_available": ocr.tesseract_available()}
+    except Exception:
+        return {"scanned": True, "text": "", "diet": None, "pages": []}
 
 
 if __name__ == "__main__":

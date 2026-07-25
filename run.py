@@ -56,6 +56,16 @@ def open_browser():
 
 if __name__ == "__main__":
     log.info("NutriCoach avvio su porta %s (DB=%s)", PORT, DB_ENV or "default")
+    # check aggiornamenti non bloccante (logga se disponibile; la UI lo mostra)
+    def _boot_update_check():
+        try:
+            info = app_module.get_update_info(force=False)
+            if info.get("update_available"):
+                log.info("Aggiornamento disponibile: v%s (attuale v%s) — %s",
+                          info.get("latest"), info.get("current"), info.get("html_url"))
+        except Exception as e:  # pragma: no cover
+            log.debug("check aggiornamenti non disponibile: %s", e)
+    threading.Thread(target=_boot_update_check, daemon=True).start()
     if not os.environ.get("NUTRICOACH_NOBROWSE"):
         threading.Thread(target=open_browser, daemon=True).start()
     try:
