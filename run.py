@@ -24,6 +24,42 @@ if getattr(sys, "frozen", False):
 else:
     _base = os.path.dirname(os.path.abspath(__file__))
 
+# Quando l'app è un EXE one-file (console=False), sys.stdin può essere None.
+# uvicorn.DefaultFormatter chiama sys.stdin.isatty() -> crash. Lo rendiamo robusto.
+class _SafeStream:
+    """Wrapper che simula un terminale non interattivo se stdin/out/err mancano."""
+    def __init__(self, stream):
+        self._s = stream
+    def isatty(self):
+        return False
+    def write(self, s):
+        if self._s is not None:
+            try:
+                self._s.write(s)
+            except Exception:
+                pass
+    def flush(self):
+        if self._s is not None:
+            try:
+                self._s.flush()
+            except Exception:
+                pass
+    def read(self, *a):
+        if self._s is not None:
+            return self._s.read(*a)
+        return ""
+    def readline(self, *a):
+        if self._s is not None:
+            return self._s.readline(*a)
+        return ""
+
+if sys.stdin is None:
+    sys.stdin = _SafeStream(None)
+if sys.stdout is None:
+    sys.stdout = _SafeStream(None)
+if sys.stderr is None:
+    sys.stderr = _SafeStream(None)
+
 LOG_DIR = os.path.join(os.path.expanduser("~"), ".nutricoach")
 os.makedirs(LOG_DIR, exist_ok=True)
 LOG_FILE = os.path.join(LOG_DIR, "nutricoach.log")
@@ -34,6 +70,29 @@ logging.basicConfig(
     handlers=[logging.FileHandler(LOG_FILE, encoding="utf-8")],
 )
 log = logging.getLogger("nutricoach")
+
+# Config logging per uvicorn SENZA DefaultFormatter (che usa sys.stdin.isatty()):
+# in EXE console=False sys.stdin e' None e crasha. Usiamo logging.Formatter standard.
+UVICORN_LOG_CONFIG = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "default": {"class": "logging.Formatter", "fmt": "%(levelname)s: %(message)s"},
+        "access": {
+            "class": "uvicorn.logging.AccessFormatter",
+            "fmt": '%(levelname)s: %(client_addr)s - "%(request_line)s" %(status_code)s',
+        },
+    },
+    "handlers": {
+        "default": {"formatter": "default", "class": "logging.StreamHandler", "stream": "ext://sys.stderr"},
+        "access": {"formatter": "access", "class": "logging.StreamHandler", "stream": "ext://sys.stdout"},
+    },
+    "loggers": {
+        "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
+        "uvicorn.error": {"level": "INFO", "propagate": False},
+        "uvicorn.access": {"handlers": ["access"], "level": "INFO", "propagate": False},
+    },
+}
 
 # import diretto dell'app (funziona da sorgente e da EXE PyInstaller)
 import app as app_module
@@ -69,7 +128,12 @@ if __name__ == "__main__":
     if not os.environ.get("NUTRICOACH_NOBROWSE"):
         threading.Thread(target=open_browser, daemon=True).start()
     try:
-        uvicorn.run(app_module.app, host="127.0.0.1", port=PORT, log_level="info")
+        uvicorn.run(app_module.app, host="127.0.0.1", port=PORT,
+                    log_level="info", log_config=UVICORN_LOG_CONFIG)
     except Exception as e:  # pragma: no cover
         log.exception("Errore di avvio: %s", e)
-        input("Errore di avvio. Premi Invio per chiudere. (vedi ~/.nutricoach/nutricoach.log)")
+        # In EXE console=False sys.stdin puo' essere None -> input() crasha.
+        try:
+            input("Errore di avvio. Premi Invio per chiudere. (vedi ~/.nutricoach/nutricoach.log)")
+        except Exception:
+            time.sleep(5)

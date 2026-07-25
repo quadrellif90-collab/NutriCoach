@@ -3,6 +3,18 @@
 Tutte le versioni significative del progetto. Formato basato su
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.1.2] — 2026-07-25
+
+### Fix (critico avvio EXE)
+- **Crash all'avvio dell'EXE** (`console=False`): `uvicorn.DefaultFormatter`
+  chiamava `sys.stdin.isatty()` ma in EXE `sys.stdin` è `None` →
+  `AttributeError` + `ValueError: Unable to configure formatter 'default'`,
+  seguito da `RuntimeError: input(): lost sys.stdin`.
+  Risolto in `run.py`: wrapper `_SafeStream` che rende `sys.stdin/out/err`
+  robusti a `None`, e `UVICORN_LOG_CONFIG` con `logging.Formatter` standard
+  (senza `DefaultFormatter`). Verificato: server parte con stdin `/dev/null`
+  e risponde HTTP 200.
+
 ## [1.1.1] — 2026-07-25
 
 ### Fix
