@@ -39,7 +39,7 @@ import version
 UPLOAD_DIR = os.path.join(database.DATA_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-app = FastAPI(title="NutriCoach", version="1.4.3")
+app = FastAPI(title="NutriCoach", version="1.4.4")
 
 app.add_middleware(
     CORSMiddleware,
@@ -426,26 +426,91 @@ async def api_client_checkin(cid: int, request: Request):
     return {"ok": True, "checkin": checkin}
 
 
+CONFIG_PATH = os.path.join(database.DATA_DIR, "studio_config.json")
+
+def load_studio_config():
+    try:
+        with open(CONFIG_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_studio_config(cfg):
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+
+@app.get("/api/studio/config")
+def api_get_config():
+    cfg = load_studio_config()
+    # non esporre la password SMTP
+    safe = {k: ("" if k == "smtp_password" else v) for k, v in cfg.items()}
+    safe["has_smtp_password"] = bool(cfg.get("smtp_password"))
+    return safe
+
+@app.post("/api/studio/config")
+async def api_set_config(request: Request):
+    body = await request.body()
+    cfg = json.loads(body.decode() if body else "{}")
+    # merge con esistente
+    cur = load_studio_config()
+    cur.update(cfg)
+    save_studio_config(cur)
+    return {"ok": True}
+
 @app.post("/api/clients/{cid}/notify")
 async def api_notify(cid: int, request: Request):
-    """Registra l'invio di un follow-up (piano/check-in) e restituisce un
-    payload mailto pronto all'uso (apre il client email locale, 0 dipendenze).
-    Salva in notification_log come 'sent'."""
+    """Invia un follow-up via email (SMTP reale se configurato) o whatsapp
+    (link wa.me, 0 dipendenze). Registra in notification_log.
+    Se l'email non e' configurata/invio fallisce, ritorna comunque il link
+    (mailto o wa.me) per invio manuale."""
     b = await request.json()
     client = database.get_client(cid) or {}
     channel = b.get("channel", "email")
     ctype = b.get("type", "piano")
     subject = b.get("subject", f"NutriCoach — {ctype} {client.get('name', 'Cliente')}")
     body = b.get("body", "In allegato/collegato il tuo piano. A presto!")
-    # registra invio
-    database.add_notification_log(cid, ctype, channel, note=subject)
-    # costruisci mailto (se c'e' email cliente)
     email = client.get("email") or ""
-    mailto = ""
-    if email:
-        import urllib.parse
-        mailto = f"mailto:{email}?subject={urllib.parse.quote(subject)}&body={urllib.parse.quote(body)}"
-    return {"ok": True, "mailto": mailto, "email": email, "logged": True}
+    phone = (client.get("phone") or "").strip().replace(" ", "").replace("+", "").replace("-", "")
+    result = {"ok": True, "channel": channel, "logged": True, "sent": False}
+
+    if channel == "email":
+        if email:
+            cfg = load_studio_config()
+            if cfg.get("smtp_host") and cfg.get("smtp_user") and cfg.get("smtp_password"):
+                try:
+                    import smtplib, ssl
+                    from email.message import EmailMessage
+                    msg = EmailMessage()
+                    msg["Subject"] = subject
+                    msg["From"] = cfg.get("smtp_from", cfg["smtp_user"])
+                    msg["To"] = email
+                    msg.set_content(body)
+                    ctx = ssl.create_default_context()
+                    with smtplib.SMTP(cfg["smtp_host"], int(cfg.get("smtp_port", 587))) as s:
+                        if cfg.get("smtp_tls", True):
+                            s.starttls(context=ctx)
+                        s.login(cfg["smtp_user"], cfg["smtp_password"])
+                        s.send_message(msg)
+                    result["sent"] = True
+                    result["method"] = "smtp"
+                except Exception as e:
+                    result["smtp_error"] = str(e)
+            # fallback mailto
+            import urllib.parse
+            result["mailto"] = f"mailto:{email}?subject={urllib.parse.quote(subject)}&body={urllib.parse.quote(body)}"
+            result["email"] = email
+        else:
+            result["email_missing"] = True
+    elif channel == "whatsapp":
+        if phone:
+            import urllib.parse
+            result["wa_link"] = f"https://wa.me/{phone}?text={urllib.parse.quote(body)}"
+            result["phone"] = phone
+        else:
+            result["phone_missing"] = True
+
+    database.add_notification_log(cid, ctype, channel, note=subject)
+    return result
 
 
 # ===== Backup / Export / Restore (P) =====

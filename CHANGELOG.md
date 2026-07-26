@@ -1,4 +1,18 @@
 
+## [1.4.4] — 2026-07-26
+
+### Invio automatico Email / WhatsApp (cliente finale)
+- **✉️ Email reale via SMTP**: il nutrizionista configura il proprio server
+  SMTP (Gmail/Outlook) nel pannello "⚙️ Config email" (Home Oggi).
+  La "📧 Email" del piano / check-in invia davvero il messaggio.
+  Se non configurato → fallback `mailto:` (client locale).
+  Endpoint `/api/studio/config` (GET/POST) + SMTP in `/api/clients/{cid}/notify`.
+- **📱 WhatsApp via `wa.me`**: la "📱 WhatsApp" apre la chat col cliente
+  con il messaggio precompilato (0 dipendenze, nessuna API a pagamento).
+- **Check-in**: nel modale ora ci sono anche "✉️ Email" e "📱 WhatsApp"
+  per sollecitare il paziente direttamente.
+- **Coda notifiche**: invio reale + log (non solo bottone "Inviato").
+
 ## [1.4.3] — 2026-07-26
 
 ### Bug fix (audit contratti frontend↔backend)

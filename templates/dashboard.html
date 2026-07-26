@@ -415,7 +415,8 @@ label{font-size:12px;color:var(--text3);display:block;margin-top:8px}
         </div>
         <button class="btn" onclick="generatePlan()">⚡ Genera settimana</button>
         <button class="btn ghost" onclick="exportPlanPdf()" style="margin-left:8px">📄 Esporta PDF clinico</button>
-        <button class="btn ghost" onclick="sendPlanEmail()" style="margin-left:8px">📧 Invia via email</button>
+        <button class="btn ghost" onclick="sendPlanEmail('email')" style="margin-left:8px">📧 Email</button>
+        <button class="btn ghost" onclick="sendPlanEmail('whatsapp')" style="margin-left:8px">📱 WhatsApp</button>
         <span id="plan-gen-result" style="margin-left:10px;color:var(--accent)"></span>
       </div>
       <div id="plan-week"></div>
@@ -828,8 +829,10 @@ label{font-size:12px;color:var(--text3);display:block;margin-top:8px}
     <div style="margin:8px 0"><label>Compliance dieta (%)</label><input id="ck-compliance" type="range" min="0" max="100" value="80" oninput="document.getElementById('ck-compliance-v').textContent=this.value+'%'"><span id="ck-compliance-v">80%</span></div>
     <div style="margin:8px 0"><label>Energia (1-10)</label><input id="ck-energy" type="range" min="1" max="10" value="5" oninput="document.getElementById('ck-energy-v').textContent=this.value"><span id="ck-energy-v">5</span></div>
     <div style="margin:8px 0"><label>Note</label><textarea id="ck-notes" rows="2" style="width:100%"></textarea></div>
-    <div style="display:flex;gap:10px;margin-top:14px">
+    <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
       <button class="btn" onclick="submitCheckin()">💾 Salva check-in</button>
+      <button class="btn ghost" onclick="sendCheckinMsg(ckCid, document.getElementById('ck-name').textContent, 'email')">✉️ Email</button>
+      <button class="btn ghost" onclick="sendCheckinMsg(ckCid, document.getElementById('ck-name').textContent, 'whatsapp')">📱 WhatsApp</button>
       <button class="btn ghost" onclick="document.getElementById('ck-overlay').style.display='none'">✕ Annulla</button>
     </div>
   </div>
@@ -1457,14 +1460,31 @@ async function exportPlanPdf(){
   if(r.ok){ const blob=await r.blob(); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='piano_clinico.pdf'; a.click(); toast('PDF pronto ✓'); }
   else { toast('Errore generazione PDF'); }
 }
-async function sendPlanEmail(){
+async function sendPlanEmail(channel){
   const cid = STATE.clientId;
   if(!cid){ toast('Seleziona prima un cliente'); return; }
-  const r = await jpost(`/api/clients/${cid}/notify`, {type:'piano', channel:'email', subject:`NutriCoach — Piano ${new Date().toLocaleDateString('it-IT')}`, body:'Ciao! Trovi in allegato il tuo piano alimentare personalizzato. Per qualsiasi dubbio sono qui. A presto!'});
+  channel = channel || 'email';
+  const r = await jpost(`/api/clients/${cid}/notify`, {type:'piano', channel, subject:`NutriCoach — Piano ${new Date().toLocaleDateString('it-IT')}`, body:'Ciao! Trovi in allegato il tuo piano alimentare personalizzato. Per qualsiasi dubbio sono qui. A presto!'});
   if(r.ok){
-    if(r.mailto){ window.location.href = r.mailto; toast('Apertura client email ✓'); }
-    else { toast('Invio registrato — aggiungi l\'email del cliente per il link mailto'); }
+    if(channel==='email'){
+      if(r.sent){ toast('✅ Email inviata via SMTP'); }
+      else if(r.mailto){ window.location.href = r.mailto; toast('Apertura client email ✓'); }
+      else if(r.email_missing){ toast('⚠️ Cliente senza email — aggiungila nella scheda'); }
+      else if(r.smtp_error){ toast('SMTP errato: '+r.smtp_error); }
+    } else if(channel==='whatsapp'){
+      if(r.wa_link){ window.open(r.wa_link, '_blank'); toast('Apertura WhatsApp ✓'); }
+      else if(r.phone_missing){ toast('⚠️ Cliente senza telefono — aggiungilo nella scheda'); }
+    }
   } else { toast('Errore invio'); }
+}
+async function sendCheckinMsg(cid, cname, channel){
+  const r = await jpost(`/api/clients/${cid}/notify`, {type:'checkin', channel: channel||'email', subject:`NutriCoach — Check-in ${cname}`, body:`Ciao ${cname}! Come procede questa settimana? Fammi sapere peso, energia e sintomi. A presto!`});
+  if(r.ok){
+    if(channel==='whatsapp' && r.wa_link){ window.open(r.wa_link, '_blank'); toast('WhatsApp aperto ✓'); }
+    else if(r.mailto){ window.location.href = r.mailto; toast('Email aperta ✓'); }
+    else if(r.sent){ toast('✅ Email inviata'); }
+    else { toast('Registrato (nessun contatto)'); }
+  }
 }
 async function loadPlan(){ /* i target restano; si genera on-demand */ document.getElementById('plan-week').innerHTML=''; document.getElementById('plan-gen-result').textContent=''; }
 
@@ -2150,7 +2170,39 @@ async function openRestore(){
   else toast('Errore ripristino');
 }
 
-// ---- I: seed demo client ----
+// ---- Config SMTP (invio email reale) ----
+async function openSmtpConfig(){
+  const c = await jget('/api/studio/config');
+  const html = `<div style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:22px;width:380px;max-width:92vw">
+      <h3>⚙️ Configura invio email (SMTP)</h3>
+      <p style="font-size:12px;color:var(--text3)">Inserisci i dati del tuo provider (Gmail/Outlook). Se vuoto, l'app usa il tuo client email (mailto).</p>
+      <div style="margin:8px 0"><label>Server SMTP</label><input id="sc-host" value="${c.smtp_host||''}" placeholder="smtp.gmail.com" style="width:100%"></div>
+      <div style="margin:8px 0"><label>Porta</label><input id="sc-port" value="${c.smtp_port||'587'}" style="width:100%"></div>
+      <div style="margin:8px 0"><label>Utente</label><input id="sc-user" value="${c.smtp_user||''}" placeholder="tu@email.com" style="width:100%"></div>
+      <div style="margin:8px 0"><label>Password / App password</label><input id="sc-pass" type="password" placeholder="${c.has_smtp_password?'•••••••• (impostata)':''}" style="width:100%"></div>
+      <div style="margin:8px 0"><label>Mittente (From)</label><input id="sc-from" value="${c.smtp_from||''}" placeholder="stesso utente se vuoto" style="width:100%"></div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn" onclick="saveSmtpConfig()">💾 Salva</button>
+        <button class="btn ghost" onclick="this.closest('div').parentElement.remove()">✕ Annulla</button>
+      </div>
+    </div></div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+async function saveSmtpConfig(){
+  const cfg = {
+    smtp_host: document.getElementById('sc-host').value.trim(),
+    smtp_port: document.getElementById('sc-port').value.trim() || '587',
+    smtp_user: document.getElementById('sc-user').value.trim(),
+    smtp_from: document.getElementById('sc-from').value.trim(),
+    smtp_tls: true,
+  };
+  const pw = document.getElementById('sc-pass').value;
+  if(pw) cfg.smtp_password = pw;  // solo se compilata
+  const r = await jpost('/api/studio/config', cfg);
+  if(r.ok){ toast('Config SMTP salvata ✓'); document.querySelectorAll('div[style*="z-index:100"]').forEach(e=>e.remove()); }
+  else toast('Errore salvataggio config');
+}
 async function seedDemo(){
   const r = await jpost('/api/studio/seed-demo', {});
   if(r.ok){ toast('Cliente demo creato ✓'); loadToday(); loadClients(); }
@@ -2177,6 +2229,7 @@ async function loadToday(){
     <button class="btn ghost" onclick="exportArchive()">⬇ Esporta archivio (zip)</button>
     <button class="btn ghost" onclick="backupNow()">📌 Backup ora</button>
     <button class="btn ghost" onclick="openRestore()">📥 Ripristina backup</button>
+    <button class="btn ghost" onclick="openSmtpConfig()">⚙️ Config email</button>
     <span id="backup-status" style="font-size:12px;color:var(--text3)"></span>`;
   if(!d.today.length){
     list.innerHTML = `<div class="card" style="text-align:center;padding:24px">
