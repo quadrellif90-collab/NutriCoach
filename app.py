@@ -113,7 +113,11 @@ async def api_plan_generate(cid: int, request: Request):
     # SINGLE SOURCE OF TRUTH: parse_pathologies gestisce CSV e JSON
     parsed = clinical_nutrition.parse_pathologies(client.get("pathologies"))
     conditions = parsed["conditions"]
-    excl = meal_planner.excluded_foods(conditions, client.get("allergies") or "")
+    # allergie da entrambe le fonti: campo cliente + anamnesi JSON
+    allergies = client.get("allergies") or ""
+    if parsed["allergies"]:
+        allergies = (allergies + "," + ",".join(parsed["allergies"])).strip(",")
+    excl = meal_planner.excluded_foods(conditions, allergies)
     excl.update(options.get("exclude_foods") or [])
     options["exclude_foods"] = sorted(excl)
     plan = meal_planner.generate_plan(targets, options)

@@ -2012,19 +2012,24 @@ def parse_pathologies(raw):
     Il campo `pathologies` del DB puo' arrivare in due formati storicamente
     divergenti:
       1) stringa CSV  -> "sibo, ibs, histamine_intolerance"
-      2) JSON dict    -> '{"clinical_conditions": ["sibo","ibs"], "anamnesis_notes": "..."}'
+      2) JSON dict    -> '{"clinical_conditions": ["sibo","ibs"], "allergies": ["noci"],
+                            "anamnesis_notes": "..."}'
                          (salvato da /api/clients/{cid}/anamnesis)
 
-    Ritorna sempre {'conditions': [...], 'notes': str} in modo uniforme,
-    cosi' il resto dell'app non deve piu' gestire il formato.
+    Ritorna sempre {'conditions': [...], 'allergies': [...], 'notes': str} in
+    modo uniforme, cosi' il resto dell'app non deve piu' gestire il formato.
+    Le allergie sono necessarie per le esclusioni del piano (excluded_foods).
     """
     if not raw:
-        return {"conditions": [], "notes": ""}
+        return {"conditions": [], "allergies": [], "notes": ""}
     if isinstance(raw, dict):
         return {
             "conditions": normalize_condition_keys(raw.get("clinical_conditions", [])),
-            "notes": raw.get("anamnesis_notes", "") or ""
+            "allergies": _normalize_allergies(raw.get("allergies", [])),
+            "notes": raw.get("anamnesis_notes", raw.get("notes", "")) or ""
         }
+    if isinstance(raw, list):
+        return {"conditions": normalize_condition_keys(raw), "allergies": [], "notes": ""}
     if isinstance(raw, str):
         s = raw.strip()
         if s.startswith("{") or s.startswith("["):
@@ -2033,17 +2038,30 @@ def parse_pathologies(raw):
                 if isinstance(data, dict):
                     return {
                         "conditions": normalize_condition_keys(data.get("clinical_conditions", [])),
-                        "notes": data.get("anamnesis_notes", "") or ""
+                        "allergies": _normalize_allergies(data.get("allergies", [])),
+                        "notes": data.get("anamnesis_notes", data.get("notes", "")) or ""
                     }
                 if isinstance(data, list):
-                    return {"conditions": normalize_condition_keys(data), "notes": ""}
+                    return {"conditions": normalize_condition_keys(data), "allergies": [], "notes": ""}
             except Exception:
                 pass
-        # stringa CSV
-        return {"conditions": normalize_condition_keys(s), "notes": ""}
-    if isinstance(raw, list):
-        return {"conditions": normalize_condition_keys(raw), "notes": ""}
-    return {"conditions": [], "notes": ""}
+        # CSV: "sibo, ibs" (le allergie vivono in un altro campo del cliente)
+        return {"conditions": normalize_condition_keys(s), "allergies": [], "notes": ""}
+    return {"conditions": [], "allergies": [], "notes": ""}
+
+
+def _normalize_allergies(allergies):
+    """Normalizza allergie in lista di stringhe lowercase."""
+    if not allergies:
+        return []
+    if isinstance(allergies, str):
+        allergies = [a.strip() for a in allergies.split(",") if a.strip()]
+    out = []
+    for a in allergies:
+        if not a:
+            continue
+        out.append(str(a).strip().lower())
+    return out
 
 
 def get_all_conditions():

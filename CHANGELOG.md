@@ -1,4 +1,17 @@
 
+## [1.3.1] — 2026-07-26
+
+### Fix (audit aggressivo post-release)
+- **`parse_pathologies` ora estrae anche le `allergies` dal JSON anamnesi**
+  (`{"clinical_conditions":[...], "allergies":[...]}`). Prima le allergie
+  salvate via anamnesi JSON venivano **perse** → il piano filtrava le
+  condizioni ma NON le allergie quando l'anamnesi era in formato JSON.
+  Ora `api_plan_generate` unisce entrambe le fonti (campo `allergies`
+  del cliente + `allergies` dall'anamnesi JSON) nelle esclusioni.
+- Aggiunto `_normalize_allergies` (lowercase, gestione stringa/lista).
+- `parse_pathologies` gestisce anche input `dict`/`list` diretti (non solo
+  stringa) e non crasha mai.
+
 ## [1.3.0] — 2026-07-26
 
 ### Aggiunto (raffinamento scientifico + workflow)
