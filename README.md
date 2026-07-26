@@ -4,9 +4,9 @@
 
 **Gestionale di nutrizione per nutrizionisti, locale, che chiude il loop tra piano alimentare, misure del corpo (BIA/antropometria) e follow-up del cliente — con diario, pianificazione automatica, appuntamenti e notifiche. Tutto offline.**
 
-![Python](https://img.shields.io/badge/Python-3.11-blue) ![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-green) ![Version](https://img.shields.io/badge/Version-v1.4.4-brightgreen) ![License](https://img.shields.io/badge/License-MIT-blue)
+![Python](https://img.shields.io/badge/Python-3.11-blue) ![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-green) ![Version](https://img.shields.io/badge/Version-v1.5.0-brightgreen) ![License](https://img.shields.io/badge/License-MIT-blue)
 
-Latest: **[v1.4.4 — Clinical Nutrition (23 condizioni), Pattern Dietetici, Cartella Clinica unificata, Workflow A–E + fix](https://github.com/quadrellif90-collab/NutriCoach/releases/tag/v1.4.4)**
+Latest: **[v1.5.0 — Clinical Nutrition (23 condizioni), Pattern Dietetici, Cartella Clinica unificata, Workflow A–E + fix](https://github.com/quadrellif90-collab/NutriCoach/releases/tag/v1.5.0)**
 
 > 🔒 **100% offline.** Nessun dato lascia la macchina. Nessun account remoto. Nessuna sottoscrizione. I dati dei tuoi clienti vivono solo in `~/.nutricoach/` sul tuo computer.
 
@@ -84,11 +84,11 @@ python run.py                 # apre http://127.0.0.1:8090 nel browser
 
 # Build desktop (EXE Windows) + installer NSIS
 pyinstaller NutriCoach.spec --clean --noconfirm
-makensis /DVERSION=1.3.0 installer.nsi     # -> NutriCoach-Setup-1.4.4.exe
+makensis /DVERSION=1.3.0 installer.nsi     # -> NutriCoach-Setup-1.5.0.exe
 
 # Build desktop (macOS .dmg) — richiede macOS
 pyinstaller NutriCoach.spec --clean --noconfirm
-# impacchetta dist/NutriCoach in .app + hdiutil -> NutriCoach-1.4.4.dmg
+# impacchetta dist/NutriCoach in .app + hdiutil -> NutriCoach-1.5.0.dmg
 ```
 
 Nessun `.exe` necessario per la modalità web: il backend FastAPI gira e l'interfaccia è HTML nel browser. I dati utente restano in `~/.nutricoach/`.

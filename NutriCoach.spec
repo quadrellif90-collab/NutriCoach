@@ -9,7 +9,7 @@ block_cipher = None
 src = os.path.dirname(os.path.abspath(SPEC))
 
 a = Analysis(
-    ['run.py'],
+    ['launcher.py'],
     pathex=[src],
     binaries=[],
     datas=[
@@ -21,6 +21,9 @@ a = Analysis(
         'charts', 'pdf_export', 'auth', 'notifications', 'nutrition_db',
         'meal_planner', 'ocr', 'diet_presets', 'sport_science',
         'fastapi', 'uvicorn', 'reportlab', 'fitz', 'pydantic', 'pytesseract',
+        # finestra nativa pywebview (come PCC)
+        'webview', 'webview.platforms', 'webview.platforms.edgechromium',
+        'webview.platforms.cocoa', 'webview.platforms.gtk',
     ],
     hookspath=[],
     hooksconfig={},

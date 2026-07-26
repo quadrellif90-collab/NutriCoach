@@ -8,5 +8,7 @@ reportlab>=4.0.0
 # OCR su PDF scansionati (opzionale: richiede anche il binario Tesseract installato nel sistema)
 pytesseract>=0.3.10
 Pillow>=10.0.0
+# finestra nativa desktop (come PCC — apre l'app in una finestra, non nel browser)
+pywebview>=6.0.0
 # build EXE (sviluppo): pyinstaller NutriCoach.spec
 pyinstaller>=6.0.0

@@ -39,7 +39,7 @@ import version
 UPLOAD_DIR = os.path.join(database.DATA_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-app = FastAPI(title="NutriCoach", version="1.4.4")
+app = FastAPI(title="NutriCoach", version="1.5.0")
 
 app.add_middleware(
     CORSMiddleware,

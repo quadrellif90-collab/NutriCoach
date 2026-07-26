@@ -1,4 +1,21 @@
 
+## [1.5.0] — 2026-07-26
+
+### Finestra nativa desktop (come PCC — niente più pagina browser)
+- **`launcher.py`**: avvia il server FastAPI in background e apre l'app in
+  una **finestra nativa** via `pywebview` (EdgeChromium su Windows, Cocoa su
+  Mac, GTK/WebKit su Linux) — NON più un tab nel browser.
+- **Fallback automatico**: se `pywebview` non è installato, ricade sul
+  browser classico (`webbrowser.open`) — nessun regressione in dev.
+- **Bridge JS↔Python** (`window.pywebview.api`):
+  - `open_external(url)` — mailto / WhatsApp (`wa.me`) / link esterni si
+    aprono nel browser di sistema, fuori dalla finestra.
+  - `download(filename, b64)` — i download (PDF piano, archivio zip) usano
+    il dialogo "Salva con nome" nativo (necessario su macOS WKWebView che
+    ignora `<a download>`). Su Windows funziona anche il metodo nativo.
+- **`NutriCoach.spec`** ora builda da `launcher.py` e include `pywebview`
+  negli hidden imports; `requirements.txt` aggiunge `pywebview>=6.0.0`.
+
 ## [1.4.4] — 2026-07-26
 
 ### Invio automatico Email / WhatsApp (cliente finale)

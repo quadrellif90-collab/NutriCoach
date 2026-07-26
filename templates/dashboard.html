@@ -877,6 +877,26 @@ label{font-size:12px;color:var(--text3);display:block;margin-top:8px}
 const API = "";
 let STATE = { selections:{}, clientId:null, picked:new Set() };
 
+// ---- Bridge finestra nativa (pywebview). Se assente (browser/dev),
+//      ricade sui metodi nativi del browser. ----
+function ncHasNative(){ return (typeof window.pywebview !== 'undefined' && window.pywebview && window.pywebview.api); }
+function ncOpenExternal(url){
+  if(ncHasNative()){ try { window.pywebview.api.open_external(url); return; } catch(e){} }
+  window.open(url, '_blank');
+}
+async function ncDownload(filename, blob){
+  if(ncHasNative()){
+    try {
+      const b64 = await new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result.split(',')[1]); fr.onerror=rej; fr.readAsDataURL(blob); });
+      const r = await window.pywebview.api.download(filename, b64);
+      if(r && r.ok) return true;
+      if(r && r.error==='cancelled') return false;
+      // se il bridge fallisce, ricade sul metodo nativo
+    } catch(e){}
+  }
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click(); return true;
+}
+
 // ---- tabs (con guardia: fuori dal cliente si puo' solo tornare alla lista) ----
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   const tab = t.dataset.tab;
@@ -1185,7 +1205,7 @@ async function exportHtml(){
   const did=document.getElementById('plan-diet').value;
   const cid=document.getElementById('plan-client').value;
   const r=await fetch(API+`/api/diets/${did}/export-html`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id:cid,selections:STATE.selections})});
-  const blob=await r.blob();const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='piano_nutrizionale.html';a.click();
+  const blob=await r.blob(); ncDownload('piano_nutrizionale.html', blob);
   toast('HTML esportato');
 }
 
@@ -1222,7 +1242,7 @@ async function exportHtmlSummary(){
   const did=document.getElementById('sum-diet').value;const cid=document.getElementById('sum-client').value;
   if(!did)return;
   const r=await fetch(API+`/api/diets/${did}/export-html`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id:cid,selections:STATE.selections})});
-  const blob=await r.blob();const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='riepilogo_nutrizionale.html';a.click();
+  const blob=await r.blob(); ncDownload('riepilogo_nutrizionale.html', blob);
 }
 function exportHtmlSummary(){return exportHtml();}
 
@@ -1457,7 +1477,7 @@ async function exportPlanPdf(){
                  f:+document.getElementById('p-f').value||67};
   toast('Genero PDF clinico...');
   const r=await fetch(`/api/clients/${cid}/plan/export-pdf`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({targets})});
-  if(r.ok){ const blob=await r.blob(); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='piano_clinico.pdf'; a.click(); toast('PDF pronto ✓'); }
+  if(r.ok){ const blob=await r.blob(); ncDownload('piano_clinico.pdf', blob); toast('PDF pronto ✓'); }
   else { toast('Errore generazione PDF'); }
 }
 async function sendPlanEmail(channel){
@@ -1468,11 +1488,11 @@ async function sendPlanEmail(channel){
   if(r.ok){
     if(channel==='email'){
       if(r.sent){ toast('✅ Email inviata via SMTP'); }
-      else if(r.mailto){ window.location.href = r.mailto; toast('Apertura client email ✓'); }
+      else if(r.mailto){ ncOpenExternal(r.mailto); toast('Apertura client email ✓'); }
       else if(r.email_missing){ toast('⚠️ Cliente senza email — aggiungila nella scheda'); }
       else if(r.smtp_error){ toast('SMTP errato: '+r.smtp_error); }
     } else if(channel==='whatsapp'){
-      if(r.wa_link){ window.open(r.wa_link, '_blank'); toast('Apertura WhatsApp ✓'); }
+      if(r.wa_link){ ncOpenExternal(r.wa_link); toast('Apertura WhatsApp ✓'); }
       else if(r.phone_missing){ toast('⚠️ Cliente senza telefono — aggiungilo nella scheda'); }
     }
   } else { toast('Errore invio'); }
@@ -1480,8 +1500,8 @@ async function sendPlanEmail(channel){
 async function sendCheckinMsg(cid, cname, channel){
   const r = await jpost(`/api/clients/${cid}/notify`, {type:'checkin', channel: channel||'email', subject:`NutriCoach — Check-in ${cname}`, body:`Ciao ${cname}! Come procede questa settimana? Fammi sapere peso, energia e sintomi. A presto!`});
   if(r.ok){
-    if(channel==='whatsapp' && r.wa_link){ window.open(r.wa_link, '_blank'); toast('WhatsApp aperto ✓'); }
-    else if(r.mailto){ window.location.href = r.mailto; toast('Email aperta ✓'); }
+    if(channel==='whatsapp' && r.wa_link){ ncOpenExternal(r.wa_link); toast('WhatsApp aperto ✓'); }
+    else if(r.mailto){ ncOpenExternal(r.mailto); toast('Email aperta ✓'); }
     else if(r.sent){ toast('✅ Email inviata'); }
     else { toast('Registrato (nessun contatto)'); }
   }
@@ -1677,7 +1697,7 @@ async function sciExportPdf(){
   const inten=document.getElementById('sci-int').value||'race';
   const w=document.getElementById('sci-weight').value||'';
   const url=`${API}/api/clients/${cid}/sport-science-report?day_type=${day}&intensity=${inten}&weight_kg=${w}`;
-  window.open(url, '_blank');
+  ncOpenExternal(url);
 }
 
 // ---- Aggiornamenti (GitHub Releases) ----
@@ -2151,7 +2171,7 @@ function drawTrendChart(canvasId, rows, key, unit, color){
 // ---- P: Backup / Export / Restore ----
 async function exportArchive(){
   const r = await fetch('/api/studio/export');
-  if(r.ok){ const blob=await r.blob(); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='nutricoach_archivio.zip'; a.click(); document.getElementById('backup-status').textContent='Archivio scaricato ✓'; }
+  if(r.ok){ const blob=await r.blob(); ncDownload('nutricoach_archivio.zip', blob); document.getElementById('backup-status').textContent='Archivio scaricato ✓'; }
   else { toast('Errore export'); }
 }
 async function backupNow(){
