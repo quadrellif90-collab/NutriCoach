@@ -336,7 +336,7 @@ def list_bia(cid):
     rows = [dict(r) for r in cur.fetchall()]
     for r in rows:
         try: r["data"] = json.loads(r["data_json"])
-        except: r["data"] = {}
+        except (json.JSONDecodeError, ValueError): r["data"] = {}
     conn.close(); return rows
 
 
@@ -365,7 +365,7 @@ def get_diet(did):
         conn.close(); return None
     d = dict(row)
     try: d["diet"] = json.loads(d["diet_json"])
-    except: d["diet"] = {}
+    except (json.JSONDecodeError, ValueError): d["diet"] = {}
     conn.close(); return d
 
 
@@ -396,7 +396,7 @@ def get_recipe(rid):
     d = dict(row)
     for k in ("ingredients_json","steps_json","nutrients_json"):
         try: d[k[:-5]] = json.loads(d[k])
-        except: d[k[:-5]] = {}
+        except (json.JSONDecodeError, ValueError): d[k[:-5]] = {}
     conn.close(); return d
 
 
@@ -554,7 +554,7 @@ def list_custom_foods():
     rows = [dict(r) for r in cur.fetchall()]
     for r in rows:
         try: r["per_100g"] = json.loads(r["per_100g"])
-        except: r["per_100g"] = {}
+        except (json.JSONDecodeError, ValueError): r["per_100g"] = {}
     conn.close(); return rows
 
 def delete_custom_food(fid):
