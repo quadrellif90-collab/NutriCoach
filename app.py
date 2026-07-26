@@ -108,7 +108,24 @@ async def api_plan_generate(cid: int, request: Request):
     b = await request.json()
     targets = b.get("targets", {})
     options = b.get("options", {})
+    # anamnesi + allergie del cliente -> esclusioni cliniche nel piano
+    client = database.get_client(cid) or {}
+    conditions = []
+    try:
+        pat = json.loads(client.get("pathologies") or "{}")
+        if isinstance(pat, dict):
+            conditions = pat.get("clinical_conditions", []) or []
+    except Exception:
+        pass
+    excl = meal_planner.excluded_foods(conditions, client.get("allergies") or "")
+    excl.update(options.get("exclude_foods") or [])
+    options["exclude_foods"] = sorted(excl)
     plan = meal_planner.generate_plan(targets, options)
+    plan["clinical"] = {
+        "conditions": conditions,
+        "excluded_foods": sorted(excl),
+        "recommendations": clinical_nutrition.get_dietary_recommendations(conditions) if conditions else [],
+    }
     return plan
 
 
@@ -285,6 +302,22 @@ def api_get_check_ins(cid: int):
             pass
     return {"checkins": checkins}
 
+
+@app.get("/api/clients/{cid}/follow-up")
+def api_follow_up(cid: int, current_kcal: float = None):
+    """Analisi follow-up: trend peso, compliance, consiglio aggiustamento kcal."""
+    import followup
+    client = database.get_client(cid)
+    if not client:
+        raise HTTPException(404, "Cliente non trovato")
+    checkins = api_get_check_ins(cid)["checkins"]
+    checkins.sort(key=lambda c: c.get("date", ""))
+    # fallback kcal: TDEE dall'antropometria se non passato
+    if not current_kcal:
+        anth = database.compute_anthropometry(cid) or {}
+        current_kcal = anth.get("tdee")
+    return followup.analyze(checkins, client.get("goal", ""), current_kcal)
+
 @app.post("/api/clients/{cid}/share-plan")
 async def api_share_plan(cid: int, request: Request):
     """Genera un PDF del piano alimentare per condividerlo con il cliente."""
@@ -329,6 +362,21 @@ async def api_share_plan(cid: int, request: Request):
                 f"F {round(day_totals.get('fat',0))}g</i>", styles['Normal']))
             story.append(Spacer(1, 10))
         story.append(Spacer(1, 20))
+        # avvertenze cliniche dall'anamnesi (alimenti da evitare)
+        try:
+            pat = json.loads(client.get("pathologies") or "{}")
+            conds = pat.get("clinical_conditions", []) if isinstance(pat, dict) else []
+        except Exception:
+            conds = []
+        if conds:
+            avoid = clinical_nutrition.get_foods_to_avoid(conds)
+            names = [clinical_nutrition.get_condition(k).get("name", k)
+                     for k in conds if clinical_nutrition.get_condition(k)]
+            story.append(Paragraph("<b>Avvertenze cliniche</b>", styles['Heading2']))
+            story.append(Paragraph("Condizioni considerate: " + ", ".join(names), styles['Normal']))
+            if avoid:
+                story.append(Paragraph("Alimenti da evitare/limitare: " + "; ".join(avoid[:20]), styles['Normal']))
+            story.append(Spacer(1, 10))
         story.append(Paragraph("Generato da NutriCoach", styles['Normal']))
         doc.build(story)
         return Response(content=buf.getvalue(), media_type="application/pdf",

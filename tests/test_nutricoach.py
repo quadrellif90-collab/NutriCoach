@@ -326,3 +326,36 @@ def test_add_measurement_date_kwarg_conflict():
     db.add_measurement(cid, date, **body)
     ms = db.list_measurements(cid)
     assert ms and ms[0]["weight_kg"] == 80 and ms[0]["date"] == "2026-07-01"
+
+
+def test_plan_excludes_clinical_foods():
+    """Il generatore piano rispetta esclusioni cliniche/allergie."""
+    import meal_planner as mp
+    excl = mp.excluded_foods(["celiac", "lactose_intolerance"], "allergia alle noci")
+    assert "pasta" in excl and "mozzarella" in excl and "noci" in excl
+    plan = mp.generate_plan({"kcal": 2000, "p": 150, "c": 200, "f": 67},
+                            {"exclude_foods": sorted(excl)})
+    foods = {i["food"] for d in plan["days"] for m in d["meals"] for i in m["items"]}
+    assert not (foods & excl), foods & excl
+
+
+def test_followup_analysis():
+    """Trend peso + consiglio kcal coerente con l'obiettivo."""
+    import followup
+    # cut, peso stabile, buona compliance -> ridurre ~10%
+    ck = [{"date": "2026-07-01", "weight_kg": 80, "compliance_pct": 85, "energy_level": 7},
+          {"date": "2026-07-08", "weight_kg": 80, "compliance_pct": 90, "energy_level": 7},
+          {"date": "2026-07-15", "weight_kg": 80.1, "compliance_pct": 88, "energy_level": 6}]
+    r = followup.analyze(ck, "Dimagrimento", 2400)
+    assert r["kcal_adjustment_pct"] == -10 and r["kcal_suggested"] == 2160
+    # cut, perdita troppo rapida -> aumento
+    ck2 = [{"date": "2026-07-01", "weight_kg": 80, "compliance_pct": 90},
+           {"date": "2026-07-08", "weight_kg": 78.8, "compliance_pct": 90}]
+    r2 = followup.analyze(ck2, "Dimagrimento", 2000)
+    assert r2["kcal_adjustment_pct"] > 0
+    # massa, peso stabile -> aumento
+    r3 = followup.analyze(ck, "Massa muscolare", 2800)
+    assert r3["kcal_adjustment_pct"] > 0
+    # nessun check-in
+    r4 = followup.analyze([], "Dimagrimento", 2000)
+    assert "Nessun check-in" in r4["advice"]

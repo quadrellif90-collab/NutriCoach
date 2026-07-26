@@ -14,6 +14,53 @@ import db
 import nutrition_db as ndb
 
 
+# Mappa condizione clinica -> alimenti del BDD da escludere dal generatore.
+# VISTA delle regole in clinical_nutrition (foods_avoid): qui i nomi sono
+# normalizzati sulle chiavi reali di nutrition_db usate dal planner.
+CONDITION_EXCLUSIONS = {
+    "lactose_intolerance": ["mozzarella", "ricotta", "formaggio bianco", "yogurt greco"],
+    "celiac": ["pasta", "pane comune", "pane integrale", "avena", "fiocchi d'avena", "farro"],
+    "ncgs": ["pasta", "pane comune", "pane integrale", "farro"],
+    "ibs": ["fiocchi d'avena", "avena", "mela", "pera", "cavolfiore", "olive"],
+    "gerd": ["pomodori", "arancia", "kiwi", "peperoni"],
+    "dyspepsia": ["peperoni", "olive", "arachidi"],
+    "hypertension": ["prosciutto cotto", "olive"],
+    "diabetes_t2": ["pane comune", "banana"],
+    "food_allergy": [],   # dipende dall'allergene: usare campo allergies
+    "eoe": ["mozzarella", "ricotta", "formaggio bianco", "yogurt greco", "uova gallina",
+            "pane comune", "pasta"],
+    "obesity": [],
+    "osteoporosis": [],
+}
+
+# parole chiave allergie (campo libero cliente) -> alimenti BDD
+ALLERGY_KEYWORDS = {
+    "lattosio": ["mozzarella", "ricotta", "formaggio bianco", "yogurt greco"],
+    "latte": ["mozzarella", "ricotta", "formaggio bianco", "yogurt greco"],
+    "glutine": ["pasta", "pane comune", "pane integrale", "avena", "fiocchi d'avena", "farro"],
+    "uova": ["uova gallina"],
+    "uovo": ["uova gallina"],
+    "pesce": ["tonno", "salmone"],
+    "frutta secca": ["mandorle", "noci", "arachidi"],
+    "noci": ["noci", "mandorle"],
+    "arachidi": ["arachidi"],
+    "soia": [],
+    "crostacei": [],
+}
+
+
+def excluded_foods(conditions=None, allergies_text=""):
+    """Alimenti del BDD da escludere date condizioni cliniche + allergie testuali."""
+    out = set()
+    for c in conditions or []:
+        out.update(CONDITION_EXCLUSIONS.get(c, []))
+    txt = (allergies_text or "").lower()
+    for kw, foods in ALLERGY_KEYWORDS.items():
+        if kw in txt:
+            out.update(foods)
+    return out
+
+
 # pasti standard e loro quota dei target
 MEALS = [
     ("colazione", 0.20),
@@ -119,6 +166,18 @@ def generate_plan(targets, options=None):
     targets = {"kcal": kcal, "p": p, "c": c, "f": f}
     options = options or {}
     days = options.get("days", ["lun", "mar", "mer", "gio", "ven", "sab", "dom"])
+    # esclusioni cliniche/allergie: filtra le categorie mantenendo un fallback
+    excl = set(options.get("exclude_foods") or [])
+
+    def _filt(cat, fallback):
+        keep = [x for x in cat if x not in excl]
+        return keep or [fallback]
+
+    proteins = _filt(_PROTEINS, "petto di pollo")
+    carbs = _filt(_CARBS, "riso basmati")
+    vegs = _filt(_VEG, "zucchine")
+    fats = _filt(_FATS, "olio extravergine d'oliva")
+    fruits = _filt(_FRUIT, "banana")
     import random
     rnd = random.Random(42)
     week = []
@@ -126,11 +185,11 @@ def generate_plan(targets, options=None):
         day_meals = []
         day_items_all = []
         for meal, share in MEALS:
-            protein = rnd.choice(_PROTEINS)
-            carb = rnd.choice(_CARBS)
-            veg = rnd.choice(_VEG)
-            fat = rnd.choice(_FATS)
-            fruit = rnd.choice(_FRUIT) if meal in ("colazione", "spuntino", "spuntino2") else None
+            protein = rnd.choice(proteins)
+            carb = rnd.choice(carbs)
+            veg = rnd.choice(vegs)
+            fat = rnd.choice(fats)
+            fruit = rnd.choice(fruits) if meal in ("colazione", "spuntino", "spuntino2") else None
             tot, items = _meal_combo(protein, carb, veg, fat, fruit,
                                      targets["kcal"] * share, targets["p"] * share)
             day_meals.append({"meal": meal, "items": items, "totals": tot})
