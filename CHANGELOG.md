@@ -1,4 +1,16 @@
 
+## [1.4.1] — 2026-07-26
+
+### UX quotidiana (cliente finale)
+- **📱 Sidebar responsive**: su schermi stretti (<900px) i 22 tab diventano
+  una barra orizzontale scrollabile (niente più colonna illeggibile su
+  laptop 13" / tablet).
+- **🖨️ Print CSS**: stampando da browser (Cartella Clinica, Diario, Piano)
+  l'UI scompare e resta solo il contenuto pulito, pagina per pagina.
+- **🔍 Ricerca clienti**: campo filtro live nella lista clienti (per nome).
+- **📈 Mini-grafico trend peso**: Canvas nativo (0 dipendenze) nella Cartella
+  Clinica che disegna l'andamento peso sulle ultime misurazioni.
+
 ## [1.4.0] — 2026-07-26
 
 ### Workflow & UX (cliente finale)

@@ -82,6 +82,31 @@ label{font-size:12px;color:var(--text3);display:block;margin-top:8px}
 .reminder.done{opacity:.5}
 .reminder .rd{font-size:12px;color:var(--text3)}
 
+/* M: sidebar responsive su schermi stretti */
+@media (max-width: 900px){
+  .app-shell{flex-direction:column}
+  .sidebar-tabs{width:100%;flex-direction:row;flex-wrap:nowrap;overflow-x:auto;
+    border-right:none;border-bottom:1px solid var(--border);padding:8px;gap:4px}
+  .sidebar-tabs h1{display:none}
+  .sidebar-tabs .tab{white-space:nowrap;padding:8px 12px}
+  .main-content{padding:14px}
+}
+@media (max-width: 560px){
+  .sidebar-tabs .tab{font-size:13px;padding:7px 10px}
+  .main-content{padding:10px}
+}
+
+/* L: print pulito — nasconde UI, mostra solo il contenuto */
+@media print{
+  .app-shell{display:block}
+  .sidebar-tabs,.topbar,.toast,#update-banner,.tab,.client-card .btn,
+  button,.modal,.overlay,#onboard-overlay,#ck-overlay{display:none !important}
+  .main-content{padding:0;overflow:visible}
+  .section{display:block !important;page-break-inside:avoid}
+  body{background:#fff;color:#000}
+  .card{border:1px solid #ccc;break-inside:avoid}
+  a[href]:after{content:""}
+}
 </style>
 </head>
 <body>
@@ -165,6 +190,10 @@ label{font-size:12px;color:var(--text3);display:block;margin-top:8px}
         <button class="btn amber" onclick="showCompare()">⚖ Confronta selezionati</button>
       </div>
       <div class="grid" id="client-grid"></div>
+      <div style="margin:10px 0 4px">
+        <input id="client-search" placeholder="🔍 Filtra clienti per nome…" oninput="filterClients(this.value)" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">
+      </div>
+      <div class="grid" id="client-grid-filtered"></div>
       <div id="compare-result"></div>
       <div class="card" style="margin-top:20px">
         <h3>📨 Coda nutrizionista — cosa inviare ai clienti</h3>
@@ -770,6 +799,7 @@ label{font-size:12px;color:var(--text3);display:block;margin-top:8px}
         <div class="card" style="flex:1;min-width:280px">
           <h3>📈 Trend peso</h3>
           <div id="cc-weight"></div>
+          <canvas id="cc-weight-chart" width="320" height="120" style="margin-top:8px;max-width:100%"></canvas>
         </div>
       </div>
       <div class="card">
@@ -914,11 +944,7 @@ function exitClient(){ showList(); loadClients(); }
 async function loadClients(){
   const cs = await jget('/api/clients');
   window.__clients = cs;
-  const grid = document.getElementById('client-grid');
-  grid.innerHTML = cs.map(c=>`<div class="client-card" onclick="enterClient(${c.id})">
-    <input class="pick" type="checkbox" onchange="togglePick(${c.id},this.checked)" onclick="event.stopPropagation()">
-    <h3>${c.name}</h3><div class="goal">${c.goal||'—'}</div>
-    <div style="margin-top:8px"><span class="tag">${c.sex||''}</span></div></div>`).join('');
+  renderClientGrid(cs);
   for(const sel of ['imp-client','plan-client','shop-client','sum-client']){
     const el=document.getElementById(sel); if(!el)continue;
     const cur=el.value;
@@ -926,6 +952,29 @@ async function loadClients(){
     if(cur)el.value=cur;
   }
   const ael=document.getElementById('anthro-client'); if(ael){ael.innerHTML='<option value="">— seleziona —</option>'+cs.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');}
+}
+function clientCardHTML(c){
+  return `<div class="client-card" onclick="enterClient(${c.id})">
+    <input class="pick" type="checkbox" onchange="togglePick(${c.id},this.checked)" onclick="event.stopPropagation()">
+    <h3>${c.name}</h3><div class="goal">${c.goal||'—'}</div>
+    <div style="margin-top:8px"><span class="tag">${c.sex||''}</span></div></div>`;
+}
+function renderClientGrid(cs){
+  const grid=document.getElementById('client-grid');
+  const fg=document.getElementById('client-grid-filtered');
+  if(!grid) return;
+  grid.innerHTML=cs.map(clientCardHTML).join('');
+  if(fg) fg.innerHTML='';
+}
+function filterClients(q){
+  q=(q||'').trim().toLowerCase();
+  const fg=document.getElementById('client-grid-filtered');
+  const grid=document.getElementById('client-grid');
+  if(!fg) return;
+  if(!q){ fg.innerHTML=''; grid.style.display=''; return; }
+  grid.style.display='none';
+  const cs=(window.__clients||[]).filter(c=>(c.name||'').toLowerCase().includes(q));
+  fg.innerHTML = cs.length ? cs.map(clientCardHTML).join('') : '<p style="color:var(--text3);font-size:13px">Nessun cliente per "'+q+'".</p>';
 }
 function togglePick(id,on){ if(on)STATE.picked.add(id); else STATE.picked.delete(id); }
 async function showCompare(){
@@ -2043,10 +2092,36 @@ async function loadCartella(){
   document.getElementById('cc-weight').innerHTML = s.measurements && s.measurements.length ?
     s.measurements.slice(-8).map(m=>`<div style="font-size:12px">${m.date}: ${m.weight||'—'} kg</div>`).join('') :
     '<div style="color:var(--text3)">Nessuna misurazione</div>';
+  // N: mini-grafico canvas trend peso
+  drawTrendChart('cc-weight-chart', s.measurements || [], 'weight', 'kg', '#2dd4bf');
   // note
   document.getElementById('cc-notes').innerHTML = s.progress_notes && s.progress_notes.length ?
     s.progress_notes.slice().reverse().map(n=>`<div style="padding:4px 0;font-size:12px;border-bottom:1px solid var(--border)"><b>${n.date}</b>: ${n.text}</div>`).join('') :
     '<div style="color:var(--text3)">Nessuna nota</div>';
+}
+
+// ---- N: mini-grafico trend (canvas nativo, 0 dipendenze) ----
+function drawTrendChart(canvasId, rows, key, unit, color){
+  const cv=document.getElementById(canvasId);
+  if(!cv) return;
+  const ctx=cv.getContext('2d');
+  ctx.clearRect(0,0,cv.width,cv.height);
+  const pts=rows.filter(r=>r[key]!=null && !isNaN(parseFloat(r[key]))).map(r=>({x:r.date, y:parseFloat(r[key])}));
+  if(pts.length<2){ ctx.fillStyle='#888'; ctx.font='12px sans-serif'; ctx.fillText('Servono ≥2 misurazioni',8,20); return; }
+  const vals=pts.map(p=>p.y);
+  const min=Math.min(...vals), max=Math.max(...vals);
+  const pad=16, w=cv.width-pad*2, h=cv.height-pad*2;
+  const range=(max-min)||1;
+  ctx.strokeStyle=color; ctx.lineWidth=2; ctx.beginPath();
+  pts.forEach((p,i)=>{
+    const x=pad+(w*i/(pts.length-1));
+    const y=pad+h-((p.y-min)/range)*h;
+    i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+  });
+  ctx.stroke();
+  ctx.fillStyle='#888'; ctx.font='10px sans-serif';
+  ctx.fillText(max.toFixed(1)+unit, pad, pad-4);
+  ctx.fillText(min.toFixed(1)+unit, pad, cv.height-4);
 }
 
 // ---- I: seed demo client ----
