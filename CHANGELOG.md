@@ -1,4 +1,19 @@
 
+## [1.4.2] — 2026-07-26
+
+### Sicurezza dati & chiusura loop (cliente finale)
+- **💾 Backup/Export archivio**: nella Home "Oggi" pannello "I tuoi dati" —
+  scarica `nutricoach_archivio.zip` (DB SQLite + dump JSON di tutti i clienti).
+  Endpoint `/api/studio/export`.
+- **📌 Backup ora + 📥 Ripristina**: crea/ripristina backup in
+  `~/.nutricoach/backups/` (keep ultimi 7). Il ripristino chiede conferma
+  esplicita e fa un backup di sicurezza prima di sovrascrivere.
+  Endpoint `/api/studio/backup-now`, `/api/studio/backups`, `/api/studio/restore`.
+- **🔄 Auto-backup silenzioso al login**: ogni accesso copia il DB nei backup.
+- **📅 Agenda → Oggi**: la Home "Oggi" segnala gli appuntamenti di oggi
+  (collega agenda e priorità giornaliera). Endpoint `/api/studio/today`
+  ora include flag `agenda` per appuntamenti del giorno corrente.
+
 ## [1.4.1] — 2026-07-26
 
 ### UX quotidiana (cliente finale)

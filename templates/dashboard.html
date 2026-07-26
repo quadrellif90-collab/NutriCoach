@@ -1335,8 +1335,12 @@ async function doLogin(){
   const user=document.getElementById('lp-user2').value.trim();
   const pw=document.getElementById('lp-pass').value;
   const r=await jpost('/api/auth/login',{username:user,password:pw}).catch(e=>null);
-  if(r && r.ok){ closeLogin(); }
+  if(r && r.ok){ closeLogin(); autoBackup(); }
   else { const m='Credenziali errate. Ricontrolla utente e password.'; document.getElementById('login-msg').textContent=m; document.getElementById('lp-pass').value=''; toast(m); }
+}
+// Q: auto-backup silenzioso al login
+async function autoBackup(){
+  try { await jpost('/api/studio/backup-now',{}); } catch(e){ /* silenzioso */ }
 }
 async function resetAccount(){
   if(!confirm('Reimpostare l\'account? I dati dei clienti restano intatti, dovrai ricreare utente e password.')) return;
@@ -2124,6 +2128,28 @@ function drawTrendChart(canvasId, rows, key, unit, color){
   ctx.fillText(min.toFixed(1)+unit, pad, cv.height-4);
 }
 
+// ---- P: Backup / Export / Restore ----
+async function exportArchive(){
+  const r = await fetch('/api/studio/export');
+  if(r.ok){ const blob=await r.blob(); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='nutricoach_archivio.zip'; a.click(); document.getElementById('backup-status').textContent='Archivio scaricato ✓'; }
+  else { toast('Errore export'); }
+}
+async function backupNow(){
+  const r = await jpost('/api/studio/backup-now',{});
+  if(r.ok) document.getElementById('backup-status').textContent='Backup creato: '+r.backup.split('/').pop();
+  else toast('Errore backup');
+}
+async function openRestore(){
+  const r = await jget('/api/studio/backups');
+  if(!r.backups.length){ toast('Nessun backup disponibile'); return; }
+  const name = prompt('Backup disponibili:\n'+r.backups.join('\n')+'\n\nInserisci il nome esatto da ripristinare:');
+  if(!name) return;
+  if(!confirm('Ripristinare "'+name+'" SOVRASCRIVERA\' il database corrente. Sei sicuro?')) return;
+  const rr = await jpost('/api/studio/restore',{name});
+  if(rr.ok){ toast('Backup ripristinato ✓ — ricarico'); setTimeout(()=>location.reload(), 800); }
+  else toast('Errore ripristino');
+}
+
 // ---- I: seed demo client ----
 async function seedDemo(){
   const r = await jpost('/api/studio/seed-demo', {});
@@ -2138,6 +2164,20 @@ async function loadToday(){
   document.getElementById('today-count').innerHTML = d.count_attention ?
     `<b style="color:var(--accent2)">${d.count_attention}</b> cliente/i richiedono attenzione` :
     `<span style="color:var(--text3)">Nessun cliente urgente — tutto in regola ✅</span>`;
+  // P: pannello Backup & Dati (sopra la lista)
+  let backupBox = document.getElementById('today-backup');
+  if(!backupBox){
+    backupBox = document.createElement('div');
+    backupBox.id = 'today-backup';
+    backupBox.className = 'card';
+    backupBox.style.cssText = 'margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap';
+    list.parentNode.insertBefore(backupBox, list);
+  }
+  backupBox.innerHTML = `<b style="font-size:13px">💾 I tuoi dati</b>
+    <button class="btn ghost" onclick="exportArchive()">⬇ Esporta archivio (zip)</button>
+    <button class="btn ghost" onclick="backupNow()">📌 Backup ora</button>
+    <button class="btn ghost" onclick="openRestore()">📥 Ripristina backup</button>
+    <span id="backup-status" style="font-size:12px;color:var(--text3)"></span>`;
   if(!d.today.length){
     list.innerHTML = `<div class="card" style="text-align:center;padding:24px">
       <p style="color:var(--text3)">Nessun cliente. Inizia creandone uno o carica un esempio.</p>

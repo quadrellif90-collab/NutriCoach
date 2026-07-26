@@ -39,7 +39,7 @@ import version
 UPLOAD_DIR = os.path.join(database.DATA_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-app = FastAPI(title="NutriCoach", version="1.4.1")
+app = FastAPI(title="NutriCoach", version="1.4.2")
 
 app.add_middleware(
     CORSMiddleware,
@@ -368,6 +368,10 @@ def api_studio_today():
             flags.append({"type": "piano", "label": "Nessun piano generato", "days": None})
         if days_since(last_checkin) > 7:
             flags.append({"type": "checkin", "label": "Check-in settimanale mancante", "days": days_since(last_checkin)})
+        # R: appuntamento oggi
+        todays = [a for a in database.list_appointments(cid) if (a.get("appt_date") or "").startswith(today.isoformat())]
+        if todays:
+            flags.append({"type": "agenda", "label": f"Appuntamento oggi: {todays[0].get('title','')}", "days": 0})
 
         out.append({
             "id": cid,
@@ -442,6 +446,78 @@ async def api_notify(cid: int, request: Request):
         import urllib.parse
         mailto = f"mailto:{email}?subject={urllib.parse.quote(subject)}&body={urllib.parse.quote(body)}"
     return {"ok": True, "mailto": mailto, "email": email, "logged": True}
+
+
+# ===== Backup / Export / Restore (P) =====
+BACKUP_DIR = os.path.join(database.DATA_DIR, "backups")
+os.makedirs(BACKUP_DIR, exist_ok=True)
+
+@app.get("/api/studio/export")
+def api_export_archive():
+    """Esporta l'intero archivio: scarica il DB SQLite + un dump JSON di tutti i clienti."""
+    import shutil, io, json as _json
+    db_path = database.DB_PATH
+    if not os.path.exists(db_path):
+        raise HTTPException(404, "DB non trovato")
+    # dump JSON di tutti i clienti
+    clients = database.list_clients()
+    dump = {"exported_at": datetime.datetime.now().isoformat(), "clients": []}
+    for c in clients:
+        cid = c["id"]
+        dump["clients"].append({
+            "client": c,
+            "measurements": database.list_measurements(cid),
+            "diets": database.list_diets(cid),
+            "symptoms": database.list_symptoms(cid),
+            "supplements": database.list_supplements(cid),
+            "diet_phases": database.list_diet_phases(cid),
+            "progress_notes": database.list_progress_notes(cid),
+        })
+    # costruisci uno zip in memoria
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.write(db_path, "nutricoach.db")
+        z.writestr("clients_dump.json", _json.dumps(dump, ensure_ascii=False, indent=2))
+    buf.seek(0)
+    from fastapi.responses import Response
+    return Response(content=buf.getvalue(),
+                    media_type="application/zip",
+                    headers={"Content-Disposition": "attachment; filename=nutricoach_archivio.zip"})
+
+@app.post("/api/studio/backup-now")
+def api_backup_now():
+    """Crea subito un backup del DB in ~/.nutricoach/backups/YYYYMMDD-HHMM.db."""
+    import shutil, datetime as _dt
+    ts = _dt.datetime.now().strftime("%Y%m%d-%H%M")
+    dest = os.path.join(BACKUP_DIR, f"nutricoach_{ts}.db")
+    shutil.copy2(database.DB_PATH, dest)
+    # tieni solo gli ultimi 7
+    files = sorted([f for f in os.listdir(BACKUP_DIR) if f.endswith(".db")])
+    for old in files[:-7]:
+        try: os.remove(os.path.join(BACKUP_DIR, old))
+        except Exception: pass
+    return {"ok": True, "backup": dest, "kept": len(files[-7:])}
+
+@app.get("/api/studio/backups")
+def api_list_backups():
+    files = sorted([f for f in os.listdir(BACKUP_DIR) if f.endswith(".db")], reverse=True)
+    return {"backups": files, "dir": BACKUP_DIR}
+
+@app.post("/api/studio/restore")
+async def api_restore_backup(request: Request):
+    """Ripristina un backup: invia il nome file da /api/studio/backups oppure
+    upload diretto. SOVRASCRIVE il DB corrente — usare con cautela."""
+    import shutil
+    b = await request.json()
+    name = b.get("name") or ""
+    src = os.path.join(BACKUP_DIR, os.path.basename(name))
+    if not os.path.exists(src):
+        raise HTTPException(404, "Backup non trovato")
+    # backup di sicurezza prima di sovrascrivere
+    api_backup_now()
+    shutil.copy2(src, database.DB_PATH)
+    return {"ok": True, "restored": name}
 
 
 @app.post("/api/clients/{cid}/share-plan")
