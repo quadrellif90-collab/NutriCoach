@@ -559,7 +559,7 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
 
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);}
 function jget(u){return fetch(API+u).then(r=>r.json());}
-function jpost(u,b){return fetch(API+u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json());}
+function jpost(u,b){return fetch(API+u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json().then(d=>{d._status=r.status;return d;}));}
 function jput(u,b){return fetch(API+u,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json());}
 function jdel(u){return fetch(API+u,{method:'DELETE'}).then(r=>r.json());}
 
@@ -959,7 +959,13 @@ async function doSetup(){
   const pw=document.getElementById('lp-new').value;
   const r=await jpost('/api/auth/setup',{username:user,password:pw}).catch(e=>null);
   if(r && r.ok){ toast('Account creato'); closeLogin(); }
-  else { const m=(r&&r.detail)||'Utente (min 2) e password (min 4) validi'; document.getElementById('login-msg').textContent=m; toast(m); }
+  else {
+    let m=(r&&r.detail)||'Utente (min 2) e password (min 4) validi';
+    if(r && r._status===403){ m='Account già esistente. Usa il login per accedere.'; }
+    document.getElementById('login-msg').textContent=m;
+    document.getElementById('login-msg').style.color='#ef4444';
+    toast(m);
+  }
 }
 async function doLogin(){
   const user=document.getElementById('lp-user2').value.trim();
