@@ -1,3 +1,32 @@
+
+## [1.2.0] — 2026-07-25
+
+### Aggiunto
+- **Modulo Clinical Nutrition** (`clinical_nutrition.py`): database di 11 condizioni cliniche
+  con strategie dietetiche evidence-based (fonti 2024-2026):
+  - IBS/FODMAP (3 fasi, 70% responder, umbrella review PMC 2025)
+  - GERD/reflusso (dieta anti-reflusso, dieta Mediterranea)
+  - Intolleranza lattosio (eliminazione, sostituti, enzimi lattasi)
+  - Celiachia (GFD per tutta la vita, ESSCD 2025 guidelines)
+  - Sensibilità glutine non celiaca (NCGS)
+  - Allergie alimentari IgE-mediate (14 allergeni EU, EAACI 2022)
+  - Esofagite Eosinofila (dieta 4FED, ASCIA 2023)
+  - Dispepsia funzionale
+  - Obesità/sovrappeso
+  - Diabete tipo 2
+  - Ipertensione (dieta DASH)
+  - Osteoporosi
+- **Anamnesi cliente**: salva/leggi condizioni cliniche + note
+  (`/api/clients/{cid}/anamnesis` GET/POST)
+- **Raccomandazioni dietetiche**: genera report personalizzato
+  in base alle condizioni del cliente
+  (`/api/clinical-nutrition/recommendations`)
+- **Check-in settimanale**: peso, compliance, umore, sintomi, energia
+  (`/api/clients/{cid}/check-in` GET/POST)
+- **Condivisione piano**: PDF esportabile del piano alimentare
+  (`/api/clients/{cid}/share-plan`)
+- **Endpoint elenco condizioni**: `/api/clinical-nutrition/conditions`
+- **Dettaglio condizione**: `/api/clinical-nutrition/conditions/{key}`
 # Changelog — NutriCoach
 
 Tutte le versioni significative del progetto. Formato basato su
