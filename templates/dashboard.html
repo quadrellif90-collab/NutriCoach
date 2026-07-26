@@ -2090,10 +2090,10 @@ async function loadCartella(){
     '<div style="color:var(--text3)">Nessun sintomo registrato</div>';
   // peso
   document.getElementById('cc-weight').innerHTML = s.measurements && s.measurements.length ?
-    s.measurements.slice(-8).map(m=>`<div style="font-size:12px">${m.date}: ${m.weight||'—'} kg</div>`).join('') :
+    s.measurements.slice(-8).map(m=>`<div style="font-size:12px">${m.date}: ${m.weight_kg||'—'} kg</div>`).join('') :
     '<div style="color:var(--text3)">Nessuna misurazione</div>';
   // N: mini-grafico canvas trend peso
-  drawTrendChart('cc-weight-chart', s.measurements || [], 'weight', 'kg', '#2dd4bf');
+  drawTrendChart('cc-weight-chart', s.measurements || [], 'weight_kg', 'kg', '#2dd4bf');
   // note
   document.getElementById('cc-notes').innerHTML = s.progress_notes && s.progress_notes.length ?
     s.progress_notes.slice().reverse().map(n=>`<div style="padding:4px 0;font-size:12px;border-bottom:1px solid var(--border)"><b>${n.date}</b>: ${n.text}</div>`).join('') :
