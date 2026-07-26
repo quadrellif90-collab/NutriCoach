@@ -105,6 +105,11 @@ label{font-size:12px;color:var(--text3);display:block;margin-top:8px}
     <div class="tab" data-tab="acqua">💧 Acqua</div>
     <div class="tab" data-tab="progressi">📈 Progressi</div>
     <div class="tab" data-tab="scienza">🔬 Scienza Sport</div>
+    <div class="tab" data-tab="guthealth">🧬 Salute Intestinale</div>
+    <div class="tab" data-tab="symptoms">🩺 Diario Sintomi</div>
+    <div class="tab" data-tab="supplements">💊 Integratori</div>
+    <div class="tab" data-tab="dietpatterns">🥗 Pattern Dietetici</div>
+    <div class="tab" data-tab="cartella">🗂️ Cartella Clinica</div>
   </div>
 
   <div class="main-content">
@@ -121,6 +126,7 @@ label{font-size:12px;color:var(--text3);display:block;margin-top:8px}
         <div class="cmeta" id="ch-meta"></div>
       </div>
       <button class="btn ghost" onclick="exitClient()">⟵ Esci (vedi tutti)</button>
+      <button class="btn amber" onclick="openOnboard()">🧭 Onboarding</button>
     </div>
 
     <!-- OVERLAY LOGIN NUTRIZIONISTA -->
@@ -378,6 +384,7 @@ label{font-size:12px;color:var(--text3);display:block;margin-top:8px}
           <span id="p-preset-note" style="align-self:center;color:var(--text3);font-size:12px"></span>
         </div>
         <button class="btn" onclick="generatePlan()">⚡ Genera settimana</button>
+        <button class="btn ghost" onclick="exportPlanPdf()" style="margin-left:8px">📄 Esporta PDF clinico</button>
         <span id="plan-gen-result" style="margin-left:10px;color:var(--accent)"></span>
       </div>
       <div id="plan-week"></div>
@@ -527,6 +534,281 @@ label{font-size:12px;color:var(--text3);display:block;margin-top:8px}
 
       <p class="section-note">Fonti: Cao W et al. (PMC 2025); Outside/Velo & Olympics.com (Tour de France 2025 fueling 100-120 g/h); Aspetar journal "Emerging Challenges in Recovery for the Elite Football Player" (FIFA World Cup 2026); Ranchordas MK et al. (PMC 2017); Rackard G et al. (2025); UCI declaration on ketone supplements (2024); Lak&Bagheri 2024 (Frontiers); Morton 2018; Mamerow 2014; Schoenfeld 2013/2017; EF Pro Cycling gut-training 2025; Rønnestad block periodization review; Issurin; Kreider 2025 (ISSN); Garcia 2025; Tam 2025; Topalidis 2024; Dasari 2024; Khawaja 2024; Schyvens 2025.</p>
     </section>
+
+    <!-- ─── SALUTE INTESTINALE (FODMAP, microbioma, dysbiosis) ──── -->
+    <section id="guthealth" class="tabpane hidden">
+      <h2>🧬 Salute Intestinale</h2>
+      <p class="section-note">Analisi FODMAP, microbioma, protocolli clinici per SIBO, disbiosi, istamina. Basato su evidenze 2024-2026.</p>
+
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:14px">
+        <label style="color:var(--accent2)">Cliente</label>
+        <select id="gh-client" onchange="loadGutHealth()" style="min-width:200px"></select>
+        <button onclick="loadGutHealth()" style="padding:4px 12px">🔄 Aggiorna</button>
+      </div>
+
+      <!-- Conflitti multi-condizione -->
+      <div class="card" id="gh-conflicts" style="display:none">
+        <h3>⚠️ Conflitti tra condizioni</h3>
+        <div id="gh-conflicts-list"></div>
+      </div>
+
+      <!-- Analisi FODMAP giornaliero -->
+      <div class="card">
+        <h3>📊 Carico FODMAP Giornaliero</h3>
+        <p class="section-note">Calcola il carico FODMAP totale del piano/registro alimentare del cliente.</p>
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+          <select id="gh-fodmap-day">
+            <option value="lun">Lunedì</option><option value="mar">Martedì</option>
+            <option value="mer">Mercoledì</option><option value="gio">Giovedì</option>
+            <option value="ven">Venerdì</option><option value="sab">Sabato</option>
+            <option value="dom">Domenica</option>
+          </select>
+          <button onclick="analyzeFODMAP()">Analizza FODMAP</button>
+        </div>
+        <div id="gh-fodmap-result"></div>
+      </div>
+
+      <!-- Analisi singolo alimento -->
+      <div class="card">
+        <h3>🔍 Analisi Alimento</h3>
+        <p class="section-note">Cerca un alimento per vedere FODMAP, istamina, ossalati, salicilati, lectine.</p>
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+          <input id="gh-food-search" placeholder="es. cipolla, salmone, spinaci..." style="flex:1">
+          <button onclick="analyzeFood()">Analizza</button>
+        </div>
+        <div id="gh-food-result"></div>
+      </div>
+
+      <!-- Protocolli phased -->
+      <div class="card">
+        <h3>📋 Protocollo Fasato</h3>
+        <p class="section-note">Visualizza il protocollo eliminazione → reintroduzione → mantenimento per una condizione.</p>
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+          <select id="gh-phase-cond">
+            <option value="ibs">IBS</option><option value="sibo">SIBO</option>
+            <option value="sibo_hydrogen">SIBO Idrogeno</option><option value="sibo_methane">SIBO Metano</option>
+            <option value="histamine_intolerance">Intolleranza Istamina</option>
+            <option value="dysbiosis">Disbiosi</option>
+            <option value="gerd">GERD</option><option value="celiac">Celiachia</option>
+          </select>
+          <button onclick="loadPhasedProtocol()">Mostra Protocollo</button>
+        </div>
+        <div id="gh-phase-result"></div>
+      </div>
+
+      <!-- Integratori raccomandati -->
+      <div class="card">
+        <h3>💊 Integratori Raccomandati</h3>
+        <p class="section-note">Integratori basati sulle condizioni cliniche del cliente (con dosaggi e warning).</p>
+        <button onclick="loadConditionSupps()" style="margin-bottom:10px">Mostra Integratori</button>
+        <div id="gh-supps-result"></div>
+      </div>
+    </section>
+
+    <!-- ─── DIARIO SINTOMI ──────────────────────────────────────── -->
+    <section id="symptoms" class="tabpane hidden">
+      <h2>🩺 Diario Sintomi GI</h2>
+      <p class="section-note">Log giornaliero dei sintomi gastrointestinali. Scala 0-4 (nessuno → severo). Include Bristol Stool Scale e correlazione con i pasti.</p>
+
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:14px">
+        <label style="color:var(--accent2)">Cliente</label>
+        <select id="sy-client" onchange="loadSymptoms()"></select>
+      </div>
+
+      <!-- Form nuovo sintomo -->
+      <div class="card">
+        <h3>➕ Nuovo Registro</h3>
+        <div class="row" style="flex-wrap:wrap;gap:8px">
+          <div style="width:120px"><label>Data</label><input id="sy-date" type="date"></div>
+          <div style="width:80px"><label>Ora</label><input id="sy-time" type="time"></div>
+          <div style="width:120px"><label>Pasto</label>
+            <select id="sy-meal"><option value="">-</option>
+              <option value="colazione">Colazione</option><option value="pranzo">Pranzo</option>
+              <option value="cena">Cena</option><option value="spuntino">Spuntino</option></select>
+          </div>
+          <div style="width:120px"><label>Compliance</label>
+            <select id="sy-compliance"><option value="">-</option>
+              <option value="full">Totale</option><option value="partial">Parziale</option>
+              <option value="none">Nessuna</option></select>
+          </div>
+          <div style="width:100px"><label>Bristol (1-7)</label>
+            <select id="sy-bristol"><option value="">-</option>
+              <option value="1">1 - Grumi duri</option><option value="2">2 - Colon irregolare</option>
+              <option value="3">3 - Con crepe</option><option value="4">4 - Liscio</option>
+              <option value="5">5 - Morbidi</option><option value="6">6 - Pastoso</option>
+              <option value="7">7 - Liquido</option></select>
+          </div>
+        </div>
+        <div class="row" style="flex-wrap:wrap;gap:8px;margin-top:8px">
+          <div style="width:100px"><label>Gonfiore</label><input id="sy-bloat" type="range" min="0" max="4" value="0"><span id="sy-bloat-v">0</span></div>
+          <div style="width:100px"><label>Dolore</label><input id="sy-pain" type="range" min="0" max="4" value="0"><span id="sy-pain-v">0</span></div>
+          <div style="width:100px"><label>Gas</label><input id="sy-gas" type="range" min="0" max="4" value="0"><span id="sy-gas-v">0</span></div>
+          <div style="width:100px"><label>Nausea</label><input id="sy-nausea" type="range" min="0" max="4" value="0"><span id="sy-nausea-v">0</span></div>
+          <div style="width:100px"><label>Bruciore</label><input id="sy-heart" type="range" min="0" max="4" value="0"><span id="sy-heart-v">0</span></div>
+          <div style="width:120px"><label>Stitichezza</label><input id="sy-const" type="range" min="0" max="4" value="0"><span id="sy-const-v">0</span></div>
+          <div style="width:100px"><label>Diarrea</label><input id="sy-diarr" type="range" min="0" max="4" value="0"><span id="sy-diarr-v">0</span></div>
+          <div style="width:120px"><label>Brain fog</label><input id="sy-brain" type="range" min="0" max="4" value="0"><span id="sy-brain-v">0</span></div>
+          <div style="width:100px"><label>Fatica</label><input id="sy-fatigue" type="range" min="0" max="4" value="0"><span id="sy-fatigue-v">0</span></div>
+        </div>
+        <div style="margin-top:8px">
+          <label>Alimenti consumati</label>
+          <input id="sy-foods" placeholder="es. riso con pollo, insalata..." style="width:100%">
+        </div>
+        <div style="margin-top:6px">
+          <label>Note</label>
+          <textarea id="sy-notes" rows="2" placeholder="Note aggiuntive..."></textarea>
+        </div>
+        <button onclick="saveSymptom()" style="margin-top:10px;padding:6px 18px">💾 Salva</button>
+      </div>
+
+      <!-- Riepilogo sintomi -->
+      <div class="card">
+        <h3>📈 Riepilogo Sintomi (ultimi 30 giorni)</h3>
+        <div id="sy-summary"></div>
+      </div>
+
+      <!-- Storico -->
+      <div class="card">
+        <h3>📋 Storico</h3>
+        <div id="sy-history"></div>
+      </div>
+
+      <!-- AI Pattern + reintroduzione FODMAP -->
+      <div class="card" style="border-left:3px solid var(--accent2)">
+        <h3>🤖 AI Pattern & Reintroduzione FODMAP</h3>
+        <button onclick="loadSymptomPatterns()" style="padding:6px 18px">🔍 Analizza pattern & prossimo passo</button>
+        <div id="sy-patterns" style="margin-top:10px"></div>
+        <div id="sy-reintro" style="margin-top:12px"></div>
+      </div>
+    </section>
+
+    <!-- ─── INTEGRATORI ─────────────────────────────────────────── -->
+    <section id="supplements" class="tabpane hidden">
+      <h2>💊 Registro Integratori</h2>
+      <p class="section-note">Traccia gli integratori assunti dal cliente. Utile per monitorare compliance e interazioni.</p>
+
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:14px">
+        <label style="color:var(--accent2)">Cliente</label>
+        <select id="sp-client" onchange="loadSupplements()"></select>
+      </div>
+
+      <div class="card">
+        <h3>➕ Nuovo Integratore</h3>
+        <div class="row" style="flex-wrap:wrap;gap:8px">
+          <div style="width:140px"><label>Data</label><input id="sp-date" type="date"></div>
+          <div style="flex:1"><label>Integratore</label><input id="sp-name" placeholder="es. Vitamina D3"></div>
+          <div style="width:120px"><label>Dose</label><input id="sp-dose" placeholder="es. 1000 UI"></div>
+        </div>
+        <button onclick="saveSupplement()" style="margin-top:10px;padding:6px 18px">💾 Salva</button>
+      </div>
+
+      <div class="card">
+        <h3>📋 Storico Integratori</h3>
+        <div id="sp-history"></div>
+      </div>
+    </section>
+
+    <section id="sec-dietpatterns" class="section">
+      <h2>🥗 Pattern Dietetici Evidence-Based</h2>
+      <p style="color:var(--muted);margin-top:-6px">
+        Diete "orizzontali" con evidenza scientifica 2024-2026 (Mediterranea, DASH, MIND, Portfolio, basso-IG, RPAH/FAILSAFE, supporto barriera). Seleziona le condizioni del cliente per ricevere i pattern consigliati.
+      </p>
+
+      <div class="card">
+        <h3>🎯 Suggerimenti per condizione</h3>
+        <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px">
+          <label style="color:var(--accent2)">Cliente</label>
+          <select id="dp-client" onchange="loadDietPatternSuggestions()"></select>
+          <button onclick="loadDietPatternSuggestions()" style="padding:4px 12px">🔄 Aggiorna</button>
+        </div>
+        <div id="dp-suggestions"></div>
+      </div>
+
+      <div class="card">
+        <h3>📚 Tutti i pattern</h3>
+        <div id="dp-all"></div>
+      </div>
+
+      <div class="card" id="dp-detail-card" style="display:none">
+        <h3 id="dp-detail-title"></h3>
+        <div id="dp-detail"></div>
+      </div>
+    </section>
+
+    <section id="sec-cartella" class="section">
+      <h2>🗂️ Cartella Clinica — <span id="cc-name"></span></h2>
+      <p style="color:var(--muted);margin-top:-6px">Vista unificata: condizioni, conflitti, esclusioni, integratori, fase dieta e trend sintomi/peso.</p>
+      <div id="cc-conditions"></div>
+      <div id="cc-conflicts"></div>
+      <div class="row" style="display:flex;gap:12px;flex-wrap:wrap">
+        <div class="card" style="flex:1;min-width:280px">
+          <h3>⛔ Alimenti da evitare</h3>
+          <div id="cc-avoid" style="font-size:13px"></div>
+        </div>
+        <div class="card" style="flex:1;min-width:280px">
+          <h3>✅ Alimenti consigliati</h3>
+          <div id="cc-safe" style="font-size:13px"></div>
+        </div>
+      </div>
+      <div class="row" style="display:flex;gap:12px;flex-wrap:wrap">
+        <div class="card" style="flex:1;min-width:280px">
+          <h3>💊 Integratori</h3>
+          <div id="cc-supplements"></div>
+        </div>
+        <div class="card" style="flex:1;min-width:280px">
+          <h3>🔄 Fase dieta attiva</h3>
+          <div id="cc-phases"></div>
+        </div>
+      </div>
+      <div class="row" style="display:flex;gap:12px;flex-wrap:wrap">
+        <div class="card" style="flex:1;min-width:280px">
+          <h3>🩺 Sintomi (30gg)</h3>
+          <div id="cc-symptoms"></div>
+        </div>
+        <div class="card" style="flex:1;min-width:280px">
+          <h3>📈 Trend peso</h3>
+          <div id="cc-weight"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>📝 Note di progresso</h3>
+        <div id="cc-notes"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- Wizard Onboarding Anamnesi (D) -->
+<div id="onboard-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;align-items:center;justify-content:center">
+  <div style="background:var(--card);max-width:560px;width:92%;border-radius:14px;padding:22px;max-height:90vh;overflow:auto">
+    <h2 style="margin-top:0">🧭 Onboarding Anamnesi — <span id="ob-name"></span></h2>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <div id="ob-step1" class="ob-dot" style="flex:1;padding:8px;border-radius:8px;background:var(--accent2);color:#fff;font-size:13px;text-align:center">1. Patologie</div>
+      <div id="ob-step2" class="ob-dot" style="flex:1;padding:8px;border-radius:8px;background:var(--surface2);font-size:13px;text-align:center">2. Allergie</div>
+      <div id="ob-step3" class="ob-dot" style="flex:1;padding:8px;border-radius:8px;background:var(--surface2);font-size:13px;text-align:center">3. Conferma</div>
+    </div>
+    <div id="ob-panel-1">
+      <p style="font-size:13px;color:var(--muted)">Seleziona le condizioni cliniche (multi-scelta). Le useremo per filtrare il piano e i consigli.</p>
+      <div id="ob-cond-list" style="display:flex;flex-wrap:wrap;gap:6px;margin:10px 0;max-height:260px;overflow:auto"></div>
+    </div>
+    <div id="ob-panel-2" style="display:none">
+      <p style="font-size:13px;color:var(--muted)">Allergie e note libere (testo).</p>
+      <label>Allergie / intolleranze note</label>
+      <input id="ob-allergies" style="width:100%;margin:6px 0" placeholder="es. noci, glutine">
+      <label>Note anamnesi</label>
+      <textarea id="ob-notes" rows="3" style="width:100%" placeholder="es. intervento colecisti 2023, viaggi frequenti..."></textarea>
+    </div>
+    <div id="ob-panel-3" style="display:none">
+      <p style="font-size:13px;color:var(--muted)">Riepilogo e salvataggio.</p>
+      <div id="ob-review" style="font-size:13px"></div>
+      <div id="ob-conflicts" style="margin-top:10px"></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button id="ob-prev" onclick="obStep(-1)" class="btn ghost" style="flex:1">⬅ Indietro</button>
+      <button id="ob-next" onclick="obStep(1)" class="btn" style="flex:1">Avanti ➡</button>
+      <button id="ob-save" onclick="obSave()" class="btn amber" style="flex:1;display:none">💾 Salva anamnesi</button>
+      <button onclick="obClose()" class="btn ghost">✕ Annulla</button>
+    </div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -555,6 +837,11 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   if (tab === 'messaggi') loadMessages();
   if (tab === 'acqua') loadWater();
   if (tab === 'progressi') loadProgNotes();
+  if (tab === 'guthealth') loadGutHealth();
+  if (tab === 'symptoms') loadSymptoms();
+  if (tab === 'supplements') loadSupplements();
+  if (tab === 'dietpatterns') loadDietPatterns();
+  if (tab === 'cartella') loadCartella();
 });
 
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);}
@@ -1048,18 +1335,43 @@ async function applyPreset(){
   }
 }
 async function generatePlan(){
+  const cid = STATE.clientId;
+  if(!cid){ toast('Seleziona prima un cliente'); return; }
   const targets={kcal:+document.getElementById('p-kcal').value||2000,
                  p:+document.getElementById('p-p').value||150,
                  c:+document.getElementById('p-c').value||200,
                  f:+document.getElementById('p-f').value||67};
-  const plan=await jpost(`/api/clients/${STATE.clientId}/plan/generate`,{targets});
+  const client=await jget(`/api/clients/${cid}`);
+  const conds=client.pathologies?client.pathologies.split(',').map(s=>s.trim().toLowerCase().replace(/\s+/g,'_')).filter(Boolean):[];
+  const plan=await jpost(`/api/clients/${cid}/plan/generate`,{targets});
   if(plan && plan.days){
+    const clin=plan.clinical||{};
+    let banner = '';
+    if(clin.conditions && clin.conditions.length){
+      banner = `<div class="card" style="margin-top:10px;border-left:3px solid var(--accent2)">
+        <div style="font-size:13px"><b>🩺 Piano filtrato per ${clin.conditions.length} condizione/i:</b>
+        <span style="color:var(--text3)">${clin.conditions.join(', ')}</span></div>
+        ${clin.excluded_foods && clin.excluded_foods.length?
+          `<div style="font-size:12px;margin-top:4px;color:var(--warning)">⚠️ Esclusi: ${clin.excluded_foods.slice(0,12).join(', ')}${clin.excluded_foods.length>12?'…':''}</div>`:''}
+      </div>`;
+    } else {
+      banner = `<div class="card" style="margin-top:10px;color:var(--text3);font-size:12px">ℹ️ Nessuna condizione clinica registrata: il piano e' generico. Registra le patologie in Anamnesi per filtrarlo.</div>`;
+    }
     document.getElementById('plan-gen-result').textContent=`Generato: ${plan.days.length} giorni, ~${Math.round(plan.week_totals.kcal/7)} kcal/giorno`;
-    document.getElementById('plan-week').innerHTML = plan.days.map(d=>`
-      <div class="card" style="margin-top:10px"><h3>Giorno ${d.day} — ${Math.round(d.totals.kcal)} kcal</h3>
-      ${d.meals.map(m=>`<div style="margin:6px 0"><b>${m.meal}</b>: ${m.items.map(i=>i.food+' '+i.g+'g').join(', ')} <span style="color:var(--text3)">(${Math.round(m.totals.kcal)} kcal)</span></div>`).join('')}
-      </div>`).join('');
+    document.getElementById('plan-week').innerHTML = banner + plan.days.map(d=>`\n      <div class="card" style="margin-top:10px"><h3>Giorno ${d.day} — ${Math.round(d.totals.kcal)} kcal</h3>\n      ${d.meals.map(m=>`<div style="margin:6px 0"><b>${m.meal}</b>: ${m.items.map(i=>i.food+' '+i.g+'g').join(', ')} <span style="color:var(--text3)">(${Math.round(m.totals.kcal)} kcal)</span></div>`).join('')}\n      </div>`).join('');
   }
+}
+async function exportPlanPdf(){
+  const cid = STATE.clientId;
+  if(!cid){ toast('Seleziona prima un cliente'); return; }
+  const targets={kcal:+document.getElementById('p-kcal').value||2000,
+                 p:+document.getElementById('p-p').value||150,
+                 c:+document.getElementById('p-c').value||200,
+                 f:+document.getElementById('p-f').value||67};
+  toast('Genero PDF clinico...');
+  const r=await fetch(`/api/clients/${cid}/plan/export-pdf`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({targets})});
+  if(r.ok){ const blob=await r.blob(); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='piano_clinico.pdf'; a.click(); toast('PDF pronto ✓'); }
+  else { toast('Errore generazione PDF'); }
 }
 async function loadPlan(){ /* i target restano; si genera on-demand */ document.getElementById('plan-week').innerHTML=''; document.getElementById('plan-gen-result').textContent=''; }
 
@@ -1285,6 +1597,487 @@ function toggleTheme(){
   const light=document.body.classList.toggle('light');
   localStorage.setItem('nc-theme', light?'light':'dark');
 }
+
+// ---- Salute Intestinale (Gut Health) ----
+async function loadGutHealth(){
+  const cid=STATE.clientId;
+  if(!cid) return;
+  // carica clienti nel select
+  const clients=await jget('/api/clients');
+  const sel=document.getElementById('gh-client');
+  sel.innerHTML=clients.map(c=>`<option value="${c.id}" ${c.id==cid?'selected':''}>${c.name}</option>`).join('');
+  // carica patologie per conflitti
+  const client=await jget(`/api/clients/${cid}`);
+  const conds=client.pathologies?client.pathologies.split(',').map(s=>s.trim().toLowerCase().replace(/\s+/g,'_')):[];
+  if(conds.length>1){
+    const r=await jpost('/api/clinical-nutrition/conflicts',{conditions:conds});
+    if(r.conflicts.length){
+      document.getElementById('gh-conflicts').style.display='block';
+      document.getElementById('gh-conflicts-list').innerHTML=r.conflicts.map(c=>`<div style="padding:6px 0;color:var(--warning)">⚠️ ${c}</div>`).join('');
+    } else {
+      document.getElementById('gh-conflicts').style.display='none';
+    }
+  } else {
+    document.getElementById('gh-conflicts').style.display='none';
+  }
+}
+
+async function analyzeFODMAP(){
+  const cid=STATE.clientId||document.getElementById('gh-client').value;
+  const day=document.getElementById('gh-fodmap-day').value;
+  const r=await jpost(`/api/clients/${cid}/fodmap-analysis`,{day});
+  let html='';
+  if(r.message){ html=`<div style="color:var(--text3)">${r.message}</div>`; }
+  else {
+    html+=`<div style="font-size:15px;margin-bottom:8px">Carico totale: <b>${r.total_load} g</b> ${r.total_load>1.5?'<span style="color:var(--danger)">⚠️ Alto</span>':r.total_load>0.75?'<span style="color:var(--warning)">⚡ Moderato</span>':'<span style="color:var(--success)">✅ Basso</span>'}</div>`;
+    if(r.flagged_items && r.flagged_items.length){
+      html+=`<div style="margin-top:6px"><b>Alimenti con FODMAP elevati:</b></div>`;
+      html+=r.flagged_items.map(f=>`<div style="padding:4px 0;font-size:13px">• ${f.food} (${f.grams}g) — ${f.group}: ${f.value}g <span style="color:var(--danger)">[${f.level}]</span></div>`).join('');
+    }
+    if(r.by_group){
+      html+=`<div style="margin-top:8px;font-size:12px;color:var(--text3)">`;
+      html+=Object.entries(r.by_group).filter(([,v])=>v>0).map(([k,v])=>`${k}: ${v}g`).join(' | ');
+      html+=`</div>`;
+    }
+  }
+  document.getElementById('gh-fodmap-result').innerHTML=html;
+}
+
+async function analyzeFood(){
+  const food=document.getElementById('gh-food-search').value.trim();
+  if(!food) return;
+  const r=await jget(`/api/clinical-nutrition/food-analysis/${encodeURIComponent(food)}`);
+  if(!r.found){ document.getElementById('gh-food-result').innerHTML='<div style="color:var(--text3)">Alimento non trovato nel database</div>'; return; }
+  let html=`<div style="font-weight:600;margin-bottom:6px">${r.name}</div>`;
+  // FODMAP
+  if(r.fodmap){
+    const total=Object.values(r.fodmap).reduce((a,b)=>a+b,0);
+    html+=`<div><b>FODMAP:</b> ${total>0?total.toFixed(2)+' g/100g':'✅ Basso/Zero'}`;
+    if(total>0){
+      const groups=Object.entries(r.fodmap).filter(([,v])=>v>0).map(([k,v])=>`${k}: ${v}g`).join(', ');
+      html+=` <span style="font-size:12px;color:var(--text3)">(${groups})</span>`;
+    }
+    html+=`</div>`;
+  }
+  // Istamina
+  const histColors={low:'var(--success)',moderate:'var(--warning)',high:'var(--danger)'};
+  html+=`<div><b>Istamina:</b> <span style="color:${histColors[r.histamine]||'var(--text)'}">■</span> ${r.histamine}</div>`;
+  // Ossalati
+  html+=`<div><b>Ossalati:</b> <span style="color:${histColors[r.oxalate]||'var(--text)'}">■</span> ${r.oxalate}</div>`;
+  // Salicilati
+  html+=`<div><b>Salicilati:</b> <span style="color:${histColors[r.salicylate]||'var(--text)'}">■</span> ${r.salicylate}</div>`;
+  // Lectine
+  html+=`<div><b>Lectine:</b> <span style="color:${histColors[r.lectin]||'var(--text)'}">■</span> ${r.lectin}</div>`;
+  document.getElementById('gh-food-result').innerHTML=html;
+}
+
+async function loadPhasedProtocol(){
+  const cond=document.getElementById('gh-phase-cond').value;
+  const r=await jget(`/api/clinical-nutrition/phased/${cond}`);
+  if(!r.protocol){ document.getElementById('gh-phase-result').innerHTML='<div style="color:var(--text3)">Nessun protocollo phased disponibile</div>'; return; }
+  const p=r.protocol;
+  let html='';
+  for(const[phase,data] of Object.entries(p)){
+    if(phase==='condition') continue;
+    html+=`<div style="margin-bottom:12px"><div style="font-weight:600;color:var(--accent)">${phase.charAt(0).toUpperCase()+phase.slice(1)}</div>`;
+    if(Array.isArray(data)){
+      html+=data.map(d=>`<div style="padding:3px 0;font-size:13px">• ${typeof d==='string'?d:d.name?d.name+': '+(d.description||''):(JSON.stringify(d))}</div>`).join('');
+    }
+    html+=`</div>`;
+  }
+  document.getElementById('gh-phase-result').innerHTML=html;
+}
+
+async function loadConditionSupps(){
+  const cid=STATE.clientId||document.getElementById('gh-client').value;
+  const client=await jget(`/api/clients/${cid}`);
+  const conds=client.pathologies?client.pathologies.split(',').map(s=>s.trim().toLowerCase().replace(/\s+/g,'_')):[];
+  if(!conds.length){ document.getElementById('gh-supps-result').innerHTML='<div style="color:var(--text3)">Nessuna condizione clinica registrata</div>'; return; }
+  const r=await jpost('/api/clinical-nutrition/supplements',{conditions:conds});
+  if(!r.supplements.unique||!r.supplements.unique.length){ document.getElementById('gh-supps-result').innerHTML='<div style="color:var(--text3)">Nessun integratore specifico per le condizioni attuali</div>'; return; }
+  let html=r.supplements.unique.map(s=>`<div style="padding:6px 0;border-bottom:1px solid var(--border)">
+    <b>${s.name}</b> — <span style="color:var(--accent)">${s.dose}</span>
+    <div style="font-size:12px;color:var(--text3)">${s.rationale}</div>
+    ${s.warning?`<div style="font-size:12px;color:var(--warning)">⚠️ ${s.warning}</div>`:''}
+    <div style="font-size:11px;color:var(--text3)">Condizione: ${s.condition_name||s.condition}</div>
+  </div>`).join('');
+  if(r.supplements.duplicates&&r.supplements.duplicates.length){
+    html+=`<div style="margin-top:10px;padding:8px;background:rgba(255,165,0,0.1);border-radius:6px;font-size:13px">
+      <b>⚠️ Doppiette:</b> ${r.supplements.duplicates.map(d=>`${d.name} (${d.condition1} + ${d.condition2})`).join(', ')}
+    </div>`;
+  }
+  document.getElementById('gh-supps-result').innerHTML=html;
+}
+
+// ---- Range sliders update ----
+document.querySelectorAll('#symptoms input[type=range]').forEach(sl=>{
+  const vSpan=document.getElementById(sl.id+'-v');
+  if(vSpan) sl.oninput=()=>{ vSpan.textContent=sl.value; };
+});
+
+// ---- Diario Sintomi ----
+async function loadSymptoms(){
+  const cid=STATE.clientId||document.getElementById('sy-client').value;
+  if(!cid) return;
+  // carica clienti nel select
+  const clients=await jget('/api/clients');
+  const sel=document.getElementById('sy-client');
+  sel.innerHTML=clients.map(c=>`<option value="${c.id}" ${c.id==cid?'selected':''}>${c.name}</option>`).join('');
+  // set today
+  document.getElementById('sy-date').value=new Date().toISOString().slice(0,10);
+  // summary
+  const summary=await jget(`/api/clients/${cid}/symptoms/summary?days=30`);
+  let html='';
+  if(summary.total_entries){
+    const metrics=[
+      ['Gonfiore',summary.avg_bloating],['Dolore',summary.avg_pain],['Gas',summary.avg_gas],
+      ['Nausea',summary.avg_nausea],['Bruciore',summary.avg_heartburn],['Stitichezza',summary.avg_constipation],
+      ['Diarrea',summary.avg_diarrhea],['Brain fog',summary.avg_brain_fog],['Fatica',summary.avg_fatigue]
+    ];
+    html+=`<div style="font-size:13px;margin-bottom:6px">Media su ${summary.total_entries} registrazioni:</div>`;
+    html+=`<div style="display:flex;flex-wrap:wrap;gap:6px">`;
+    metrics.forEach(([name,val])=>{
+      if(val==null) return;
+      const color=val>2?'var(--danger)':val>1?'var(--warning)':val>0.5?'var(--accent)':'var(--success)';
+      html+=`<div style="padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.05);font-size:12px"><span style="color:${color}">■</span> ${name}: ${val}</div>`;
+    });
+    html+=`</div>`;
+    if(summary.avg_bristol) html+=`<div style="font-size:12px;margin-top:4px;color:var(--text3)">Bristol medio: ${summary.avg_bristol}</div>`;
+  } else {
+    html='<div style="color:var(--text3)">Nessun sintomo registrato negli ultimi 30 giorni</div>';
+  }
+  document.getElementById('sy-summary').innerHTML=html;
+  // history
+  const hist=await jget(`/api/clients/${cid}/symptoms?limit=20`);
+  if(hist.symptoms.length){
+    document.getElementById('sy-history').innerHTML=hist.symptoms.map(s=>{
+      const vals=[];
+      if(s.bloating) vals.push('Gonfiore:'+s.bloating);
+      if(s.pain) vals.push('Dolore:'+s.pain);
+      if(s.gas) vals.push('Gas:'+s.gas);
+      if(s.nausea) vals.push('Nausea:'+s.nausea);
+      if(s.heartburn) vals.push('Bruciore:'+s.heartburn);
+      if(s.constipation) vals.push('Stitichezza:'+s.constipation);
+      if(s.diarrhea) vals.push('Diarrea:'+s.diarrhea);
+      if(s.brain_fog) vals.push('BrainFog:'+s.brain_fog);
+      if(s.fatigue) vals.push('Fatica:'+s.fatigue);
+      return `<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
+        <b>${s.date}</b> ${s.time||''} ${s.meal_context?'('+s.meal_context+')':''} — ${vals.join(', ')}
+        ${s.bristol_scale?' | Bristol:'+s.bristol_scale:''}
+        ${s.foods_eaten?'<div style="font-size:12px;color:var(--text3)">Alimenti: '+s.foods_eaten+'</div>':''}
+        ${s.notes?'<div style="font-size:12px;color:var(--text3)">'+s.notes+'</div>':''}
+      </div>`;
+    }).join('');
+  } else {
+    document.getElementById('sy-history').innerHTML='<div style="color:var(--text3)">Nessun registro</div>';
+  }
+}
+
+async function loadSymptomPatterns(){
+  const cid=STATE.clientId||document.getElementById('sy-client').value;
+  if(!cid){ toast('Seleziona un cliente'); return; }
+  const [pat, reintro] = await Promise.all([
+    jget(`/api/clients/${cid}/symptom-patterns?days=30`),
+    jget(`/api/clients/${cid}/fodmap-reintroduction`)
+  ]);
+  const p=pat.patterns||{};
+  let h='';
+  h+=`<div style="font-size:13px"><b>Pattern rilevati</b> (${p.total_days||0} giorni analizzati, ${p.high_days||0} con sintomi rilevanti)</div>`;
+  if(p.top_symptoms && p.top_symptoms.length){
+    h+=`<div style="margin-top:4px">Sintomi dominanti: <span style="color:var(--warning)">${p.top_symptoms.join(', ')}</span></div>`;
+  }
+  if(p.food_hypotheses && p.food_hypotheses.length){
+    h+=`<div style="margin-top:4px;font-size:12px"><b>Candidati trigger alimentari</b> (giorni a sintomi alti): `+
+       p.food_hypotheses.map(f=>f.food+' ('+f.hits+')').join(', ')+`</div>`;
+  }
+  if(!p.top_symptoms || !p.top_symptoms.length){
+    h+=`<div style="margin-top:4px;color:var(--text3)">Nessun pattern rilevante: diario troppo scarno o sintomi bassi.</div>`;
+  }
+  document.getElementById('sy-patterns').innerHTML=h;
+  // reintroduzione FODMAP
+  let r=`<div style="font-size:13px"><b>🥦 Reintroduzione FODMAP guidata</b></div>`;
+  if(reintro.ready){
+    r+=`<div style="color:var(--success);margin-top:4px">✅ ${reintro.reason}</div>`;
+    if(reintro.next_step){
+      r+=`<div style="font-size:12px;margin-top:4px;color:var(--text3)">${reintro.next_step.method}</div>`;
+      r+=reintro.next_step.steps.map((s,i)=>
+        `<div style="padding:6px 0;border-left:2px solid var(--accent2);margin-left:6px;padding-left:8px">
+          <b>${i+1}. ${s.label}</b> <span style="font-size:11px;color:var(--text3)">(${s.rationale})</span>
+          <div style="font-size:12px">Test: ${s.test_foods.join(' · ')}</div>
+        </div>`).join('');
+    }
+  } else {
+    r+=`<div style="color:var(--warning);margin-top:4px">⏳ ${reintro.reason}</div>`;
+  }
+  document.getElementById('sy-reintro').innerHTML=r;
+}
+
+async function saveSymptom(){
+  const cid=STATE.clientId||document.getElementById('sy-client').value;
+  if(!cid){ toast('Seleziona un cliente'); return; }
+  const data={
+    date: document.getElementById('sy-date').value,
+    time: document.getElementById('sy-time').value,
+    bloating: +document.getElementById('sy-bloat').value,
+    pain: +document.getElementById('sy-pain').value,
+    gas: +document.getElementById('sy-gas').value,
+    nausea: +document.getElementById('sy-nausea').value,
+    heartburn: +document.getElementById('sy-heart').value,
+    constipation: +document.getElementById('sy-const').value,
+    diarrhea: +document.getElementById('sy-diarr').value,
+    brain_fog: +document.getElementById('sy-brain').value,
+    fatigue: +document.getElementById('sy-fatigue').value,
+    bristol_scale: +document.getElementById('sy-bristol').value||null,
+    meal_context: document.getElementById('sy-meal').value||null,
+    foods_eaten: document.getElementById('sy-foods').value||null,
+    diet_compliance: document.getElementById('sy-compliance').value||null,
+    notes: document.getElementById('sy-notes').value||null,
+  };
+  const r=await jpost(`/api/clients/${cid}/symptoms`,data);
+  if(r.ok){
+    toast('Sintomo registrato ✓');
+    // reset sliders
+    document.querySelectorAll('#symptoms input[type=range]').forEach(sl=>{sl.value=0;});
+    document.querySelectorAll('#symptoms input[type=range]').forEach(sl=>{
+      const v=document.getElementById(sl.id+'-v'); if(v) v.textContent='0';
+    });
+    document.getElementById('sy-foods').value='';
+    document.getElementById('sy-notes').value='';
+    loadSymptoms();
+  }
+}
+
+// ---- Integratori ----
+async function loadSupplements(){
+  const cid=STATE.clientId||document.getElementById('sp-client').value;
+  if(!cid) return;
+  const clients=await jget('/api/clients');
+  const sel=document.getElementById('sp-client');
+  sel.innerHTML=clients.map(c=>`<option value="${c.id}" ${c.id==cid?'selected':''}>${c.name}</option>`).join('');
+  document.getElementById('sp-date').value=new Date().toISOString().slice(0,10);
+  const hist=await jget(`/api/clients/${cid}/supplements`);
+  if(hist.supplements.length){
+    document.getElementById('sp-history').innerHTML=hist.supplements.map(s=>
+      `<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
+        <b>${s.date}</b> — <b>${s.supplement_name}</b> ${s.dose?'('+s.dose+')':''}
+        ${s.taken?'<span style="color:var(--success)">✓</span>':'<span style="color:var(--danger)">✗</span>'}
+        ${s.notes?'<div style="font-size:12px;color:var(--text3)">'+s.notes+'</div>':''}
+      </div>`
+    ).join('');
+  } else {
+    document.getElementById('sp-history').innerHTML='<div style="color:var(--text3)">Nessun integratore registrato</div>';
+  }
+}
+
+async function saveSupplement(){
+  const cid=STATE.clientId||document.getElementById('sp-client').value;
+  if(!cid){ toast('Seleziona un cliente'); return; }
+  const name=document.getElementById('sp-name').value.trim();
+  if(!name){ toast('Inserisci il nome dell\'integratore'); return; }
+  const data={
+    date: document.getElementById('sp-date').value,
+    name: name,
+    dose: document.getElementById('sp-dose').value||null,
+  };
+  const r=await jpost(`/api/clients/${cid}/supplements`,data);
+  if(r.ok){
+    toast('Integratore registrato ✓');
+    document.getElementById('sp-name').value='';
+    document.getElementById('sp-dose').value='';
+    loadSupplements();
+  }
+}
+
+// ---- Pattern Dietetici Evidence-Based ----
+async function loadDietPatterns(){
+  // popola select clienti
+  const cid=STATE.clientId;
+  const clients=await jget('/api/clients');
+  const sel=document.getElementById('dp-client');
+  sel.innerHTML='<option value="">— seleziona —</option>'+clients.map(c=>`<option value="${c.id}" ${c.id==cid?'selected':''}>${c.name}</option>`).join('');
+  // elenco di tutti i pattern
+  const all=await jget('/api/clinical-nutrition/diet-patterns');
+  const keys=Object.keys(all.patterns);
+  document.getElementById('dp-all').innerHTML=keys.map(k=>{
+    const p=all.patterns[k];
+    return `<div style="padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="showDietPattern('${k}')">
+      <b style="color:var(--accent2)">${p.name}</b>
+      <div style="font-size:12px;color:var(--text3)">🎯 ${p.goal}</div>
+    </div>`;
+  }).join('');
+  // se c'è un cliente attivo, mostra i suggerimenti
+  if(cid){ loadDietPatternSuggestions(); }
+  else { document.getElementById('dp-suggestions').innerHTML='<div style="color:var(--text3)">Seleziona un cliente per i suggerimenti.</div>'; }
+}
+
+async function loadDietPatternSuggestions(){
+  const cid=document.getElementById('dp-client').value||STATE.clientId;
+  const box=document.getElementById('dp-suggestions');
+  if(!cid){ box.innerHTML='<div style="color:var(--text3)">Seleziona un cliente.</div>'; return; }
+  const client=await jget(`/api/clients/${cid}`);
+  const conds=client.pathologies?client.pathologies.split(',').map(s=>s.trim().toLowerCase().replace(/\s+/g,'_')):[];
+  if(!conds.length){ box.innerHTML='<div style="color:var(--text3)">Nessuna patologia registrata per questo cliente.</div>'; return; }
+  const r=await jpost('/api/clinical-nutrition/diet-patterns/suggest',{conditions:conds});
+  if(!r.suggestions.length){ box.innerHTML='<div style="color:var(--text3)">Nessun pattern specifico per le condizioni registrate. Usa i pattern generali qui sotto.</div>'; return; }
+  box.innerHTML=r.suggestions.map(s=>
+    `<div style="padding:10px;margin-bottom:8px;border-left:3px solid var(--accent2);background:rgba(255,255,255,0.02);border-radius:4px;cursor:pointer" onclick="showDietPattern('${s.key}')">
+      <div><b style="color:var(--accent2)">${s.name}</b> <span style="font-size:11px;color:var(--success)">${s.match_count} match</span></div>
+      <div style="font-size:12px;color:var(--muted)">🎯 ${s.goal}</div>
+      <div style="font-size:12px;margin-top:4px">${s.evidence}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px">Condizioni: ${s.matched_conditions.join(', ')}</div>
+    </div>`
+  ).join('');
+}
+
+async function showDietPattern(key){
+  const r=await jget(`/api/clinical-nutrition/diet-patterns/${key}`);
+  const p=r.pattern;
+  const card=document.getElementById('dp-detail-card');
+  card.style.display='block';
+  document.getElementById('dp-detail-title').textContent='🥗 '+p.name;
+  let html=`<div style="font-size:12px;color:var(--muted);margin-bottom:6px">🎯 ${p.goal}</div>`;
+  html+=`<p style="font-size:13px">${p.description}</p>`;
+  html+=`<div style="margin-top:8px"><b>Evidenza:</b><div style="font-size:13px">${p.evidence}</div></div>`;
+  if(p.applies_to && p.applies_to.length){
+    html+=`<div style="margin-top:6px;font-size:12px;color:var(--text3)"><b>Applicabile a:</b> ${p.applies_to.join(', ')}</div>`;
+  }
+  if(p.phases){
+    html+=`<div style="margin-top:8px"><b>Fasi:</b>`;
+    for(const [k,v] of Object.entries(p.phases)){ html+=`<div style="font-size:12px;padding:2px 0">• <b>${k}:</b> ${v}</div>`; }
+    html+=`</div>`;
+  }
+  if(p.supports){
+    html+=`<div style="margin-top:8px"><b>Nutrienti di supporto:</b><ul style="font-size:12px;margin:4px 0">`+p.supports.map(s=>`<li>${s}</li>`).join('')+`</ul></div>`;
+  }
+  if(p.fonti){
+    html+=`<div style="margin-top:8px;font-size:11px;color:var(--text3)"><b>Fonti:</b><ul style="margin:4px 0">`+p.fonti.map(f=>`<li>${f}</li>`).join('')+`</ul></div>`;
+  }
+  document.getElementById('dp-detail').innerHTML=html;
+  card.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+// ---- Cartella Clinica unificata ----
+async function loadCartella(){
+  const cid=STATE.clientId;
+  if(!cid){ document.getElementById('cc-name').textContent='(seleziona un cliente)';
+    ['cc-conditions','cc-conflicts','cc-avoid','cc-safe','cc-supplements','cc-phases','cc-symptoms','cc-weight','cc-notes'].forEach(id=>document.getElementById(id).innerHTML=''); return; }
+  const s=await jget(`/api/clients/${cid}/clinical-summary`);
+  document.getElementById('cc-name').textContent=s.client_name;
+  // condizioni
+  document.getElementById('cc-conditions').innerHTML = s.condition_details && s.condition_details.length ?
+    `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">`+
+    s.condition_details.map(c=>`<span style="background:var(--surface2);padding:4px 10px;border-radius:14px;font-size:13px;border-left:3px solid var(--accent2)"><b>${c.name}</b> <span style="font-size:10px;color:var(--text3)">[${c.evidence_level}]</span></span>`).join('')+
+    `</div>` :
+    `<div style="color:var(--text3);margin-bottom:10px">Nessuna condizione registrata.</div>`;
+  // conflitti
+  const cc=document.getElementById('cc-conflicts');
+  if(s.conflicts && s.conflicts.length){
+    cc.style.display='block';
+    cc.innerHTML=`<div class="card" style="border-left:3px solid var(--warning);margin-bottom:10px"><h3 style="color:var(--warning)">⚠️ Conflitti multi-condizione</h3>`+
+      s.conflicts.map(c=>`<div style="font-size:13px;padding:4px 0">${c}</div>`).join('')+`</div>`;
+  } else { cc.style.display='none'; }
+  // evita / safe
+  document.getElementById('cc-avoid').innerHTML = s.foods_to_avoid && s.foods_to_avoid.length ?
+    s.foods_to_avoid.slice(0,20).map(f=>`<div style="padding:2px 0;color:var(--danger)">• ${f}</div>`).join('') : '<div style="color:var(--text3)">—</div>';
+  document.getElementById('cc-safe').innerHTML = s.foods_safe && s.foods_safe.length ?
+    s.foods_safe.slice(0,20).map(f=>`<div style="padding:2px 0;color:var(--success)">• ${f}</div>`).join('') : '<div style="color:var(--text3)">—</div>';
+  // integratori
+  document.getElementById('cc-supplements').innerHTML = s.supplements && s.supplements.length ?
+    s.supplements.slice(0,12).map(x=>`<div style="padding:3px 0;font-size:12px"><b>${x.date}</b> — ${x.supplement_name} ${x.dose?'('+x.dose+')':''}</div>`).join('') : '<div style="color:var(--text3)">Nessun integratore</div>';
+  // fasi dieta
+  document.getElementById('cc-phases').innerHTML = s.diet_phases && s.diet_phases.length ?
+    s.diet_phases.map(p=>`<div style="padding:3px 0;font-size:12px"><b>${p.condition_key}</b>: <span style="color:var(--accent2)">${p.phase}</span> ${p.start_date?'('+p.start_date+')':''}</div>`).join('') : '<div style="color:var(--text3)">Nessuna fase impostata</div>';
+  // sintomi
+  const sym=s.symptom_summary||{};
+  document.getElementById('cc-symptoms').innerHTML = sym.avg ?
+    `<div style="font-size:13px">Medie 30gg:</div>`+
+    Object.entries(sym.avg).map(([k,v])=>`<div style="font-size:12px">• ${k}: ${v}</div>`).join('') :
+    '<div style="color:var(--text3)">Nessun sintomo registrato</div>';
+  // peso
+  document.getElementById('cc-weight').innerHTML = s.measurements && s.measurements.length ?
+    s.measurements.slice(-8).map(m=>`<div style="font-size:12px">${m.date}: ${m.weight||'—'} kg</div>`).join('') :
+    '<div style="color:var(--text3)">Nessuna misurazione</div>';
+  // note
+  document.getElementById('cc-notes').innerHTML = s.progress_notes && s.progress_notes.length ?
+    s.progress_notes.slice().reverse().map(n=>`<div style="padding:4px 0;font-size:12px;border-bottom:1px solid var(--border)"><b>${n.date}</b>: ${n.text}</div>`).join('') :
+    '<div style="color:var(--text3)">Nessuna nota</div>';
+}
+
+// ---- D: Wizard Onboarding Anamnesi ----
+let obState = { cid: null, conditions: [], step: 1 };
+async function openOnboard(){
+  const cid=STATE.clientId; if(!cid){ toast('Seleziona un cliente'); return; }
+  const client=await jget(`/api/clients/${cid}`);
+  obState={cid, conditions:[], step:1};
+  document.getElementById('ob-name').textContent=client.name||'';
+  // pre-popola da pathologies esistenti
+  const parsed=clinical_parse(client.pathologies);
+  obState.conditions=parsed;
+  document.getElementById('ob-allergies').value=client.allergies||'';
+  document.getElementById('ob-notes').value=parsed_notes(client.pathologies);
+  // lista condizioni (checkbox)
+  const conds=await jget('/api/clinical-nutrition/conditions');
+  const list=document.getElementById('ob-cond-list');
+  list.innerHTML=Object.entries(conds).map(([k,v])=>{
+    const on=obState.conditions.includes(k)?'checked':'';
+    return `<label style="display:flex;align-items:center;gap:6px;background:var(--surface2);padding:6px 10px;border-radius:18px;font-size:13px;cursor:pointer">
+      <input type="checkbox" value="${k}" ${on} onchange="obToggle(this)"> ${v.name}</label>`;
+  }).join('');
+  document.getElementById('onboard-overlay').style.display='flex';
+  obShowStep(1);
+}
+function clinical_parse(raw){
+  if(!raw) return [];
+  if(typeof raw==='string' && (raw.trim().startsWith('{')||raw.trim().startsWith('['))){
+    try{ const d=JSON.parse(raw); if(Array.isArray(d)) return d; if(d.clinical_conditions) return d.clinical_conditions; }catch(e){}
+    return raw.split(',').map(s=>s.trim().toLowerCase().replace(/ /g,'_')).filter(Boolean);
+  }
+  if(Array.isArray(raw)) return raw;
+  return [];
+}
+function parsed_notes(raw){
+  if(typeof raw==='string' && raw.trim().startsWith('{')){
+    try{ const d=JSON.parse(raw); return d.anamnesis_notes||''; }catch(e){}
+  }
+  return '';
+}
+function obToggle(el){ const k=el.value; if(el.checked){ if(!obState.conditions.includes(k)) obState.conditions.push(k);} else { obState.conditions=obState.conditions.filter(x=>x!==k); } }
+function obShowStep(n){
+  obState.step=n;
+  for(let i=1;i<=3;i++){ document.getElementById('ob-panel-'+i).style.display=(i===n)?'block':'none'; }
+  for(let i=1;i<=3;i++){ const d=document.getElementById('ob-step'+i); d.style.background=(i<=n)?'var(--accent2)':'var(--surface2)'; d.style.color=(i<=n)?'#fff':''; }
+  document.getElementById('ob-prev').style.display=(n>1)?'flex':'none';
+  document.getElementById('ob-next').style.display=(n<3)?'flex':'none';
+  document.getElementById('ob-save').style.display=(n===3)?'flex':'none';
+  if(n===3) obReview();
+}
+function obStep(d){ const next=obState.step+d; if(next>=1&&next<=3) obShowStep(next); }
+async function obReview(){
+  const rev=document.getElementById('ob-review');
+  const names=await jget('/api/clinical-nutrition/conditions');
+  rev.innerHTML=`<div><b>Patologie (${obState.conditions.length}):</b> ${obState.conditions.map(k=>names[k]?names[k].name:k).join(', ')||'nessuna'}</div>
+    <div style="margin-top:4px"><b>Allergie:</b> ${document.getElementById('ob-allergies').value||'—'}</div>
+    <div style="margin-top:4px"><b>Note:</b> ${document.getElementById('ob-notes').value||'—'}</div>`;
+  // conflitti
+  const cc=document.getElementById('ob-conflicts');
+  if(obState.conditions.length>1){
+    const r=await jpost('/api/clinical-nutrition/conflicts',{conditions:obState.conditions});
+    cc.innerHTML=r.conflicts.length?`<div style="border-left:3px solid var(--warning);padding:6px 10px;font-size:13px"><b style="color:var(--warning)">⚠️ Conflitti:</b><br>`+r.conflicts.map(c=>`${c}<br>`).join('')+`</div>`:'<div style="font-size:13px;color:var(--success)">✅ Nessun conflitto rilevato</div>';
+  } else { cc.innerHTML=''; }
+}
+async function obSave(){
+  const cid=obState.cid;
+  const payload={conditions:obState.conditions, notes:document.getElementById('ob-notes').value};
+  await jpost(`/api/clients/${cid}/anamnesis`,payload);
+  // aggiorna anche allergie sul cliente
+  const allergies=document.getElementById('ob-allergies').value;
+  await jput(`/api/clients/${cid}`,{allergies});
+  toast('Anamnesi salvata ✓');
+  obClose();
+  // ricarica la scheda antropometria / cartella se aperta
+  if(document.getElementById('sec-cartella') && !document.getElementById('sec-cartella').classList.contains('hidden')) loadCartella();
+}
+function obClose(){ document.getElementById('onboard-overlay').style.display='none'; }
 
 // init
 initAuth(); loadRecipes(); checkUpdate(); loadPresets();

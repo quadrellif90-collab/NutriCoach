@@ -216,6 +216,56 @@ def _ensure():
         created_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
     )""")
+    # ── Diario sintomi GI (IBS, SIBO, IST, MCAS) ──────────────────────
+    cur.execute("""CREATE TABLE IF NOT EXISTS symptom_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id INTEGER NOT NULL,
+        date TEXT NOT NULL,
+        time TEXT,
+        -- Scala 0-4 (0=nessuno, 1=lieve, 2=moderato, 3=forte, 4=severo)
+        bloating INTEGER DEFAULT 0,
+        pain INTEGER DEFAULT 0,
+        gas INTEGER DEFAULT 0,
+        nausea INTEGER DEFAULT 0,
+        heartburn INTEGER DEFAULT 0,
+        constipation INTEGER DEFAULT 0,
+        diarrhea INTEGER DEFAULT 0,
+        brain_fog INTEGER DEFAULT 0,
+        fatigue INTEGER DEFAULT 0,
+        -- Bristol Stool Scale 1-7
+        bristol_scale INTEGER,
+        -- Correlazione pasto
+        meal_context TEXT,       -- colazione/pranzo/cena/spuntino
+        foods_eaten TEXT,        -- testo libero o JSON alimenti
+        -- Compliance
+        diet_compliance TEXT,    -- 'full'/'partial'/'none'
+        -- Note aggiuntive
+        notes TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
+    )""")
+    # ── Log integratori ────────────────────────────────────────────────
+    cur.execute("""CREATE TABLE IF NOT EXISTS supplement_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id INTEGER NOT NULL,
+        date TEXT NOT NULL,
+        supplement_name TEXT NOT NULL,
+        dose TEXT,
+        taken INTEGER DEFAULT 1,
+        notes TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
+    )""")
+    # ── Fase dieta corrente (eliminazione/reintroduzione/mantenimento) ──
+    cur.execute("""CREATE TABLE IF NOT EXISTS diet_phase (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id INTEGER NOT NULL,
+        condition_key TEXT NOT NULL,
+        phase TEXT NOT NULL DEFAULT 'elimination',
+        start_date TEXT,
+        notes TEXT,
+        FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
+    )""")
     conn.commit()
     return conn
 
@@ -664,6 +714,116 @@ def add_progress_note(cid, date, text):
 def list_progress_notes(cid):
     conn = _ensure(); cur = conn.cursor()
     cur.execute("SELECT * FROM progress_notes WHERE client_id=? ORDER BY date DESC", (cid,))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close(); return rows
+
+
+# ---------------- Symptom Log (diario sintomi GI) ----------------
+def add_symptom(cid, date, time=None, bloating=0, pain=0, gas=0, nausea=0,
+                heartburn=0, constipation=0, diarrhea=0, brain_fog=0, fatigue=0,
+                bristol_scale=None, meal_context=None, foods_eaten=None,
+                diet_compliance=None, notes=None):
+    """Registra un evento sintomatologico."""
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("""INSERT INTO symptom_log
+        (client_id,date,time,bloating,pain,gas,nausea,heartburn,
+         constipation,diarrhea,brain_fog,fatigue,bristol_scale,
+         meal_context,foods_eaten,diet_compliance,notes)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (cid, date, time, bloating, pain, gas, nausea, heartburn,
+         constipation, diarrhea, brain_fog, fatigue, bristol_scale,
+         meal_context, foods_eaten, diet_compliance, notes))
+    sid = cur.lastrowid
+    conn.commit(); conn.close(); return sid
+
+
+def list_symptoms(cid, date_from=None, date_to=None, limit=100):
+    """Lista i log sintomi di un cliente, ordinate per data/ora."""
+    conn = _ensure(); cur = conn.cursor()
+    q = "SELECT * FROM symptom_log WHERE client_id=?"
+    args = [cid]
+    if date_from:
+        q += " AND date>=?"; args.append(date_from)
+    if date_to:
+        q += " AND date<=?"; args.append(date_to)
+    q += " ORDER BY date DESC, time DESC LIMIT ?"
+    args.append(limit)
+    cur.execute(q, args)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close(); return rows
+
+
+def symptom_summary(cid, days=30):
+    """Riepilogo sintomi degli ultimi N giorni (medie per scala 0-4)."""
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("""SELECT
+        ROUND(AVG(bloating),1) AS avg_bloating,
+        ROUND(AVG(pain),1) AS avg_pain,
+        ROUND(AVG(gas),1) AS avg_gas,
+        ROUND(AVG(nausea),1) AS avg_nausea,
+        ROUND(AVG(heartburn),1) AS avg_heartburn,
+        ROUND(AVG(constipation),1) AS avg_constipation,
+        ROUND(AVG(diarrhea),1) AS avg_diarrhea,
+        ROUND(AVG(brain_fog),1) AS avg_brain_fog,
+        ROUND(AVG(fatigue),1) AS avg_fatigue,
+        ROUND(AVG(bristol_scale),1) AS avg_bristol,
+        COUNT(*) AS total_entries
+        FROM symptom_log
+        WHERE client_id=? AND date >= date('now', ?)""",
+        (cid, f'-{days} days'))
+    row = cur.fetchone()
+    conn.close(); return dict(row) if row else {}
+
+
+def delete_symptom(sid):
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("DELETE FROM symptom_log WHERE id=?", (sid,))
+    conn.commit(); conn.close()
+
+
+# ---------------- Supplement Log ----------------
+def add_supplement(cid, date, name, dose=None, taken=1, notes=None):
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("INSERT INTO supplement_log (client_id,date,supplement_name,dose,taken,notes) VALUES (?,?,?,?,?,?)",
+                (cid, date, name, dose, taken, notes))
+    sid = cur.lastrowid
+    conn.commit(); conn.close(); return sid
+
+
+def list_supplements(cid, date_from=None, limit=100):
+    conn = _ensure(); cur = conn.cursor()
+    q = "SELECT * FROM supplement_log WHERE client_id=?"
+    args = [cid]
+    if date_from:
+        q += " AND date>=?"; args.append(date_from)
+    q += " ORDER BY date DESC LIMIT ?"
+    args.append(limit)
+    cur.execute(q, args)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close(); return rows
+
+
+# ---------------- Diet Phase ----------------
+def set_diet_phase(cid, condition_key, phase, start_date=None, notes=None):
+    """Impiazza la fase corrente di una dieta clinica per un cliente."""
+    conn = _ensure(); cur = conn.cursor()
+    # upsert: se esiste già per quella condizione, aggiorna
+    cur.execute("SELECT id FROM diet_phase WHERE client_id=? AND condition_key=?",
+                (cid, condition_key))
+    existing = cur.fetchone()
+    if existing:
+        cur.execute("UPDATE diet_phase SET phase=?, start_date=COALESCE(?,start_date), notes=COALESCE(?,notes) WHERE id=?",
+                    (phase, start_date, notes, existing["id"]))
+    else:
+        cur.execute("INSERT INTO diet_phase (client_id,condition_key,phase,start_date,notes) VALUES (?,?,?,?,?)",
+                    (cid, condition_key, phase, start_date, notes))
+    conn.commit(); conn.close()
+
+
+def get_diet_phases(cid):
+    """Ritorna tutte le fasi dieta attive per un cliente."""
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("SELECT * FROM diet_phase WHERE client_id=?", (cid,))
     rows = [dict(r) for r in cur.fetchall()]
     conn.close(); return rows
 

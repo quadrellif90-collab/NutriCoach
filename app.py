@@ -39,7 +39,7 @@ import version
 UPLOAD_DIR = os.path.join(database.DATA_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-app = FastAPI(title="NutriCoach", version="1.0.0")
+app = FastAPI(title="NutriCoach", version="1.3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -110,13 +110,9 @@ async def api_plan_generate(cid: int, request: Request):
     options = b.get("options", {})
     # anamnesi + allergie del cliente -> esclusioni cliniche nel piano
     client = database.get_client(cid) or {}
-    conditions = []
-    try:
-        pat = json.loads(client.get("pathologies") or "{}")
-        if isinstance(pat, dict):
-            conditions = pat.get("clinical_conditions", []) or []
-    except Exception:
-        pass
+    # SINGLE SOURCE OF TRUTH: parse_pathologies gestisce CSV e JSON
+    parsed = clinical_nutrition.parse_pathologies(client.get("pathologies"))
+    conditions = parsed["conditions"]
     excl = meal_planner.excluded_foods(conditions, client.get("allergies") or "")
     excl.update(options.get("exclude_foods") or [])
     options["exclude_foods"] = sorted(excl)
@@ -126,6 +122,13 @@ async def api_plan_generate(cid: int, request: Request):
         "excluded_foods": sorted(excl),
         "recommendations": clinical_nutrition.get_dietary_recommendations(conditions) if conditions else [],
     }
+    # Gap 1: persisti il piano come dieta per renderlo esportabile in PDF
+    import datetime as _dt
+    title = f"Piano {client.get('name','')} {_dt.date.today().isoformat()}"
+    if conditions:
+        title += f" [{','.join(conditions)}]"
+    did = database.add_diet(cid, plan, title=title, date=_dt.date.today().isoformat())
+    plan["diet_id"] = did
     return plan
 
 
@@ -362,20 +365,38 @@ async def api_share_plan(cid: int, request: Request):
                 f"F {round(day_totals.get('fat',0))}g</i>", styles['Normal']))
             story.append(Spacer(1, 10))
         story.append(Spacer(1, 20))
-        # avvertenze cliniche dall'anamnesi (alimenti da evitare)
-        try:
-            pat = json.loads(client.get("pathologies") or "{}")
-            conds = pat.get("clinical_conditions", []) if isinstance(pat, dict) else []
-        except Exception:
-            conds = []
+        # === E: sezione clinica unificata (conflitti + phased + pattern + esclusioni) ===
+        conds = clinical_nutrition.parse_pathologies(client.get("pathologies"))["conditions"]
         if conds:
-            avoid = clinical_nutrition.get_foods_to_avoid(conds)
             names = [clinical_nutrition.get_condition(k).get("name", k)
                      for k in conds if clinical_nutrition.get_condition(k)]
-            story.append(Paragraph("<b>Avvertenze cliniche</b>", styles['Heading2']))
-            story.append(Paragraph("Condizioni considerate: " + ", ".join(names), styles['Normal']))
+            story.append(Paragraph("<b>🩺 Cartella Clinica</b>", styles['Heading2']))
+            story.append(Paragraph("Condizioni: " + ", ".join(names), styles['Normal']))
+            # conflitti
+            if len(conds) > 1:
+                conflicts = clinical_nutrition.get_condition_conflicts(conds)
+                if conflicts:
+                    story.append(Paragraph("<b>Conflitti da gestire:</b>", styles['Normal']))
+                    for c in conflicts:
+                        story.append(Paragraph("• " + c, styles['Normal']))
+            # esclusioni
+            avoid = clinical_nutrition.get_foods_to_avoid(conds)
             if avoid:
-                story.append(Paragraph("Alimenti da evitare/limitare: " + "; ".join(avoid[:20]), styles['Normal']))
+                story.append(Paragraph("<b>Alimenti da evitare/limitare:</b> " + "; ".join(avoid[:25]), styles['Normal']))
+            # pattern dietetici consigliati
+            patterns = clinical_nutrition.get_diet_patterns_for_conditions(conds)
+            if patterns:
+                story.append(Paragraph("<b>Pattern dietetici consigliati:</b> " +
+                                       ", ".join(p["name"] for p in patterns[:4]), styles['Normal']))
+            # phased protocol (per la prima condizione con protocollo)
+            for k in conds:
+                proto = clinical_nutrition.get_phased_protocol(k)
+                if proto:
+                    story.append(Paragraph(f"<b>Protocollo {proto['condition']}:</b> "
+                                           f"eliminazione {proto['elimination'].get('duration_weeks','?')} sett, "
+                                           f"reintroduzione {proto['reintroduction'].get('duration_weeks','?')} sett",
+                                           styles['Normal']))
+                    break
             story.append(Spacer(1, 10))
         story.append(Paragraph("Generato da NutriCoach", styles['Normal']))
         doc.build(story)
@@ -535,6 +556,32 @@ async def api_export_pdf(cid: int, diet_id: int = None, selections: str = "{}"):
     path = os.path.join(tempfile.gettempdir(), f"report_{cid}.pdf")
     pdf_export.build_report_pdf(cid, diet_id, sel, path)
     return FileResponse(path, media_type="application/pdf", filename=f"report_{database.get_client(cid).get('name','cliente')}.pdf")
+
+
+@app.post("/api/clients/{cid}/plan/export-pdf")
+async def api_plan_export_pdf(cid: int, request: Request = None):
+    """Genera e salva il piano filtrato, poi restituisce il PDF clinico unificato."""
+    targets = {}
+    if request:
+        try:
+            b = await request.json()
+            targets = b.get("targets", {})
+        except Exception:
+            pass
+    if not targets:
+        targets = {"kcal": 2000, "p": 150, "c": 200, "f": 67}
+    plan = meal_planner.generate_plan(targets, {})
+    client = database.get_client(cid) or {}
+    parsed = clinical_nutrition.parse_pathologies(client.get("pathologies"))
+    conditions = parsed["conditions"]
+    excl = meal_planner.excluded_foods(conditions, client.get("allergies") or "")
+    plan["clinical"] = {"conditions": conditions, "excluded_foods": sorted(excl),
+                         "recommendations": clinical_nutrition.get_dietary_recommendations(conditions) if conditions else []}
+    import datetime as _dt
+    did = database.add_diet(cid, plan, title=f"Piano {client.get('name','')} {_dt.date.today().isoformat()}", date=_dt.date.today().isoformat())
+    path = os.path.join(tempfile.gettempdir(), f"report_{cid}.pdf")
+    pdf_export.build_report_pdf(cid, did, {}, path)
+    return FileResponse(path, media_type="application/pdf", filename=f"piano_{client.get('name','cliente')}.pdf")
 
 
 # ---------------- Auth (login nutrizionista, locale) ----------------
@@ -1039,6 +1086,197 @@ def api_self_update_apply():
                     "msg": "Aperta la pagina della release."}
     except Exception as e:
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
+
+
+# ─── Symptom Log (diario sintomi GI) ─────────────────────────────────
+@app.post("/api/clients/{cid}/symptoms")
+async def api_add_symptom(cid: int, request: Request):
+    """Registra un evento sintomatologico per un cliente."""
+    b = await request.json()
+    sid = database.add_symptom(
+        cid, b.get("date", ""), b.get("time"),
+        b.get("bloating", 0), b.get("pain", 0), b.get("gas", 0),
+        b.get("nausea", 0), b.get("heartburn", 0),
+        b.get("constipation", 0), b.get("diarrhea", 0),
+        b.get("brain_fog", 0), b.get("fatigue", 0),
+        b.get("bristol_scale"), b.get("meal_context"),
+        b.get("foods_eaten"), b.get("diet_compliance"), b.get("notes"))
+    return {"id": sid, "ok": True}
+
+
+@app.get("/api/clients/{cid}/symptoms")
+def api_list_symptoms(cid: int, date_from: str = None, date_to: str = None, limit: int = 100):
+    return {"symptoms": database.list_symptoms(cid, date_from, date_to, limit)}
+
+
+@app.get("/api/clients/{cid}/symptoms/summary")
+def api_symptom_summary(cid: int, days: int = 30):
+    return database.symptom_summary(cid, days)
+
+
+@app.delete("/api/symptoms/{sid}")
+def api_delete_symptom(sid: int):
+    database.delete_symptom(sid)
+    return {"ok": True}
+
+
+# ─── Supplement Log ──────────────────────────────────────────────────
+@app.post("/api/clients/{cid}/supplements")
+async def api_add_supplement(cid: int, request: Request):
+    b = await request.json()
+    sid = database.add_supplement(cid, b.get("date", ""), b["name"],
+                           b.get("dose"), b.get("taken", 1), b.get("notes"))
+    return {"id": sid, "ok": True}
+
+
+@app.get("/api/clients/{cid}/supplements")
+def api_list_supplements(cid: int, date_from: str = None):
+    return {"supplements": database.list_supplements(cid, date_from)}
+
+
+# ─── Diet Phase (eliminazione/reintroduzione/mantenimento) ──────────
+@app.post("/api/clients/{cid}/diet-phase")
+async def api_set_diet_phase(cid: int, request: Request):
+    b = await request.json()
+    database.set_diet_phase(cid, b["condition_key"], b["phase"],
+                     b.get("start_date"), b.get("notes"))
+    return {"ok": True}
+
+
+@app.get("/api/clients/{cid}/diet-phases")
+def api_get_diet_phases(cid: int):
+    return {"phases": database.get_diet_phases(cid)}
+
+
+# ─── Cartella Clinica unificata (aggrega tutto per cliente) ──────────
+@app.get("/api/clients/{cid}/clinical-summary")
+def api_clinical_summary(cid: int, days: int = 30):
+    """Aggrega in un'unica risposta: condizioni, conflitti, esclusioni,
+    integratori, fase dieta, sintomi (summary), trend peso, note progresso."""
+    client = database.get_client(cid) or {}
+    parsed = clinical_nutrition.parse_pathologies(client.get("pathologies"))
+    conditions = parsed["conditions"]
+    out = {
+        "client_name": client.get("name", ""),
+        "conditions": conditions,
+        "conflicts": clinical_nutrition.get_condition_conflicts(conditions) if len(conditions) > 1 else [],
+        "foods_to_avoid": clinical_nutrition.get_foods_to_avoid(conditions) if conditions else [],
+        "foods_safe": clinical_nutrition.get_foods_safe(conditions) if conditions else [],
+        "supplements": database.list_supplements(cid)[:30],
+        "diet_phases": database.get_diet_phases(cid),
+        "symptom_summary": database.symptom_summary(cid, days) if conditions else {},
+        "measurements": database.list_measurements(cid)[-10:],
+        "progress_notes": database.list_progress_notes(cid)[-10:],
+    }
+    # arricchisce con dettagli condizione
+    out["condition_details"] = [
+        {"key": k, "name": clinical_nutrition.get_condition(k).get("name", k),
+         "evidence_level": clinical_nutrition.get_condition(k).get("evidence_level", "")}
+        for k in conditions if clinical_nutrition.get_condition(k)
+    ]
+    return out
+
+
+# ─── C: AI pattern detection dal diario + reintroduzione FODMAP guidata ──
+@app.get("/api/clients/{cid}/symptom-patterns")
+def api_symptom_patterns(cid: int, days: int = 30):
+    """Rileva pattern dai log sintomi del cliente (loop chiuso piano→diario→piano)."""
+    symptoms = database.list_symptoms(cid, limit=500)
+    if days:
+        from datetime import datetime, timedelta
+        cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+        symptoms = [s for s in symptoms if s.get("date", "") >= cutoff]
+    return {"patterns": clinical_nutrition.detect_symptom_patterns(symptoms)}
+
+
+@app.get("/api/clients/{cid}/fodmap-reintroduction")
+def api_fodmap_reintroduction(cid: int):
+    """Suggerisce il prossimo passo di reintroduzione FODMAP guidata (ordine Monash)."""
+    phases = database.get_diet_phases(cid)
+    symptoms = database.list_symptoms(cid, limit=200)
+    return clinical_nutrition.suggest_next_reintroduction(phases, symptoms)
+
+
+# ─── Clinical: conflitti multi-condizione + integratori + phased ────
+@app.post("/api/clinical-nutrition/conflicts")
+async def api_condition_conflicts(request: Request):
+    """Ritorna avvisi di conflitto quando un cliente ha più condizioni."""
+    b = await request.json()
+    conditions = b.get("conditions", [])
+    return {"conflicts": clinical_nutrition.get_condition_conflicts(conditions)}
+
+
+@app.post("/api/clinical-nutrition/supplements")
+async def api_condition_supplements(request: Request):
+    """Ritorna gli integratori raccomandati per le condizioni del cliente."""
+    b = await request.json()
+    conditions = b.get("conditions", [])
+    return {"supplements": clinical_nutrition.get_supplements(conditions)}
+
+
+@app.get("/api/clinical-nutrition/phased/{condition_key}")
+def api_phased_protocol(condition_key: str):
+    """Ritorna il protocollo phased per una condizione."""
+    protocol = clinical_nutrition.get_phased_protocol(condition_key)
+    if not protocol:
+        raise HTTPException(404, "Protocollo phased non disponibile per questa condizione")
+    return {"condition": condition_key, "protocol": protocol}
+
+
+# ─── Clinical: pattern dietetici evidence-based (Mediterranea, DASH, MIND...) ──
+@app.get("/api/clinical-nutrition/diet-patterns")
+def api_all_diet_patterns():
+    """Ritorna l'elenco di tutti i pattern dietetici evidence-based."""
+    return {"patterns": clinical_nutrition.get_all_diet_patterns()}
+
+
+@app.get("/api/clinical-nutrition/diet-patterns/{pattern_key}")
+def api_diet_pattern(pattern_key: str):
+    """Ritorna il dettaglio completo di un pattern dietetico."""
+    pattern = clinical_nutrition.get_diet_pattern(pattern_key)
+    if not pattern:
+        raise HTTPException(404, "Pattern dietetico non trovato")
+    return {"key": pattern_key, "pattern": pattern}
+
+
+@app.post("/api/clinical-nutrition/diet-patterns/suggest")
+async def api_suggest_diet_patterns(request: Request):
+    """Suggerisce i pattern dietetici rilevanti per le condizioni del cliente."""
+    b = await request.json()
+    conditions = b.get("conditions", [])
+    return {"suggestions": clinical_nutrition.get_diet_patterns_for_conditions(conditions)}
+
+
+# ─── FODMAP analysis ────────────────────────────────────────────────
+@app.post("/api/clients/{cid}/fodmap-analysis")
+async def api_fodmap_analysis(cid: int, request: Request):
+    """Analisi del carico FODMAP del diario del cliente per un giorno."""
+    b = await request.json()
+    day = b.get("day", "")
+    items = database.list_diet_items(cid, day)
+    if not items:
+        return {"fodmap_load": 0, "by_group": {}, "flagged_items": [], "message": "Nessun alimento per questo giorno"}
+    food_items = [(it["food"], it["grams"]) for it in items]
+    result = clinical_nutrition.calculate_fodmap_load(food_items)
+    return result
+
+
+@app.get("/api/clinical-nutrition/food-analysis/{food_name}")
+def api_food_analysis(food_name: str):
+    """Analisi completa di un alimento: FODMAP, istamina, ossalati, salicilati, lectine."""
+    import nutrition_db as ndb
+    key = ndb._norm(food_name)
+    if not key:
+        return {"found": False, "name": food_name}
+    return {
+        "found": True, "name": key,
+        "fodmap": ndb.food_fodmap(key),
+        "histamine": ndb.food_histamine_level(key),
+        "oxalate": ndb.food_oxalate_level(key),
+        "salicylate": ndb.food_salicylate_level(key),
+        "lectin": ndb.food_lectin_level(key),
+        "nutrition": ndb.nutrition_for(key, 100),
+    }
 
 
 if __name__ == "__main__":

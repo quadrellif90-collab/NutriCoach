@@ -9,13 +9,23 @@ valori sono approssimati per 100 g edibili.
 
 Interfaccia:
     nutrition_for(name, grams) -> {food, matched, kcal, p, c, f, fib, sug, salt,
-                                    ca, fe, vitc, k, mg}
+                                    ca, fe, vitc, k, mg,
+                                    omega3, vit_d, zinc, b12, folate, selenium,
+                                    vit_a, vit_e, fodmap_total}
     search_foods(query, limit) -> [name, ...]
+    food_fodmap(name) -> {fructan, gos, ...}
+    food_histamine_level(name) -> 'low'|'medium'|'high'
+    food_oxalate_level(name) -> 'low'|'medium'|'high'
+    food_salicylate_level(name) -> 'low'|'medium'|'high'
+    food_lectin_level(name) -> 'low'|'medium'|'high'
+    fodmap_load(food_items) -> {total_load, by_group, flagged_items}
 """
 
 import re
 
-# (nome, kcal, proteine, carboidrati, grassi, fibre, zuccheri, sale)
+# ──────────────────────────────────────────────────────────────────────
+# FOODS — (nome, kcal, proteine, carboidrati, grassi, fibre, zuccheri, sale)
+# ──────────────────────────────────────────────────────────────────────
 FOODS = {
     # --- LATTICINI / UOVA ---
     "uova gallina": (143, 12.6, 0.7, 9.5, 0.0, 0.4, 0.4),
@@ -244,8 +254,10 @@ FOODS = {
     "origano": (265, 9.0, 69.0, 4.0, 43.0, 4.0, 0.0),
 }
 
-# Micronutrienti principali per 100 g (Ca mg, Fe mg, VitC mg, K mg, Mg mg).
-# Copertura dei piu' comuni; alimenti non presenti -> 0.
+# ──────────────────────────────────────────────────────────────────────
+# MICROS — Micronutrienti principali per 100 g
+# (Ca mg, Fe mg, VitC mg, K mg, Mg mg).
+# ──────────────────────────────────────────────────────────────────────
 MICROS = {
     "uova gallina": (50, 1.2, 0, 126, 12), "yogurt greco": (110, 0.1, 0, 141, 11),
     "yogurt bianco intero": (121, 0.1, 0, 155, 12), "ricotta": (84, 0.4, 0, 105, 9),
@@ -301,7 +313,9 @@ MICROS = {
     "miele": (6, 0.4, 1, 52, 2), "uova di gallina": (50, 1.2, 0, 126, 12),
 }
 
-# tabella di normalizzazione (singolare/plurale, sinonimi)
+# ──────────────────────────────────────────────────────────────────────
+# Tabella di normalizzazione (singolare/plurale, sinonimi)
+# ──────────────────────────────────────────────────────────────────────
 _NORMALIZE = {
     "uova": "uova gallina", "uovo": "uova gallina", "albume": "albumi d'uovo",
     "yogurt": "yogurt bianco intero", "yogurt greco 0": "yogurt greco 0.2",
@@ -321,6 +335,10 @@ _NORMALIZE = {
     "arancia": "arancia", "mandorla": "mandorle", "noce": "noci", "nocciola": "nocciole",
     "avocado": "avocado", "latte": "latte intero", "latte parz scremato": "latte parzialmente scremato",
     "integratore": "integratore proteico", "whey": "whey", "proteine": "proteine del siero",
+    "ciliegia": "ciliegie", "mirtillo": "mirtilli", "lamponi": "lamponi",
+    "uva": "uva", "ananas": "ananas", "limone": "limone",
+    "cipolla": "cipolle", "porro": "porri", "finocchio": "finocchi",
+    "fungho": "funghi", "mandorla": "mandorle",
 }
 
 
@@ -344,17 +362,524 @@ def _norm(name: str) -> str:
     return None
 
 
+# ──────────────────────────────────────────────────────────────────────
+# FOOD_FODMAP — Profilo FODMAP per 100 g (g/100g).
+# Basato su dati Monash University FODMAP (2024-2025).
+# ──────────────────────────────────────────────────────────────────────
+_ZERO_FODMAP = {"fructan": 0, "gos": 0, "lactose": 0, "excess_fructose": 0,
+                "sorbitol": 0, "mannitol": 0, "mannosio": 0}
+
+FOOD_FODMAP = {
+    # --- Verdure ---
+    "cipolle": {"fructan": 1.2, "gos": 0, "lactose": 0, "excess_fructose": 0,
+                "sorbitol": 0, "mannitol": 0.3, "mannosio": 0},
+    "cipolla": {"fructan": 1.2, "gos": 0, "lactose": 0, "excess_fructose": 0,
+                "sorbitol": 0, "mannitol": 0.3, "mannosio": 0},
+    "aglio": {"fructan": 1.8, "gos": 0, "lactose": 0, "excess_fructose": 0,
+              "sorbitol": 0, "mannitol": 0, "mannosio": 0},
+    "cavolfiore": {"fructan": 0.4, "gos": 0, "lactose": 0, "excess_fructose": 0,
+                   "sorbitol": 0, "mannitol": 0.3, "mannosio": 0},
+    "finocchi": {"fructan": 0.5, "gos": 0, "lactose": 0, "excess_fructose": 0,
+                 "sorbitol": 0, "mannitol": 0.2, "mannosio": 0},
+    "porri": {"fructan": 0.9, "gos": 0, "lactose": 0, "excess_fructose": 0,
+              "sorbitol": 0, "mannitol": 0, "mannosio": 0},
+    "funghi": {"fructan": 0, "gos": 0.3, "lactose": 0, "excess_fructose": 0,
+               "sorbitol": 0, "mannitol": 0.4, "mannosio": 0},
+    "funghi champignon": {"fructan": 0, "gos": 0.3, "lactose": 0, "excess_fructose": 0,
+                          "sorbitol": 0, "mannitol": 0.4, "mannosio": 0},
+    # --- Frutta ---
+    "mela": {"fructan": 0.1, "gos": 0, "lactose": 0, "excess_fructose": 0.8,
+             "sorbitol": 0.6, "mannitol": 0, "mannosio": 0},
+    "pera": {"fructan": 0.1, "gos": 0, "lactose": 0, "excess_fructose": 0.7,
+             "sorbitol": 0.9, "mannitol": 0, "mannosio": 0},
+    "anguria": {"fructan": 0, "gos": 0, "lactose": 0, "excess_fructose": 0.4,
+                "sorbitol": 0.4, "mannitol": 0, "mannosio": 0},
+    "pesca": {"fructan": 0, "gos": 0, "lactose": 0, "excess_fructose": 0.3,
+              "sorbitol": 0.3, "mannitol": 0, "mannosio": 0},
+    "albicocca": {"fructan": 0, "gos": 0, "lactose": 0, "excess_fructose": 0.3,
+                  "sorbitol": 0.3, "mannitol": 0, "mannosio": 0},
+    "prugne": {"fructan": 0, "gos": 0, "lactose": 0, "excess_fructose": 0.4,
+               "sorbitol": 0.5, "mannitol": 0, "mannosio": 0},
+    "ciliegie": {"fructan": 0, "gos": 0, "lactose": 0, "excess_fructose": 0.3,
+                 "sorbitol": 0.3, "mannitol": 0, "mannosio": 0},
+    # --- Latticini ---
+    "latte intero": {"fructan": 0, "gos": 0, "lactose": 4.7, "excess_fructose": 0,
+                     "sorbitol": 0, "mannitol": 0, "mannosio": 0},
+    "yogurt greco": {"fructan": 0, "gos": 0, "lactose": 0.8, "excess_fructose": 0,
+                     "sorbitol": 0, "mannitol": 0, "mannosio": 0},
+    # --- Legumi ---
+    "lenticchie": {"fructan": 0, "gos": 1.5, "lactose": 0, "excess_fructose": 0,
+                   "sorbitol": 0, "mannitol": 0, "mannosio": 0},
+    "ceci": {"fructan": 0, "gos": 1.2, "lactose": 0, "excess_fructose": 0,
+             "sorbitol": 0, "mannitol": 0, "mannosio": 0},
+    "fagioli": {"fructan": 0, "gos": 1.8, "lactose": 0, "excess_fructose": 0,
+                "sorbitol": 0, "mannitol": 0, "mannosio": 0},
+    # --- Cereali ---
+    "pane comune": {"fructan": 0.5, "gos": 0, "lactose": 0, "excess_fructose": 0,
+                    "sorbitol": 0, "mannitol": 0, "mannosio": 0},
+    "fiocchi d'avena": {"fructan": 0.2, "gos": 0, "lactose": 0, "excess_fructose": 0,
+                        "sorbitol": 0, "mannitol": 0, "mannosio": 0},
+    "farro": {"fructan": 0.4, "gos": 0, "lactose": 0, "excess_fructose": 0,
+              "sorbitol": 0, "mannitol": 0, "mannosio": 0},
+    # --- Frutta secca / semi ---
+    "mandorle": {"fructan": 0, "gos": 0.5, "lactose": 0, "excess_fructose": 0,
+                 "sorbitol": 0, "mannitol": 0.3, "mannosio": 0},
+    "anacardi": {"fructan": 0, "gos": 0.3, "lactose": 0, "excess_fructose": 0,
+                 "sorbitol": 0, "mannitol": 0, "mannosio": 0},
+    "pistacchi": {"fructan": 0, "gos": 0.4, "lactose": 0, "excess_fructose": 0,
+                  "sorbitol": 0, "mannitol": 0, "mannosio": 0},
+    # --- Dolci / condimenti ---
+    "miele": {"fructan": 0, "gos": 0, "lactose": 0, "excess_fructose": 2.5,
+              "sorbitol": 0.4, "mannitol": 0, "mannosio": 0},
+    "zucchero": {"fructan": 0, "gos": 0, "lactose": 0, "excess_fructose": 0,
+                 "sorbitol": 0, "mannitol": 0, "mannosio": 0},
+}
+
+
+# ──────────────────────────────────────────────────────────────────────
+# FOOD_HISTAMINE — Livello di istamina per alimento.
+# Fonte: SIGHI + dati clinici (2024-2025).
+# ──────────────────────────────────────────────────────────────────────
+FOOD_HISTAMINE = {
+    # --- High ---
+    "salame": "high",
+    "prosciutto crudo": "high",
+    "bresaola": "high",
+    "tonno in scatola": "high",
+    "sgombro": "high",
+    "sardine": "high",
+    "acciughe": "high",
+    "parmigiano": "high",
+    "pecorino": "high",
+    "formaggio fresco": "high",
+    "mozzarella stagionata": "high",
+    "yogurt": "high",
+    "yogurt bianco intero": "high",
+    "yogurt greco": "high",
+    "yogurt magro": "high",
+    "yogurt greco 0.2": "high",
+    "yogurt greco 2": "high",
+    "yogurt greco 5": "high",
+    "yogurt greco con miele": "high",
+    "kefir": "high",
+    "aceto balsamico": "high",
+    "vino": "high",
+    "birra": "high",
+    "lievito": "high",
+    "pomodori": "high",
+    "pomodoro": "high",
+    "spinaci": "high",
+    "melanzane": "high",
+    "peperoni": "high",
+    "avocado": "high",
+    "banana": "high",
+    "noci": "high",
+    "frutta secca": "high",
+    "cacao amaro": "high",
+    "cioccolato fondente": "high",
+    "cioccolato al latte": "high",
+    "caffè": "high",
+    # --- Medium ---
+    "prosciutto cotto": "medium",
+    "formaggio bianco": "medium",
+    "ricotta": "medium",
+    "ricotta vaccina": "medium",
+    "piselli": "medium",
+    "fagioli": "medium",
+    "fagioli borlotti": "medium",
+    # --- Low ---
+    "petto di pollo": "low",
+    "tacchino": "low",
+    "fesa di tacchino": "low",
+    "manzo magro": "low",
+    "vitello": "low",
+    "uova gallina": "low",
+    "uova di gallina": "low",
+    "albumi d'uovo": "low",
+    "tuorlo d'uovo": "low",
+    "riso basmati": "low",
+    "riso brillato": "low",
+    "riso integrale": "low",
+    "riso venere": "low",
+    "patate": "low",
+    "carote": "low",
+    "zucchine": "low",
+    "courgette": "low",
+    "broccoli": "low",
+    "cetrioli": "low",
+    "fragole": "low",
+    "mirtilli": "low",
+    "arancia": "low",
+    "mela": "low",
+    "olive": "low",
+    "olio evo": "low",
+    "olio extravergine d'oliva": "low",
+    "olio di semi": "low",
+    "burro": "low",
+}
+
+
+# ──────────────────────────────────────────────────────────────────────
+# FOOD_OXALATE — Livello di ossalati per alimento.
+# ──────────────────────────────────────────────────────────────────────
+FOOD_OXALATE = {
+    # --- High ---
+    "spinaci": "high",
+    "barbabietola": "high",
+    "mandorle": "high",
+    "noci": "high",
+    "semi di zucca": "high",
+    "cioccolato fondente": "high",
+    "cacao amaro": "high",
+    "tè": "high",
+    "melagrana": "high",
+    "quinoa": "high",
+    # --- Medium ---
+    "fagioli": "medium",
+    "fagioli borlotti": "medium",
+    "ceci": "medium",
+    "lenticchie": "medium",
+    "patate dolci": "medium",
+    "avena": "medium",
+    "fiocchi d'avena": "medium",
+    "tofu": "medium",
+    "soia": "medium",
+    "melanzane": "medium",
+    "peperoni": "medium",
+    "banana": "medium",
+    "fichi": "medium",
+    "prugne": "medium",
+    # --- Low ---
+    "latte intero": "low",
+    "latte parzialmente scremato": "low",
+    "latte scremato": "low",
+    "yogurt greco": "low",
+    "yogurt bianco intero": "low",
+    "yogurt magro": "low",
+    "yogurt greco 0.2": "low",
+    "yogurt greco 2": "low",
+    "yogurt greco 5": "low",
+    "formaggio bianco": "low",
+    "formaggio fresco": "low",
+    "ricotta": "low",
+    "ricotta vaccina": "low",
+    "parmigiano": "low",
+    "pecorino": "low",
+    "mozzarella": "low",
+    "petto di pollo": "low",
+    "tacchino": "low",
+    "manzo magro": "low",
+    "vitello": "low",
+    "salmone": "low",
+    "tonno": "low",
+    "merluzzo": "low",
+    "sgombro": "low",
+    "uova gallina": "low",
+    "uova di gallina": "low",
+    "riso basmati": "low",
+    "riso brillato": "low",
+    "riso integrale": "low",
+    "pane comune": "low",
+    "pane integrale": "low",
+    "olio evo": "low",
+    "olio extravergine d'oliva": "low",
+    "burro": "low",
+    "carote": "low",
+    "zucchine": "low",
+    "courgette": "low",
+    "broccoli": "low",
+    "cavolfiore": "low",
+    "asparagi": "low",
+    "fragole": "low",
+    "mirtilli": "low",
+    "arancia": "low",
+    "mandarino": "low",
+    "mela": "low",
+}
+
+
+# ──────────────────────────────────────────────────────────────────────
+# FOOD_SALICYLATE — Livello di salicilati per alimento.
+# ──────────────────────────────────────────────────────────────────────
+FOOD_SALICYLATE = {
+    # --- High ---
+    "mirtilli": "high",
+    "mirtilli rossi": "high",
+    "lamponi": "high",
+    "ribes": "high",
+    "more": "high",
+    "melagrana": "high",
+    "uva": "high",
+    "salamoia": "high",
+    "curry": "high",
+    "rosmarino": "high",
+    "paprika": "high",
+    "cannella": "high",
+    "zenzero": "high",
+    "curcuma": "high",
+    "zenzero in polvere": "high",
+    "origano": "high",
+    "basilico": "high",
+    # --- Medium ---
+    "pomodori": "medium",
+    "pomodoro": "medium",
+    "peperoni": "medium",
+    "melanzane": "medium",
+    "anguria": "medium",
+    "ciliegie": "medium",
+    "ananas": "medium",
+    "avocado": "medium",
+    "mandorle": "medium",
+    "miele": "medium",
+    "timo": "medium",
+    "prezzemolo": "medium",
+    "senape": "medium",
+    # --- Low ---
+    "riso basmati": "low",
+    "riso brillato": "low",
+    "riso integrale": "low",
+    "pasta": "low",
+    "pasta di semola": "low",
+    "pane comune": "low",
+    "pane integrale": "low",
+    "petto di pollo": "low",
+    "tacchino": "low",
+    "manzo magro": "low",
+    "salmone": "low",
+    "tonno": "low",
+    "merluzzo": "low",
+    "uova gallina": "low",
+    "uova di gallina": "low",
+    "yogurt greco": "low",
+    "latte intero": "low",
+    "formaggio bianco": "low",
+    "burro": "low",
+    "olio evo": "low",
+    "olio extravergine d'oliva": "low",
+    "zucchine": "low",
+    "courgette": "low",
+    "cetrioli": "low",
+    "lattuga": "low",
+    "patate": "low",
+    "mela": "low",
+    "pera": "low",
+    "banana": "low",
+    "carote": "low",
+    "broccoli": "low",
+    "cavolfiore": "low",
+    "finocchi": "low",
+    "sedano": "low",
+}
+
+
+# ──────────────────────────────────────────────────────────────────────
+# FOOD_LECTIN — Livello di lectine per alimento (rilevante per MCAS/gut healing).
+# ──────────────────────────────────────────────────────────────────────
+FOOD_LECTIN = {
+    # --- High ---
+    "fagioli": "high",
+    "fagioli borlotti": "high",
+    "lenticchie": "high",
+    "ceci": "high",
+    "ceci cotti": "high",
+    "piselli": "high",
+    "fave": "high",
+    "grano": "high",
+    "riso basmati": "high",
+    "riso brillato": "high",
+    "patate": "high",
+    "peperoni": "high",
+    "pomodori": "high",
+    "pomodoro": "high",
+    "melanzane": "high",
+    "cetrioli": "high",
+    # --- Medium ---
+    "avena": "medium",
+    "fiocchi d'avena": "medium",
+    "quinoa": "medium",
+    "soia": "medium",
+    "tofu": "medium",
+    # --- Low ---
+    "petto di pollo": "low",
+    "coscia di pollo": "low",
+    "tacchino": "low",
+    "manzo magro": "low",
+    "vitello": "low",
+    "salmone": "low",
+    "tonno": "low",
+    "merluzzo": "low",
+    "sgombro": "low",
+    "orata": "low",
+    "spigola": "low",
+    "gamberi": "low",
+    "uova gallina": "low",
+    "uova di gallina": "low",
+    "latte intero": "low",
+    "latte scremato": "low",
+    "yogurt greco": "low",
+    "yogurt bianco intero": "low",
+    "formaggio bianco": "low",
+    "ricotta": "low",
+    "parmigiano": "low",
+    "mela": "low",
+    "pera": "low",
+    "banana": "low",
+    "arancia": "low",
+    "fragole": "low",
+    "mirtilli": "low",
+    "zucchine": "low",
+    "courgette": "low",
+    "broccoli": "low",
+    "cavolfiore": "low",
+    "carote": "low",
+    "lattuga": "low",
+    "finocchi": "low",
+    "asparagi": "low",
+}
+
+
+# ──────────────────────────────────────────────────────────────────────
+# EXTENDED_MICROS — Micronutrienti aggiuntivi per 100 g.
+# omega3 mg, vit_d IU, zinc mg, b12 mcg, folate mcg, selenium mcg,
+# vit_a mcg RAE, vit_e mg.
+# ──────────────────────────────────────────────────────────────────────
+_EXT_MICROS_DEFAULT = {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                       "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0}
+
+EXTENDED_MICROS = {
+    "salmone": {"omega3": 1.5, "vit_d": 526, "zinc": 0, "b12": 3.2,
+                "folate": 0, "selenium": 36, "vit_a": 12, "vit_e": 0},
+    "salmone affumicato": {"omega3": 1.5, "vit_d": 526, "zinc": 0, "b12": 3.2,
+                           "folate": 0, "selenium": 36, "vit_a": 12, "vit_e": 0},
+    "sgombro": {"omega3": 2.6, "vit_d": 400, "zinc": 0, "b12": 0,
+                "folate": 0, "selenium": 44, "vit_a": 0, "vit_e": 0},
+    "tonno": {"omega3": 0.2, "vit_d": 2.7, "zinc": 0, "b12": 8.5,
+              "folate": 0, "selenium": 90, "vit_a": 0, "vit_e": 0},
+    "tonno in scatola": {"omega3": 0.2, "vit_d": 2.7, "zinc": 0, "b12": 8.5,
+                         "folate": 0, "selenium": 90, "vit_a": 0, "vit_e": 0},
+    "uova gallina": {"omega3": 0.1, "vit_d": 82, "zinc": 1.1, "b12": 1.1,
+                     "folate": 47, "selenium": 30, "vit_a": 140, "vit_e": 1.0},
+    "uova di gallina": {"omega3": 0.1, "vit_d": 82, "zinc": 1.1, "b12": 1.1,
+                        "folate": 47, "selenium": 30, "vit_a": 140, "vit_e": 1.0},
+    "petto di pollo": {"omega3": 0, "vit_d": 0, "zinc": 0.9, "b12": 0.3,
+                       "folate": 0, "selenium": 0, "vit_a": 6, "vit_e": 0},
+    "manzo magro": {"omega3": 0, "vit_d": 0, "zinc": 4.8, "b12": 2.5,
+                    "folate": 0, "selenium": 12, "vit_a": 0, "vit_e": 0},
+    "spinaci": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                "folate": 194, "selenium": 0, "vit_a": 469, "vit_e": 2.0},
+    "broccoli": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                 "folate": 63, "selenium": 0, "vit_a": 31, "vit_e": 0},
+    "mandorle": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                 "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 25.6},
+    "noci": {"omega3": 0.9, "vit_d": 0, "zinc": 0, "b12": 0,
+             "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0.7},
+    "semi di chia": {"omega3": 17.8, "vit_d": 0, "zinc": 0, "b12": 0,
+                     "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "semi di lino": {"omega3": 22.8, "vit_d": 0, "zinc": 0, "b12": 0,
+                     "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "avocado": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                "folate": 81, "selenium": 0, "vit_a": 0, "vit_e": 2.1},
+    "banana": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+               "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "patate": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+               "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "lenticchie": {"omega3": 0, "vit_d": 0, "zinc": 1.3, "b12": 0,
+                   "folate": 181, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "ceci": {"omega3": 0, "vit_d": 0, "zinc": 1.5, "b12": 0,
+             "folate": 172, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "fagioli": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                "folate": 130, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "mirtilli": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                 "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "arancia": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "kiwi": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+             "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "tacchino": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                 "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "vitello": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "gamberi": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "merluzzo": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                 "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "orata": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+              "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "quinoa": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+               "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "farro": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+              "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "avena": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+              "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "tofu": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+             "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "soia": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+             "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "semi di girasole": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                         "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "semi di zucca": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                      "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "piselli": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "fave": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+             "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "agnello": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "maiale magro": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                     "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "coniglio": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                 "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "nocciole": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                 "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "arachidi": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                 "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "pistacchi": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                  "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "anacardi": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                 "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "tahin": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+              "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "burro di arachidi": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                          "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "latte intero": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                     "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "latte scremato": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                       "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "parmigiano": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                   "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "mozzarella": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                   "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "ricotta": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+    "formaggio bianco": {"omega3": 0, "vit_d": 0, "zinc": 0, "b12": 0,
+                         "folate": 0, "selenium": 0, "vit_a": 0, "vit_e": 0},
+}
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Funzioni di normalizzazione e accesso ai dati
+# ──────────────────────────────────────────────────────────────────────
+
 def nutrition_for(name: str, grams):
-    """Ritorna nutrienti per `grams` g dell'alimento `name`."""
+    """Ritorna nutrienti per `grams` g dell'alimento `name`.
+
+    Include nutrienti base + micronutrienti estesi + score FODMAP totale.
+    """
     grams = float(grams or 0)
     key = _norm(name)
     if key is None:
         return {"food": name, "matched": False, "kcal": 0.0, "p": 0.0, "c": 0.0,
                 "f": 0.0, "fib": 0.0, "sug": 0.0, "salt": 0.0,
-                "ca": 0.0, "fe": 0.0, "vitc": 0.0, "k": 0.0, "mg": 0.0}
+                "ca": 0.0, "fe": 0.0, "vitc": 0.0, "k": 0.0, "mg": 0.0,
+                "omega3": 0.0, "vit_d": 0.0, "zinc": 0.0, "b12": 0.0,
+                "folate": 0.0, "selenium": 0.0, "vit_a": 0.0, "vit_e": 0.0,
+                "fodmap_total": 0.0}
     kcal, p, c, f, fib, sug, salt = FOODS[key]
     factor = grams / 100.0
     ca, fe, vitc, k, mg = MICROS.get(key, (0, 0, 0, 0, 0))
+    ext = EXTENDED_MICROS.get(key, _EXT_MICROS_DEFAULT)
+    fp = FOOD_FODMAP.get(key, _ZERO_FODMAP)
+    fodmap_total = sum(fp.values())
     return {
         "food": key, "matched": True,
         "kcal": round(kcal * factor, 1), "p": round(p * factor, 1),
@@ -364,6 +889,17 @@ def nutrition_for(name: str, grams):
         "ca": round(ca * factor, 1), "fe": round(fe * factor, 2),
         "vitc": round(vitc * factor, 1), "k": round(k * factor, 1),
         "mg": round(mg * factor, 1),
+        # Extended micronutrients
+        "omega3": round(ext.get("omega3", 0) * factor, 3),
+        "vit_d": round(ext.get("vit_d", 0) * factor, 1),
+        "zinc": round(ext.get("zinc", 0) * factor, 2),
+        "b12": round(ext.get("b12", 0) * factor, 2),
+        "folate": round(ext.get("folate", 0) * factor, 1),
+        "selenium": round(ext.get("selenium", 0) * factor, 1),
+        "vit_a": round(ext.get("vit_a", 0) * factor, 1),
+        "vit_e": round(ext.get("vit_e", 0) * factor, 2),
+        # FODMAP total score
+        "fodmap_total": round(fodmap_total * factor, 3),
     }
 
 
@@ -381,8 +917,166 @@ def search_foods(query: str, limit: int = 20):
     return hits[:limit]
 
 
+def food_fodmap(name: str) -> dict:
+    """Ritorna il profilo FODMAP per un alimento (g/100g).
+
+    Returns dict with keys: fructan, gos, lactose, excess_fructose,
+    sorbitol, mannitol, mannosio. Se non trovato, restituisce valori zero.
+    """
+    key = _norm(name)
+    if key is None:
+        return dict(_ZERO_FODMAP)
+    return dict(FOOD_FODMAP.get(key, _ZERO_FODMAP))
+
+
+def food_histamine_level(name: str) -> str:
+    """Ritorna il livello di istamina per un alimento: 'low', 'medium', 'high'.
+
+    Se non trovato, restituisce 'low' (assente).
+    """
+    key = _norm(name)
+    if key is None:
+        return "low"
+    return FOOD_HISTAMINE.get(key, "low")
+
+
+def food_oxalate_level(name: str) -> str:
+    """Ritorna il livello di ossalati per un alimento: 'low', 'medium', 'high'.
+
+    Se non trovato, restituisce 'low'.
+    """
+    key = _norm(name)
+    if key is None:
+        return "low"
+    return FOOD_OXALATE.get(key, "low")
+
+
+def food_salicylate_level(name: str) -> str:
+    """Ritorna il livello di salicilati per un alimento: 'low', 'medium', 'high'.
+
+    Se non trovato, restituisce 'low'.
+    """
+    key = _norm(name)
+    if key is None:
+        return "low"
+    return FOOD_SALICYLATE.get(key, "low")
+
+
+def food_lectin_level(name: str) -> str:
+    """Ritorna il livello di lectine per un alimento: 'low', 'medium', 'high'.
+
+    Se non trovato, restituisce 'low'.
+    """
+    key = _norm(name)
+    if key is None:
+        return "low"
+    return FOOD_LECTIN.get(key, "low")
+
+
+def fodmap_load(food_items: list) -> dict:
+    """Calcola il carico FODMAP totale per una lista di alimenti.
+
+    Args:
+        food_items: lista di tuple (nome_alimento, grammi).
+
+    Returns:
+        {
+            total_load: float,          # somma di tutti i FODMAP in grammi
+            by_group: {                 # totale per gruppo FODMAP
+                fructan: float,
+                gos: float,
+                lactose: float,
+                excess_fructose: float,
+                sorbitol: float,
+                mannitol: float,
+                mannosio: float,
+            },
+            flagged_items: [            # alimenti con FODMAP significativo
+                {food, grams, group, value, level},
+                ...
+            ]
+        }
+
+    level thresholds per gruppo (g/100g): low < 0.3, medium 0.3-0.6, high > 0.6.
+    """
+    groups = ["fructan", "gos", "lactose", "excess_fructose", "sorbitol", "mannitol", "mannosio"]
+    by_group = {g: 0.0 for g in groups}
+    flagged_items = []
+    total_load = 0.0
+
+    for food_name, grams in food_items:
+        grams = float(grams or 0)
+        fp = food_fodmap(food_name)
+        factor = grams / 100.0
+        for g in groups:
+            val_per_100 = fp.get(g, 0)
+            load = val_per_100 * factor
+            by_group[g] = round(by_group[g] + load, 4)
+            total_load += load
+            # Flag if per-100g value exceeds low threshold
+            if val_per_100 > 0.3:
+                if val_per_100 > 0.6:
+                    level = "high"
+                else:
+                    level = "medium"
+                key = _norm(food_name)
+                flagged_items.append({
+                    "food": key or food_name,
+                    "grams": grams,
+                    "group": g,
+                    "value": round(val_per_100 * factor, 4),
+                    "level": level,
+                })
+
+    return {
+        "total_load": round(total_load, 4),
+        "by_group": {g: round(by_group[g], 4) for g in groups},
+        "flagged_items": flagged_items,
+    }
+
+
 if __name__ == "__main__":
+    print("=== Test base ===")
     for t in ["Uova di gallina", "Latte di Soia", "Pane di segale", "Avocado", "zucchine", "proteine del siero"]:
         n = nutrition_for(t, 100)
-        print(f"{t:22s} -> {n['food']:22s} kcal={n['kcal']} p={n['p']} ca={n['ca']} fe={n['fe']} matched={n['matched']}")
-    print("Totale alimenti:", len(FOODS))
+        print(f"  {t:22s} -> {n['food']:22s} kcal={n['kcal']} p={n['p']} ca={n['ca']} fe={n['fe']} matched={n['matched']}")
+    print("  Totale alimenti:", len(FOODS))
+
+    print("\n=== Test FODMAP ===")
+    for t in ["cipolle", "mela", "latte intero", "lenticchie", "mandorle"]:
+        fp = food_fodmap(t)
+        print(f"  {t:18s} -> {fp}")
+        n = nutrition_for(t, 100)
+        print(f"    fodmap_total: {n['fodmap_total']}")
+
+    print("\n=== Test istamina ===")
+    for t in ["salame", "petto di pollo", "yogurt greco"]:
+        print(f"  {t:18s} -> histamine={food_histamine_level(t)}")
+
+    print("\n=== Test ossalati ===")
+    for t in ["spinaci", "fagioli", "latte intero"]:
+        print(f"  {t:18s} -> oxalate={food_oxalate_level(t)}")
+
+    print("\n=== Test salicilati ===")
+    for t in ["mirtilli", "pomodori", "riso basmati"]:
+        print(f"  {t:18s} -> salicylate={food_salicylate_level(t)}")
+
+    print("\n=== Test lectine ===")
+    for t in ["fagioli", "avena", "petto di pollo"]:
+        print(f"  {t:18s} -> lectin={food_lectin_level(t)}")
+
+    print("\n=== Test FODMAP load ===")
+    items = [("cipolle", 80), ("mela", 150), ("latte intero", 250), ("petto di pollo", 150)]
+    result = fodmap_load(items)
+    print(f"  total_load: {result['total_load']}")
+    print(f"  by_group: {result['by_group']}")
+    print(f"  flagged_items ({len(result['flagged_items'])}):")
+    for fi in result["flagged_items"]:
+        print(f"    {fi['food']} {fi['grams']}g -> {fi['group']}: {fi['value']} ({fi['level']})")
+
+    print("\n=== Test micronutrienti estesi ===")
+    for t in ["salmone", "uova gallina", "spinaci", "avocado"]:
+        n = nutrition_for(t, 100)
+        print(f"  {t:18s} -> omega3={n['omega3']} vit_d={n['vit_d']} zinc={n['zinc']} "
+              f"b12={n['b12']} folate={n['folate']} selenium={n['selenium']} "
+              f"vit_a={n['vit_a']} vit_e={n['vit_e']}")

@@ -4,9 +4,9 @@
 
 **Gestionale di nutrizione per nutrizionisti, locale, che chiude il loop tra piano alimentare, misure del corpo (BIA/antropometria) e follow-up del cliente — con diario, pianificazione automatica, appuntamenti e notifiche. Tutto offline.**
 
-![Python](https://img.shields.io/badge/Python-3.11-blue) ![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-green) ![Version](https://img.shields.io/badge/Version-v1.1.0-brightgreen) ![License](https://img.shields.io/badge/License-MIT-blue)
+![Python](https://img.shields.io/badge/Python-3.11-blue) ![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-green) ![Version](https://img.shields.io/badge/Version-v1.3.0-brightgreen) ![License](https://img.shields.io/badge/License-MIT-blue)
 
-Latest: **[v1.1.0 — OCR reale, Scienza Sport (A–E), preset dieto, auto-update](https://github.com/quadrellif90-collab/NutriCoach/releases/tag/v1.1.0)**
+Latest: **[v1.3.0 — Clinical Nutrition (23 condizioni), Pattern Dietetici, Cartella Clinica unificata, Workflow A–E + fix](https://github.com/quadrellif90-collab/NutriCoach/releases/tag/v1.3.0)**
 
 > 🔒 **100% offline.** Nessun dato lascia la macchina. Nessun account remoto. Nessuna sottoscrizione. I dati dei tuoi clienti vivono solo in `~/.nutricoach/` sul tuo computer.
 
@@ -33,8 +33,9 @@ NutriCoach è un gestionale **localhost-only** che:
 - Invia **notifiche** configurabili per cliente (riscontro, report, promemoria) con il nutrizionista che riceve una coda "da inviare";
 - Ha **login locale** (username + password, hash PBKDF2) e **tema chiaro/scuro**;
 - **Si aggiorna da solo** da GitHub Releases (banner + auto-install su Windows).
+- **Chiude il loop clinico**: il piano si **filtra automaticamente** per le condizioni del cliente (esclusioni FODMAP/istamina/integratori), la **Cartella Clinica** unifica tutto in un tab, e il **diario** alimenta pattern AI + reintroduzione FODMAP guidata.
 
-Tutti i calcoli derivano da **un solo motore** (`meal_planner.py` / `nutrition_engine.py`): diario, piano e riepilogo sono *viste* coerenti, mai numeri discordanti.
+Tutti i calcoli derivano da **un solo motore** (`meal_planner.py` / `nutrition_engine.py`): diario, piano e riepilogo sono *viste* coerenti, mai numeri discordanti. Le condizioni cliniche (23) sono la **single source of truth** del filtraggio: da esse derivano esclusioni, integratori e pattern dietetici.
 
 ---
 
@@ -54,12 +55,16 @@ NutriCoach nasce per essere l'opposto: **uno strumento proprio, portatile, priva
 | Area | Cosa fa | Dove (modulo) |
 |------|---------|---------------|
 | **Clienti** | Anagrafica, ricerca, confronto tra due clienti, sesso M/F + obiettivo | `db.py`, `app.py` |
+| **Clinical Nutrition** | **23 condizioni** (IBS/FODMAP, SIBO, IBD, GERD, celiachia, NCGS, allergie IgE, EoE, lattosio, dispepsia, obesità, T2D, ipertensione, osteoporosi, endometriosi, MASLD, PCOS, istamina…) con strategie evidence-based 2024-2026; **conflitti** tra condizioni, **integratori** e **protocolli phased** (es. FODMAP 3 fasi) | `clinical_nutrition.py`, `app.py` |
+| **Pattern Dietetici** | 7 pattern evidence-based (Mediterranea, DASH, MIND, Portfolio, basso IG, RPAH/FAILSAFE, Supporto Barriera) con suggerimento per condizione | `clinical_nutrition.py` (DIET_PATTERNS) |
+| **Cartella Clinica** | Vista unificata per cliente: condizioni → conflitti → esclusioni → integratori → fase dieta → sintomi → trend peso | `/api/clients/{cid}/clinical-summary` |
 | **Dieta da PDF** | Import con gruppi alternativa + grammature; **OCR su scansioni**; calcolo macro/giorno; spesa; riepilogo; export HTML/PDF | `diet_parser.py`, `ocr.py`, `pdf_export.py`, `nutrition_engine.py` |
-| **Diario** | Builder manuale voce-per-voce, ricerca alimenti, **aggregazione automatica macro + micro** | `meal_planner.py`, `nutrition_db.py` |
-| **Pianificatore** | Settimana bilanciata generata dai target (kcal/P/C/F) + **preset dieto** | `meal_planner.py`, `diet_presets.py` |
+| **Diario** | Builder manuale voce-per-voce, ricerca alimenti, **aggregazione automatica macro + micro**; **AI pattern** + **reintroduzione FODMAP guidata** (ordine Monash) | `meal_planner.py`, `nutrition_db.py`, `clinical_nutrition.py` |
+| **Pianificatore** | Settimana bilanciata generata dai target (kcal/P/C/F) **filtra automaticamente le esclusioni cliniche** + **preset dieto** + export PDF clinico | `meal_planner.py`, `diet_presets.py`, `pdf_export.py` |
 | **BIA** | Parsing referti InBody/Tanita (paste o PDF, anche scansionati/OCR), riconoscimento robusto su testo "sporco" | `bia_parser.py`, `ocr.py` |
 | **Antropometria** | BMR (Mifflin-St Jeor), % grasso (Durnin-Womersley), WHR, FFMI, classificazione | `anthropometry.py` |
 | **Scienza Sport** | Strategie pro→amatoriali con calcolatori (proteina, gut training, blocchi, creatina, wearable) + report PDF | `sport_science.py`, `pdf_sport_science.py` |
+| **Onboarding** | **Wizard anamnesi 3-step** (patologie → allergie → conflitti) che popola il cliente | UI + `/api/clients/{cid}/anamnesis` |
 | **Notifiche** | Configurabili per cliente (riscontro/report/promemoria) con frequenza e canale; coda "da inviare" | `notifications.py` |
 | **Messaggi** | Thread locale per cliente | `db.py` |
 | **Agenda** | Calendario mensile appuntamenti (per cliente o generale) | `db.py`, UI |
@@ -79,11 +84,11 @@ python run.py                 # apre http://127.0.0.1:8090 nel browser
 
 # Build desktop (EXE Windows) + installer NSIS
 pyinstaller NutriCoach.spec --clean --noconfirm
-makensis /DVERSION=1.1.0 installer.nsi     # -> NutriCoach-Setup-1.1.0.exe
+makensis /DVERSION=1.3.0 installer.nsi     # -> NutriCoach-Setup-1.3.0.exe
 
 # Build desktop (macOS .dmg) — richiede macOS
 pyinstaller NutriCoach.spec --clean --noconfirm
-# impacchetta dist/NutriCoach in .app + hdiutil -> NutriCoach-1.1.0.dmg
+# impacchetta dist/NutriCoach in .app + hdiutil -> NutriCoach-1.3.0.dmg
 ```
 
 Nessun `.exe` necessario per la modalità web: il backend FastAPI gira e l'interfaccia è HTML nel browser. I dati utente restano in `~/.nutricoach/`.

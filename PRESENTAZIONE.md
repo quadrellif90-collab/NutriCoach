@@ -2,7 +2,7 @@
 
 ![NutriCoach](assets/icon.png)
 
-> **Gestionale di nutrizione per nutrizionisti. 100% locale, nessun cloud, nessun abbonamento.** — Versione **1.1.0**
+> **Gestionale di nutrizione per nutrizionisti. 100% locale, nessun cloud, nessun abbonamento.** — Versione **1.3.0**
 
 ---
 
@@ -35,12 +35,16 @@ fa tutto il lavoro di studio senza mai mandare un byte fuori dal computer. E si
 | Cosa | Come |
 |------|------|
 | Gestione clienti | Anagrafica, ricerca, confronto tra due clienti; sesso M/F + obiettivo come selettori |
+| **Clinical Nutrition** | **23 condizioni** cliniche (IBS/FODMAP, SIBO, IBD, GERD, celiachia, NCGS, allergie IgE, EoE, lattosio, endometriosi, MASLD, PCOS, istamina…) con strategie evidence-based 2024-2026, conflitti tra condizioni, integratori e protocolli phased |
+| **Pattern Dietetici** | 7 pattern evidence-based (Mediterranea, DASH, MIND, Portfolio, basso IG, RPAH/FAILSAFE, Supporto Barriera) con suggerimento automatico per condizione |
+| **Cartella Clinica** | Tab unico per cliente: condizioni → conflitti → esclusioni → integratori → fase dieta → sintomi → trend peso, tutto in un colpo d'occhio |
 | Dieta da PDF | Import con alternative + grammi; **OCR su scansioni** (Tesseract bundlato); spesa, riepilogo, export HTML/PDF |
-| Diario alimentare | Builder manuale + ricerca alimenti + micro automatici |
-| Pianificazione | Settimana bilanciata dai target (kcal/P/C/F) + **preset dieto** (Mediterranea, Zona, CKD, Carb Cycling, Alto Proteico, Vegano, Keto, Personalizzato) |
+| Diario alimentare | Builder manuale + ricerca alimenti + micro automatici; **AI pattern** + **reintroduzione FODMAP guidata** (ordine Monash) |
+| Pianificazione | Settimana bilanciata dai target (kcal/P/C/F) che **filtra automaticamente le esclusioni cliniche** + **preset dieto** + export PDF clinico |
 | Scienza Sport | Tab con strategie pro→amatoriali (proteina, gut training, blocchi, creatina, wearable) + report PDF |
 | BIA | Referti InBody/Tanita da paste o PDF (anche scansionati/OCR), parsing robusto |
 | Antropometria | BMR, % grasso, WHR, FFMI |
+| Onboarding | **Wizard anamnesi 3-step** (patologie → allergie → conflitti) |
 | Follow-up | Notifiche configurabili, agenda, messaggi, acqua, progressi |
 | Sicurezza | Login locale PBKDF2, dati solo su `~/.nutricoach/` |
 | Auto-aggiornamento | Banner all'avvio + install silenzioso su Windows da GitHub Releases |
@@ -55,10 +59,18 @@ fa tutto il lavoro di studio senza mai mandare un byte fuori dal computer. E si
    colonna sola o pieno di parentesi.
 3. **OCR reale** — i PDF scansionati vengono letti con Tesseract, bundlato
    dentro l'EXE/dmg (nessuna installazione separata).
+3b. **Clinical Nutrition pronta all'uso** — 23 condizioni con strategie
+   evidence-based 2024-2026; il piano si **filtra da solo** per le esclusioni
+   del cliente (FODMAP, istamina, allergie, integratori) senza errori manuali.
+3c. **Cartella Clinica unificata** — condizioni, conflitti, esclusioni,
+   integratori, fase dieta e trend in un unico tab per cliente.
+3d. **AI pattern + reintroduzione FODMAP guidata** — dal diario emerge il
+   pattern sintomi e il prossimo passo di reintroduzione (ordine Monash 2025).
 4. **Micronutrienti inclusi** — non solo macro: calcio, ferro, vitamina C,
    potassio e magnesio aggregati automaticamente.
 5. **Pianificazione automatica + preset** — dai i target o scegli un tipo di
-   dieta; ottieni una settimana di pasti bilanciati, non solo una tabella.
+   dieta; ottieni una settimana di pasti bilanciati (già filtrata clinicamente),
+   non solo una tabella.
 6. **Scienza Sport documentata** — strategie del mondo elite (WorldTour,
    calcio pro) con calcolatori e fonti 2024-2026, adattate ad amatoriale/semi-pro.
 7. **Tutto offline + auto-update** — login locale PBKDF2, SQLite locale, e
@@ -69,11 +81,13 @@ fa tutto il lavoro di studio senza mai mandare un byte fuori dal computer. E si
 ## Demo rapida
 1. Avvia `NutriCoach` (release scaricata o `python run.py`)
 2. Crea il tuo account nutrizionista
-3. Aggiungi un cliente (sesso + obiettivo) → **Importa** il PDF dieta → vedi spesa e riepilogo
-4. Incolla un referto BIA (o carica un PDF scansionato: OCR automatico) → massa grassa / angolo di fase
-5. Vai su **Pianifica** → scegli un preset dieta o i target → settimana automatica
-6. Apri **Scienza Sport** → calcola distribuzione proteica / gut training / blocchi / creatina
-7. Usa **Agenda** per appuntamenti, **Messaggi** per il thread, **Notifiche** per i follow-up
+3. Aggiungi un cliente (sesso + obiettivo) → clicca **🧭 Onboarding** → seleziona patologie (es. IBS, SIBO) e allergie in 3 step
+4. **Importa** il PDF dieta → vedi spesa e riepilogo
+5. Incolla un referto BIA (o carica un PDF scansionato: OCR automatico) → massa grassa / angolo di fase
+6. Vai su **🥗 Pattern Dietetici** → scegli Mediterranea/FODMAP/Supporto Barriera per la condizione
+7. Vai su **Pianifica** → settimana automatica **già filtrata** per le esclusioni → **📄 Esporta PDF clinico**
+8. Apri la **🗂️ Cartella Clinica** per la vista unificata; nel **Diario** vedi **AI pattern** e **reintroduzione FODMAP guidata**
+9. Usa **Agenda** per appuntamenti, **Messaggi** per il thread, **Notifiche** per i follow-up
 
 ---
 

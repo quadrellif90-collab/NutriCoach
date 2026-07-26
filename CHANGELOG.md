@@ -1,4 +1,49 @@
 
+## [1.3.0] — 2026-07-26
+
+### Aggiunto (raffinamento scientifico + workflow)
+- **Modulo Clinical Nutrition ampliato a 23 condizioni** con strategie
+  evidence-based aggiornate alle fonti 2024-2026:
+  - Nuove condizioni: **IBD** (Crohn/colite, ECCO 2023), **Endometriosi**
+    (Pattern anti-infiammatorio, Endometriosis Foundation 2023),
+    **MASLD/NAFLD** (dieta Mediterranea + riduzione fruttosio, AASLD 2023),
+    **PCOS** (bassa GI + inositolo, guideline 2023), **EOE** (6FED/4FED),
+    **SIBO** (procinetici + protocollo eradicazione), **intolleranza istamina**
+    (DAO suina 4.2 mg, integrazione vitamina C).
+  - Corretta la logica SIBO: **procinetici obbligatori** (Prucalopride/LDN 62%
+    meno recidive, Iberogast), DAOsuina 4.2 mg come gold standard; **rimossa
+    la zonulina** (test non validato, Nutrients 2023).
+- **7 Pattern Dietetici evidence-based** (`DIET_PATTERNS`): Mediterranea, DASH,
+  MIND, Portfolio, basso indice glicemico, RPAH/FAILSAFE (basso chimico, 88%
+  migliora J Hum Nutr Diet 2024), Supporto Barriera Intestinale. Tab **🥗 Pattern
+  Dietetici** + endpoint `/api/clinical-nutrition/diet-patterns/*` e `/suggest`.
+- **Cartella Clinica unificata** (tab **🗂️**): endpoint
+  `/api/clients/{cid}/clinical-summary` fonde condizioni → conflitti →
+  esclusioni → integratori → fase dieta → sintomi → trend peso in un'unica vista.
+- **Loop diario → AI pattern + reintroduzione FODMAP guidata** (tab Diario):
+  - `detect_symptom_patterns()` rileva sintomi ricorrenti dai log.
+  - `fodmap_reintroduction_plan()` (ordine Monash 2025) + `suggest_next_reintroduction()`.
+  - Endpoint `/api/clients/{cid}/symptom-patterns` e `/fodmap-reintroduction`.
+- **Wizard Onboarding Anamnesi** (pulsante 🧭): 3 step (patologie → allergie/note
+  → conflitti rilevati) che popola anamnesi + allergie del cliente.
+- **PDF piano clinico unificato**: `plan/generate` ora **salva la dieta** nel DB
+  e l'endpoint `/api/clients/{cid}/plan/export-pdf` genera il report con
+  condizioni, conflitti, esclusioni, pattern consigliati e phased protocol.
+
+### Fix
+- **Bug fondamentale formato `pathologies`**: il campo arrivava come CSV
+  (`"sibo, ibs"`) dal form ma come JSON (`{"clinical_conditions":[...]}`) da
+  anamnesis; `parse_pathologies()` è ora la **single source of truth** (gestisce
+  entrambi). Prima `json.loads` falliva silenziosamente → condizioni `[]` →
+  esclusioni cliniche **mai applicate** al piano.
+- `import json` mancante in `clinical_nutrition.py` (crash silenzioso su JSON).
+- Endpoint sintomi/integratori/fase-dieta usavano `db.` inesistente → corretti a
+  `database.` (erano già rotti nel sistema).
+- `fodmap-analysis` chiamava `meal_planner._fodmap_load` inesistente → ora
+  `clinical_nutrition.calculate_fodmap_load`.
+- `pdf_export.build_report_pdf` gestisce entrambe le strutture piano (planner
+  `meal.items` e import `meal.groups`) senza `KeyError`.
+
 ## [1.2.0] — 2026-07-25
 
 ### Aggiunto

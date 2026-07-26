@@ -59,11 +59,16 @@ def build_report_pdf(client_id, diet_id, selections, path, logo_path=None):
     c = db.get_client(client_id)
     comp = None
     diet = None
+    planner_diet = None  # piano generato da meal_planner.generate_plan (struttura items/totals)
     if diet_id:
         d = db.get_diet(diet_id)
         if d:
             diet = d["diet"]
-            comp = nutrition_engine.compute_diet(diet, selections)
+            # distingui la struttura: planner (meal.items) vs import (meal.groups)
+            if diet.get("days") and diet["days"] and "items" in diet["days"][0].get("meals", [{}])[0]:
+                planner_diet = diet
+            else:
+                comp = nutrition_engine.compute_diet(diet, selections)
     anth = db.compute_anthropometry(client_id)
     bia_rows = db.list_bia(client_id)
     bia = bia_rows[0]["data"] if bia_rows else {}
@@ -119,8 +124,47 @@ def build_report_pdf(client_id, diet_id, selections, path, logo_path=None):
         rows = [[k, str(v)] for k, v in bia_items]
         el.append(_kv_table(rows, [50 * mm, 70 * mm]))
 
-    # 4. Dieta + conteggi
-    if comp:
+    # 4. Dieta + conteggi (struttura planner: meal.items / meal.totals)
+    if planner_diet:
+        # media giornaliera dai totals del primo giorno (i piani sono omogenei)
+        first = planner_diet["days"][0]
+        wk = first.get("totals", {})
+        el.append(Paragraph("Piano alimentare — giorno tipo", ss["H2"]))
+        macro = [
+            ["kcal/giorno", f"{wk.get('kcal',0):.0f}"],
+            ["Proteine", f"{wk.get('protein',0):.0f} g"],
+            ["Carboidrati", f"{wk.get('carbs',0):.0f} g"],
+            ["Grassi", f"{wk.get('fat',0):.0f} g"],
+            ["Fibre", f"{wk.get('fibre',0):.0f} g"],
+        ]
+        t = Table([["", ""]] + macro, colWidths=[60 * mm, 30 * mm])
+        t.setStyle(TableStyle([
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("TEXTCOLOR", (0, 1), (0, -1), MUTED),
+            ("BACKGROUND", (0, 0), (-1, 0), TEAL),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), 0.3, LIGHT),
+        ]))
+        el.append(t)
+        for day in planner_diet["days"]:
+            el.append(Paragraph(f"{day['day']} — {day.get('totals',{}).get('kcal',0):.0f} kcal", ss["Small"]))
+            data = [["Pasto", "Alimento", "g", "kcal"]]
+            for meal in day["meals"]:
+                for ii, it in enumerate(meal.get("items", [])):
+                    data.append([meal["meal"] if ii == 0 else "",
+                                 f"{it.get('food','')}",
+                                 f"{it.get('g',0):.0f}", f"{it.get('kcal',0):.0f}"])
+            t = Table(data, colWidths=[24 * mm, 96 * mm, 16 * mm, 16 * mm])
+            t.setStyle(TableStyle([
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("BACKGROUND", (0, 0), (-1, 0), LIGHT),
+                ("GRID", (0, 0), (-1, -1), 0.2, LIGHT),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ]))
+            el.append(t)
+            el.append(Spacer(1, 4))
+    # 4b. Dieta + conteggi (struttura import: meal.groups/options)
+    elif comp:
         wk = comp["week"]["avg_day"]
         el.append(Paragraph("Piano alimentare — media giornaliera", ss["H2"]))
         macro = [
@@ -163,7 +207,21 @@ def build_report_pdf(client_id, diet_id, selections, path, logo_path=None):
 
     # 5. Spesa
     if diet:
-        sl = nutrition_engine.build_shopping_list(diet, selections)
+        # distingui planner (items) vs import (groups) per la spesa
+        is_planner = bool(diet.get("days") and diet["days"] and "items" in diet["days"][0].get("meals", [{}])[0])
+        sl = []
+        if is_planner:
+            # aggrega gli alimenti dei pasti
+            agg = {}
+            for day in diet["days"]:
+                for meal in day.get("meals", []):
+                    for it in meal.get("items", []):
+                        f = it.get("food", "")
+                        g = it.get("g", 0) or 0
+                        agg[f] = agg.get(f, 0) + g
+            sl = [{"food": f, "grams": g} for f, g in agg.items()]
+        else:
+            sl = nutrition_engine.build_shopping_list(diet, selections)
         if sl:
             el.append(Paragraph("Lista della spesa (settimana)", ss["H2"]))
             data = [["Alimento", "Quantità"]] + [[s["food"], f"{s['grams']:.0f} g"] for s in sl]
