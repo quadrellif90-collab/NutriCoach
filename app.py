@@ -39,7 +39,7 @@ import version
 UPLOAD_DIR = os.path.join(database.DATA_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-app = FastAPI(title="NutriCoach", version="1.3.1")
+app = FastAPI(title="NutriCoach", version="1.4.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -310,7 +310,7 @@ def api_get_check_ins(cid: int):
     return {"checkins": checkins}
 
 
-@app.get("/api/clients/{cid}/follow-up")
+@app.get("/api/follow-up")
 def api_follow_up(cid: int, current_kcal: float = None):
     """Analisi follow-up: trend peso, compliance, consiglio aggiustamento kcal."""
     import followup
@@ -324,6 +324,125 @@ def api_follow_up(cid: int, current_kcal: float = None):
         anth = database.compute_anthropometry(cid) or {}
         current_kcal = anth.get("tdee")
     return followup.analyze(checkins, client.get("goal", ""), current_kcal)
+
+
+@app.get("/api/studio/today")
+def api_studio_today():
+    """Home operativa: per ogni cliente calcola i segnali 'da seguire oggi'.
+    Flag: peso mancante (>14gg), diario sintomi da rivedere (>7gg),
+    piano assente, check-in settimanale mancante, note non lette."""
+    import datetime as _dt
+    today = _dt.date.today()
+    clients = database.list_clients()
+    out = []
+    for c in clients:
+        cid = c["id"]
+        # pesi
+        ms = database.list_measurements(cid)
+        last_weight = ms[-1]["date"] if ms else None
+        # sintomi
+        sy = database.list_symptoms(cid, limit=1)
+        last_symptom = sy[0]["date"] if sy else None
+        # piani
+        diets = database.list_diets(cid)
+        has_plan = len(diets) > 0
+        last_plan = diets[0]["date"] if diets else None
+        # check-in (progress notes con compliance_pct)
+        checkins = api_get_check_ins(cid)["checkins"]
+        last_checkin = checkins[-1]["date"] if checkins else None
+
+        def days_since(d):
+            if not d:
+                return 999
+            try:
+                return (today - _dt.date.fromisoformat(d)).days
+            except Exception:
+                return 999
+
+        flags = []
+        if days_since(last_weight) > 14:
+            flags.append({"type": "peso", "label": "Peso da aggiornare", "days": days_since(last_weight)})
+        if days_since(last_symptom) > 7:
+            flags.append({"type": "diario", "label": "Diario da rivedere", "days": days_since(last_symptom)})
+        if not has_plan:
+            flags.append({"type": "piano", "label": "Nessun piano generato", "days": None})
+        if days_since(last_checkin) > 7:
+            flags.append({"type": "checkin", "label": "Check-in settimanale mancante", "days": days_since(last_checkin)})
+
+        out.append({
+            "id": cid,
+            "name": c.get("name", ""),
+            "flags": flags,
+            "last_weight": last_weight,
+            "last_symptom": last_symptom,
+            "last_plan": last_plan,
+            "has_plan": has_plan,
+            "needs_attention": len(flags) > 0,
+        })
+    out.sort(key=lambda x: (not x["needs_attention"], -sum(f["days"] or 0 for f in x["flags"])))
+    return {"today": out, "count_attention": sum(1 for x in out if x["needs_attention"])}
+
+
+@app.post("/api/studio/seed-demo")
+def api_seed_demo():
+    """Crea un cliente di esempio (Marco Demo) con anamnesi IBS+SIBO, una
+    misurazione e un piano, per aiutare un nuovo utente a scoprire l'app.
+    Idempotente: non crea duplicati se 'Marco Demo' esiste gia'."""
+    clients = database.list_clients()
+    if any(c.get("name") == "Marco Demo" for c in clients):
+        return {"ok": True, "skipped": True, "message": "Cliente demo gia' presente"}
+    cid = database.add_client("Marco Demo", sex="M", goal="Mantenimento",
+                              age=34, height_cm=178, activity="Moderato",
+                              allergies="noci",
+                              pathologies=json.dumps({"clinical_conditions": ["ibs", "sibo"], "anamnesis_notes": "Esempio demo"}))
+    database.add_measurement(cid, __import__("datetime").date.today().isoformat(), weight_kg=78.5, waist_cm=88)
+    # piano demo salvato
+    plan = meal_planner.generate_plan({"kcal": 2100, "p": 150, "c": 210, "f": 70}, {})
+    database.add_diet(cid, plan, title="Piano Marco Demo (esempio)", date=__import__("datetime").date.today().isoformat())
+    return {"ok": True, "client_id": cid, "message": "Cliente demo 'Marco Demo' creato"}
+
+
+@app.post("/api/clients/{cid}/client-checkin")
+async def api_client_checkin(cid: int, request: Request):
+    """Check-in lato CLIENTE: peso + compliance + energia + sintomo rapido.
+    Il nutrizionista vede chi ha risposto nella Home 'Oggi'."""
+    b = await request.json()
+    now = __import__("datetime").date.today().isoformat()
+    checkin = {
+        "date": b.get("date", now),
+        "weight_kg": b.get("weight_kg"),
+        "compliance_pct": b.get("compliance_pct"),
+        "energy_level": b.get("energy_level", 5),
+        "mood": b.get("mood", ""),
+        "symptoms": b.get("symptoms", []),
+        "notes": b.get("notes", ""),
+        "source": "cliente",
+    }
+    database.add_progress_note(cid, checkin["date"], json.dumps(checkin))
+    return {"ok": True, "checkin": checkin}
+
+
+@app.post("/api/clients/{cid}/notify")
+async def api_notify(cid: int, request: Request):
+    """Registra l'invio di un follow-up (piano/check-in) e restituisce un
+    payload mailto pronto all'uso (apre il client email locale, 0 dipendenze).
+    Salva in notification_log come 'sent'."""
+    b = await request.json()
+    client = database.get_client(cid) or {}
+    channel = b.get("channel", "email")
+    ctype = b.get("type", "piano")
+    subject = b.get("subject", f"NutriCoach — {ctype} {client.get('name', 'Cliente')}")
+    body = b.get("body", "In allegato/collegato il tuo piano. A presto!")
+    # registra invio
+    database.add_notification_log(cid, ctype, channel, note=subject)
+    # costruisci mailto (se c'e' email cliente)
+    email = client.get("email") or ""
+    mailto = ""
+    if email:
+        import urllib.parse
+        mailto = f"mailto:{email}?subject={urllib.parse.quote(subject)}&body={urllib.parse.quote(body)}"
+    return {"ok": True, "mailto": mailto, "email": email, "logged": True}
+
 
 @app.post("/api/clients/{cid}/share-plan")
 async def api_share_plan(cid: int, request: Request):

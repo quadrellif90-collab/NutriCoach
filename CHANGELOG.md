@@ -1,4 +1,25 @@
 
+## [1.4.0] — 2026-07-26
+
+### Workflow & UX (cliente finale)
+- **🏠 Home "Oggi"**: nuova tab operativa che mostra i clienti che richiedono
+  attenzione (peso da aggiornare >14gg, diario da rivedere >7gg, piano assente,
+  check-in settimanale mancante). Ordinati per urgenza. Endpoint `/api/studio/today`.
+- **⚡ Check-in rapido lato cliente**: modale per registrare peso + compliance %
+  + energia dal lato nutrizionista (simula l'invio del cliente). Endpoint
+  `/api/clients/{cid}/client-checkin`. Il nutrizionista vede chi ha risposto
+  nella Home "Oggi".
+- **📧 Invio piano via email**: pulsante nel tab Pianifica che registra l'invio
+  in `notification_log` e apre il client email locale (`mailto:`, 0 dipendenze).
+  Endpoint `/api/clients/{cid}/notify`.
+- **✨ Seed dati esempio**: pulsante "Carica cliente di esempio (Marco Demo)"
+  nella Home quando non ci sono clienti — crea un caso IBS+SIBO con piano
+  filtrato per esplorare l'app. Endpoint `/api/studio/seed-demo` (idempotente).
+- **⚡ Diario "Salva ORA"**: compila data/ora automaticamente; slider sintomi
+  mostrano il valore live.
+- **📄 Prompt PDF post-generazione**: dopo "Genera settimana" appare il
+  pulsante "Esporta PDF clinico" per chiudere il loop piano→PDF.
+
 ## [1.3.1] — 2026-07-26
 
 ### Fix (audit aggressivo post-release)

@@ -110,6 +110,7 @@ label{font-size:12px;color:var(--text3);display:block;margin-top:8px}
     <div class="tab" data-tab="supplements">💊 Integratori</div>
     <div class="tab" data-tab="dietpatterns">🥗 Pattern Dietetici</div>
     <div class="tab" data-tab="cartella">🗂️ Cartella Clinica</div>
+    <div class="tab" data-tab="today">🏠 Oggi</div>
   </div>
 
   <div class="main-content">
@@ -385,6 +386,7 @@ label{font-size:12px;color:var(--text3);display:block;margin-top:8px}
         </div>
         <button class="btn" onclick="generatePlan()">⚡ Genera settimana</button>
         <button class="btn ghost" onclick="exportPlanPdf()" style="margin-left:8px">📄 Esporta PDF clinico</button>
+        <button class="btn ghost" onclick="sendPlanEmail()" style="margin-left:8px">📧 Invia via email</button>
         <span id="plan-gen-result" style="margin-left:10px;color:var(--accent)"></span>
       </div>
       <div id="plan-week"></div>
@@ -778,6 +780,31 @@ label{font-size:12px;color:var(--text3);display:block;margin-top:8px}
   </div>
 </div>
 
+    </section>
+
+    <section id="sec-today" class="section">
+      <h2>🏠 Oggi — Home operativa</h2>
+      <p style="color:var(--muted);margin-top:-6px">I clienti che richiedono la tua attenzione, in cima. Clicca per aprirli.</p>
+      <div id="today-count" style="font-size:13px;margin-bottom:10px"></div>
+      <div id="today-list"></div>
+    </section>
+
+<!-- Modal Check-in rapido (G) -->
+<div id="ck-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;align-items:center;justify-content:center">
+  <div style="background:var(--card);max-width:420px;width:92%;border-radius:14px;padding:22px">
+    <h2 style="margin-top:0">⚡ Check-in rapido — <span id="ck-name"></span></h2>
+    <p style="font-size:13px;color:var(--muted)">Peso e compliance del cliente (simula l'invio lato cliente).</p>
+    <div style="margin:8px 0"><label>Peso (kg)</label><input id="ck-weight" type="number" step="0.1" style="width:100%"></div>
+    <div style="margin:8px 0"><label>Compliance dieta (%)</label><input id="ck-compliance" type="range" min="0" max="100" value="80" oninput="document.getElementById('ck-compliance-v').textContent=this.value+'%'"><span id="ck-compliance-v">80%</span></div>
+    <div style="margin:8px 0"><label>Energia (1-10)</label><input id="ck-energy" type="range" min="1" max="10" value="5" oninput="document.getElementById('ck-energy-v').textContent=this.value"><span id="ck-energy-v">5</span></div>
+    <div style="margin:8px 0"><label>Note</label><textarea id="ck-notes" rows="2" style="width:100%"></textarea></div>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button class="btn" onclick="submitCheckin()">💾 Salva check-in</button>
+      <button class="btn ghost" onclick="document.getElementById('ck-overlay').style.display='none'">✕ Annulla</button>
+    </div>
+  </div>
+</div>
+
 <!-- Wizard Onboarding Anamnesi (D) -->
 <div id="onboard-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;align-items:center;justify-content:center">
   <div style="background:var(--card);max-width:560px;width:92%;border-radius:14px;padding:22px;max-height:90vh;overflow:auto">
@@ -842,6 +869,7 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   if (tab === 'supplements') loadSupplements();
   if (tab === 'dietpatterns') loadDietPatterns();
   if (tab === 'cartella') loadCartella();
+  if (tab === 'today') loadToday();
 });
 
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);}
@@ -1358,6 +1386,9 @@ async function generatePlan(){
       banner = `<div class="card" style="margin-top:10px;color:var(--text3);font-size:12px">ℹ️ Nessuna condizione clinica registrata: il piano e' generico. Registra le patologie in Anamnesi per filtrarlo.</div>`;
     }
     document.getElementById('plan-gen-result').textContent=`Generato: ${plan.days.length} giorni, ~${Math.round(plan.week_totals.kcal/7)} kcal/giorno`;
+    let promptEl=document.getElementById('plan-prompt');
+    if(!promptEl){ promptEl=document.createElement('div'); promptEl.id='plan-prompt'; document.getElementById('plan-week').parentNode.appendChild(promptEl); }
+    promptEl.innerHTML=`<div class='card' style='margin-top:12px;display:flex;gap:10px;align-items:center;background:var(--surface2)'><b style='font-size:13px'>Piano pronto — vuoi il PDF clinico?</b><button class='btn ghost' onclick='exportPlanPdf()'>📄 Esporta PDF clinico</button></div>`;
     document.getElementById('plan-week').innerHTML = banner + plan.days.map(d=>`\n      <div class="card" style="margin-top:10px"><h3>Giorno ${d.day} — ${Math.round(d.totals.kcal)} kcal</h3>\n      ${d.meals.map(m=>`<div style="margin:6px 0"><b>${m.meal}</b>: ${m.items.map(i=>i.food+' '+i.g+'g').join(', ')} <span style="color:var(--text3)">(${Math.round(m.totals.kcal)} kcal)</span></div>`).join('')}\n      </div>`).join('');
   }
 }
@@ -1372,6 +1403,15 @@ async function exportPlanPdf(){
   const r=await fetch(`/api/clients/${cid}/plan/export-pdf`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({targets})});
   if(r.ok){ const blob=await r.blob(); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='piano_clinico.pdf'; a.click(); toast('PDF pronto ✓'); }
   else { toast('Errore generazione PDF'); }
+}
+async function sendPlanEmail(){
+  const cid = STATE.clientId;
+  if(!cid){ toast('Seleziona prima un cliente'); return; }
+  const r = await jpost(`/api/clients/${cid}/notify`, {type:'piano', channel:'email', subject:`NutriCoach — Piano ${new Date().toLocaleDateString('it-IT')}`, body:'Ciao! Trovi in allegato il tuo piano alimentare personalizzato. Per qualsiasi dubbio sono qui. A presto!'});
+  if(r.ok){
+    if(r.mailto){ window.location.href = r.mailto; toast('Apertura client email ✓'); }
+    else { toast('Invio registrato — aggiungi l\'email del cliente per il link mailto'); }
+  } else { toast('Errore invio'); }
 }
 async function loadPlan(){ /* i target restano; si genera on-demand */ document.getElementById('plan-week').innerHTML=''; document.getElementById('plan-gen-result').textContent=''; }
 
@@ -1812,9 +1852,15 @@ async function loadSymptomPatterns(){
   document.getElementById('sy-reintro').innerHTML=r;
 }
 
-async function saveSymptom(){
+async function saveSymptom(now){
   const cid=STATE.clientId||document.getElementById('sy-client').value;
   if(!cid){ toast('Seleziona un cliente'); return; }
+  // 'Salva ORA': compila data/ora correnti se non valorizzati
+  if(now){
+    const d=new Date();
+    if(!document.getElementById('sy-date').value) document.getElementById('sy-date').value=d.toISOString().slice(0,10);
+    if(!document.getElementById('sy-time').value) document.getElementById('sy-time').value=d.toTimeString().slice(0,5);
+  }
   const data={
     date: document.getElementById('sy-date').value,
     time: document.getElementById('sy-time').value,
@@ -2003,6 +2049,77 @@ async function loadCartella(){
     '<div style="color:var(--text3)">Nessuna nota</div>';
 }
 
+// ---- I: seed demo client ----
+async function seedDemo(){
+  const r = await jpost('/api/studio/seed-demo', {});
+  if(r.ok){ toast('Cliente demo creato ✓'); loadToday(); loadClients(); }
+  else toast('Errore creazione demo');
+}
+
+// ---- F: Home operativa 'Oggi' ----
+async function loadToday(){
+  const d = await jget('/api/studio/today');
+  const list = document.getElementById('today-list');
+  document.getElementById('today-count').innerHTML = d.count_attention ?
+    `<b style="color:var(--accent2)">${d.count_attention}</b> cliente/i richiedono attenzione` :
+    `<span style="color:var(--text3)">Nessun cliente urgente — tutto in regola ✅</span>`;
+  if(!d.today.length){
+    list.innerHTML = `<div class="card" style="text-align:center;padding:24px">
+      <p style="color:var(--text3)">Nessun cliente. Inizia creandone uno o carica un esempio.</p>
+      <button class="btn amber" onclick="seedDemo()">✨ Carica cliente di esempio (Marco Demo)</button>
+      <p style="font-size:12px;color:var(--text3);margin-top:10px">Il demo mostra IBS+SIBO con piano filtrato, Cartella Clinica e diario — utile per esplorare l'app.</p>
+    </div>`;
+    return;
+  }
+  list.innerHTML = d.today.map(c=>{
+    const flags = c.flags.map(f=>`<span class="chip" style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:12px;margin:3px 4px 0 0;display:inline-block">${f.label}${f.days!=null?` (${f.days}g fa)`:''}</span>`).join('');
+    return `<div class="card" style="margin-bottom:10px;cursor:pointer;border-left:3px solid ${c.needs_attention?'var(--accent2)':'var(--border)'}" onclick="selectClient(${c.id})">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <b style="font-size:15px">${c.name||'Cliente'}</b>
+        ${c.has_plan?'<span style="font-size:11px;color:var(--text3)">📋 piano</span>':'<span style="font-size:11px;color:var(--warning)">⚠️ no piano</span>'}
+      </div>
+      <div style="margin-top:6px">${flags||'<span style="color:var(--text3);font-size:12px">tutto aggiornato</span>'}</div>
+    </div>`;
+  }).join('');
+  // G: aggiungi pulsante check-in rapido a ogni card (via DOM, no inline backslash)
+  list.querySelectorAll('#today-list > .card').forEach((card, idx)=>{
+    const c = d.today[idx];
+    const cid = c.id;
+    const cname = c.name || 'Cliente';
+    const btn = document.createElement('button');
+    btn.className='btn ghost'; btn.style.cssText='font-size:12px;padding:4px 12px;margin-top:8px';
+    btn.textContent='⚡ Check-in rapido';
+    btn.onclick=(e)=>{ e.stopPropagation(); openCheckin(cid, cname); };
+    card.appendChild(btn);
+  });
+}
+
+// ---- G: Check-in rapido lato cliente ----
+let ckCid = null;
+function openCheckin(cid, cname){
+  ckCid = cid;
+  document.getElementById('ck-name').textContent = cname || 'Cliente';
+  document.getElementById('ck-weight').value = '';
+  document.getElementById('ck-compliance').value = 80;
+  document.getElementById('ck-compliance-v').textContent = '80%';
+  document.getElementById('ck-energy').value = 5;
+  document.getElementById('ck-energy-v').textContent = '5';
+  document.getElementById('ck-notes').value = '';
+  document.getElementById('ck-overlay').style.display = 'flex';
+}
+async function submitCheckin(){
+  if(!ckCid){ toast('Nessun cliente selezionato'); return; }
+  const payload = {
+    weight_kg: parseFloat(document.getElementById('ck-weight').value) || null,
+    compliance_pct: +document.getElementById('ck-compliance').value,
+    energy_level: +document.getElementById('ck-energy').value,
+    notes: document.getElementById('ck-notes').value || '',
+  };
+  const r = await jpost(`/api/clients/${ckCid}/client-checkin`, payload);
+  if(r.ok){ toast('Check-in salvato ✓'); document.getElementById('ck-overlay').style.display='none'; loadToday(); }
+  else toast('Errore salvataggio check-in');
+}
+
 // ---- D: Wizard Onboarding Anamnesi ----
 let obState = { cid: null, conditions: [], step: 1 };
 async function openOnboard(){
@@ -2081,6 +2198,23 @@ function obClose(){ document.getElementById('onboard-overlay').style.display='no
 
 // init
 initAuth(); loadRecipes(); checkUpdate(); loadPresets();
+
+// K: binding live degli slider sintomi -> span valore (senza patchare l'HTML)
+document.querySelectorAll('#symptoms input[type=range]').forEach(sl=>{
+  const v=document.getElementById(sl.id+'-v');
+  if(v){ sl.addEventListener('input',()=>{ v.textContent=sl.value; }); }
+});
+
+function addRapidSaveBtn(){
+  const form=document.querySelector('#symptoms .card');
+  if(!form || document.getElementById('sy-save-now')) return;
+  const b=document.createElement('button');
+  b.id='sy-save-now'; b.className='btn amber'; b.style.cssText='padding:6px 18px;margin-top:10px';
+  b.textContent='⚡ Salva ORA (data/ora adesso)';
+  b.onclick=()=>saveSymptom(true);
+  form.appendChild(b);
+}
+addRapidSaveBtn();
 </script>
 </body>
 </html>
