@@ -2188,7 +2188,7 @@ async function loadToday(){
   }
   list.innerHTML = d.today.map(c=>{
     const flags = c.flags.map(f=>`<span class="chip" style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:12px;margin:3px 4px 0 0;display:inline-block">${f.label}${f.days!=null?` (${f.days}g fa)`:''}</span>`).join('');
-    return `<div class="card" style="margin-bottom:10px;cursor:pointer;border-left:3px solid ${c.needs_attention?'var(--accent2)':'var(--border)'}" onclick="selectClient(${c.id})">
+    return `<div class="card" style="margin-bottom:10px;cursor:pointer;border-left:3px solid ${c.needs_attention?'var(--accent2)':'var(--border)'}" onclick="enterClient(${c.id})">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <b style="font-size:15px">${c.name||'Cliente'}</b>
         ${c.has_plan?'<span style="font-size:11px;color:var(--text3)">📋 piano</span>':'<span style="font-size:11px;color:var(--warning)">⚠️ no piano</span>'}

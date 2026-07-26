@@ -1,4 +1,14 @@
 
+## [1.4.3] — 2026-07-26
+
+### Bug fix (audit contratti frontend↔backend)
+- **Card Home "Oggi" ora aprono il cliente**: le card usavano
+  `selectClient()` (funzione inesistente → click morto). Corretto in
+  `enterClient(${c.id})` (verificato: click apre scheda cliente).
+- Audit automatico di tutti gli `onclick`/chiamate API/`getElementById`:
+  **0 orphan** rimasti dopo il fix (le altre segnalazioni erano falsi positivi
+  da stringhe template o elementi creati dinamicamente).
+
 ## [1.4.2] — 2026-07-26
 
 ### Sicurezza dati & chiusura loop (cliente finale)
