@@ -33,6 +33,7 @@ import meal_planner
 import diet_presets
 import sport_science
 import pdf_sport_science
+import clinical_nutrition
 import version
 
 UPLOAD_DIR = os.path.join(database.DATA_DIR, "uploads")
@@ -196,6 +197,136 @@ def api_sport_science_report(cid: int, day_type: str = "race", intensity: str = 
     return Response(content=pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f"attachment; filename=nutricoach_sport_science_{cid}.pdf"})
 
+
+# ---------------- Clinical Nutrition (condizioni + anamnesi) ----------------
+@app.get("/api/clinical-nutrition/conditions")
+def api_clinical_conditions():
+    """Lista di tutte le condizioni cliniche disponibili."""
+    return {"conditions": clinical_nutrition.get_all_conditions()}
+
+@app.get("/api/clinical-nutrition/conditions/{condition_key}")
+def api_clinical_condition(condition_key: str):
+    """Dettagli di una condizione clinica."""
+    cond = clinical_nutrition.get_condition(condition_key)
+    if not cond:
+        raise HTTPException(404, "Condizione non trovata")
+    return cond
+
+@app.post("/api/clinical-nutrition/recommendations")
+async def api_clinical_recommendations(request: Request):
+    """Raccomandazioni dietetiche basate sulle condizioni del cliente."""
+    b = await request.json()
+    conditions = b.get("conditions", [])
+    client_info = b.get("client_info", {})
+    return clinical_nutrition.generate_anamnesis_report(conditions, client_info)
+
+@app.post("/api/clients/{cid}/anamnesis")
+async def api_save_anamnesis(cid: int, request: Request):
+    """Salva le condizioni cliniche del cliente (anamnesi) nella colonna pathologies."""
+    b = await request.json()
+    conditions = b.get("conditions", [])
+    notes = b.get("notes", "")
+    # salva come JSON nella colonna pathologies (esistente)
+    anamnesis_data = {"clinical_conditions": conditions, "anamnesis_notes": notes}
+    database.update_client(cid, pathologies=json.dumps(anamnesis_data))
+    client = database.get_client(cid) or {}
+    recs = clinical_nutrition.generate_anamnesis_report(conditions, {"name": client.get("name", "")})
+    return {"ok": True, "recommendations": recs}
+
+@app.get("/api/clients/{cid}/anamnesis")
+def api_get_anamnesis(cid: int):
+    """Leggi l'anamnesi del cliente."""
+    client = database.get_client(cid) or {}
+    raw = client.get("pathologies", "") or ""
+    try:
+        data = json.loads(raw)
+    except Exception:
+        data = {}
+    conditions = data.get("clinical_conditions", []) if isinstance(data, dict) else []
+    notes = data.get("anamnesis_notes", "") if isinstance(data, dict) else ""
+    recs = clinical_nutrition.generate_anamnesis_report(conditions, {"name": client.get("name", "")})
+    return {"conditions": conditions, "notes": notes, "recommendations": recs}
+
+@app.post("/api/clients/{cid}/check-in")
+async def api_check_in(cid: int, request: Request):
+    """Registra un check-in settimanale del cliente."""
+    b = await request.json()
+    checkin = {
+        "date": b.get("date", datetime.date.today().isoformat()),
+        "weight_kg": b.get("weight_kg"),
+        "compliance_pct": b.get("compliance_pct"),
+        "mood": b.get("mood", ""),
+        "symptoms": b.get("symptoms", []),
+        "notes": b.get("notes", ""),
+        "energy_level": b.get("energy_level", 5),
+    }
+    database.add_progress_note(cid, checkin["date"], json.dumps(checkin))
+    return {"ok": True, "checkin": checkin}
+
+@app.get("/api/clients/{cid}/check-ins")
+def api_get_check_ins(cid: int):
+    """Leggi tutti i check-in del cliente."""
+    notes = database.list_progress_notes(cid)
+    checkins = []
+    for n in notes:
+        try:
+            data = json.loads(n.get("text", ""))
+            if isinstance(data, dict) and "compliance_pct" in data:
+                checkins.append(data)
+        except Exception:
+            pass
+    return {"checkins": checkins}
+
+@app.post("/api/clients/{cid}/share-plan")
+async def api_share_plan(cid: int, request: Request):
+    """Genera un PDF del piano alimentare per condividerlo con il cliente."""
+    b = await request.json()
+    client = database.get_client(cid) or {}
+    diet_id = b.get("diet_id")
+    if not diet_id:
+        diets = database.list_diets(cid)
+        if diets:
+            diet_id = diets[0].get("id")
+    if not diet_id:
+        raise HTTPException(404, "Nessuna dieta trovata per questo cliente")
+    diet = database.get_diet(diet_id) or {}
+    try:
+        import io
+        from reportlab.lib.pagesizes import A4
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(buf, pagesize=A4)
+        styles = getSampleStyleSheet()
+        story = []
+        title_style = ParagraphStyle('Title2', parent=styles['Title'], fontSize=18, spaceAfter=20)
+        story.append(Paragraph(f"Piano Alimentare — {client.get('name', 'Cliente')}", title_style))
+        story.append(Paragraph(f"Data: {datetime.date.today().strftime('%d/%m/%Y')}", styles['Normal']))
+        story.append(Spacer(1, 20))
+        diet_data = diet.get("diet", {})
+        for day in diet_data.get("days", []):
+            story.append(Paragraph(f"<b>Giorno {day.get('day', '')}</b>", styles['Heading2']))
+            for meal in day.get("meals", []):
+                meal_name = meal.get("meal", "")
+                items = meal.get("items", [])
+                items_text = ", ".join(f"{i.get('food','')} {i.get('g','')}g" for i in items)
+                totals = meal.get("totals", {})
+                kcal = round(totals.get("kcal", 0))
+                story.append(Paragraph(f"<b>{meal_name}</b>: {items_text} ({kcal} kcal)", styles['Normal']))
+            day_totals = day.get("totals", {})
+            story.append(Paragraph(
+                f"<i>Totale giorno: {round(day_totals.get('kcal',0))} kcal | "
+                f"P {round(day_totals.get('protein',0))}g | "
+                f"C {round(day_totals.get('carbs',0))}g | "
+                f"F {round(day_totals.get('fat',0))}g</i>", styles['Normal']))
+            story.append(Spacer(1, 10))
+        story.append(Spacer(1, 20))
+        story.append(Paragraph("Generato da NutriCoach", styles['Normal']))
+        doc.build(story)
+        return Response(content=buf.getvalue(), media_type="application/pdf",
+                        headers={"Content-Disposition": f"attachment; filename=piano_{client.get('name','cliente').replace(' ','_')}.pdf"})
+    except Exception as e:
+        raise HTTPException(500, f"Errore generazione PDF: {e}")
 
 # ---------------- Messaggi (thread locale) ----------------
 @app.post("/api/clients/{cid}/message")
