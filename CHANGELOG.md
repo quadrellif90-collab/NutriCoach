@@ -1,4 +1,13 @@
 
+## [1.5.1] — 2026-07-26
+
+### Fix launcher (finestra nativa)
+- **Port-guard**: se la porta 8090 è già occupata (es. un'altra istanza
+  di NutriCoach già aperta), il launcher esce con errore esplicito invece
+  di aprire la finestra sull'istanza sbagliata (che mostrerebbe dati o
+  versione diversi — es. "non vedo le tab" perché apre la vecchia istanza).
+- Messaggio di errore chiaro: chiudi NutriCoach già aperto e riprova.
+
 ## [1.5.0] — 2026-07-26
 
 ### Finestra nativa desktop (come PCC — niente più pagina browser)

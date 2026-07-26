@@ -129,6 +129,23 @@ def _fallback_to_browser(reason=""):
 
 
 def main():
+    # Port-guard: se la porta e' gia' occupata (un'altra istanza o un
+    # NutriCoach vecchio), rifiuta forte invece di aprire la finestra
+    # sull'istanza sbagliata (che mostrerebbe dati/versione diversi).
+    import socket
+    _probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        _probe.bind(("127.0.0.1", PORT))
+    except OSError:
+        print(f"FATAL: porta {PORT} occupata da un'altra istanza. "
+              f"Chiudi NutriCoach gia' aperto e riprova.")
+        sys.exit(2)
+    finally:
+        try:
+            _probe.close()
+        except OSError:
+            pass
+
     print(f"Starting NutriCoach on {URL}...")
     start_server()
     if not wait_for_server():
@@ -137,7 +154,7 @@ def main():
             if _server_traceback:
                 print(_server_traceback)
         else:
-            print("Warning: server timeout.")
+            print("Warning: server timeout (un'altra istanza occupa la porta?).")
         sys.exit(1)
     print(f"Server ready → {URL}")
 
