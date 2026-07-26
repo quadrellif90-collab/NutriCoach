@@ -65,7 +65,8 @@ def trend_block(weight_series, fat_series, bia_series, labels=None):
     W, H = 420, 140
     inner = ""
     for i, c in enumerate(charts):
-        # riusa il contenuto del chart come svg annidato con offset
+        # riusa il chart come svg annidato con offset (rimuove width duplicato)
+        c = c.replace('width="100%" preserveAspectRatio="xMidYMid meet" ', "", 1)
         c = c.replace("<svg ", f'<svg x="{i * W}" width="{W}" height="{H}" ', 1)
         inner += c
     total_w = W * len(charts)
