@@ -76,7 +76,7 @@ def aggregate(entries):
 
 
 def _meal_combo(protein, carb, veg, fat, fruit, t_kcal, t_p):
-    """Costruisce un pasto bilanciato vicino ai target (euristico)."""
+    """Costruisce un pasto bilanciato e lo SCALA verso il target kcal."""
     p_g = 150 if protein in ("petto di pollo", "tacchino", "manzo magro", "fesa di tacchino") else 100
     c_g = 70 if carb in ("pasta", "riso basmati") else 50
     v_g = 150
@@ -91,7 +91,16 @@ def _meal_combo(protein, carb, veg, fat, fruit, t_kcal, t_p):
     if fruit:
         items.append({"food": fruit, "g": fr_g})
     entries = [compute_entry(i["food"], i["g"]) for i in items]
-    return aggregate(entries), items
+    tot = aggregate(entries)
+    # scala le grammature verso il target kcal del pasto (single source of truth:
+    # i target del preset/configuratore guidano il piano, non porzioni fisse)
+    if t_kcal and tot["kcal"] > 0:
+        factor = max(0.4, min(2.5, t_kcal / tot["kcal"]))
+        for i in items:
+            i["g"] = round(i["g"] * factor)
+        entries = [compute_entry(i["food"], i["g"]) for i in items]
+        tot = aggregate(entries)
+    return tot, items
 
 
 def generate_plan(targets, options=None):

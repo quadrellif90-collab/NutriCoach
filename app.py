@@ -43,7 +43,10 @@ app = FastAPI(title="NutriCoach", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], allow_credentials=True,
+    # app locale single-user: consenti solo origin localhost (era "*", troppo permissivo
+    # con allow_credentials=True)
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_credentials=True,
     allow_methods=["*"], allow_headers=["*"],
 )
 
@@ -186,7 +189,12 @@ async def api_sport_science_block(request: Request):
         kcal = float(kcal) if kcal else 2000
     except Exception:
         kcal = 2000
-    return sport_science.block_phase_target(phase, None, kcal) if not phase else sport_science.block_phase_target(phase, 70, kcal)
+    if not phase:
+        raise HTTPException(400, "phase mancante")
+    out = sport_science.block_phase_target(phase, None, kcal)
+    if not out:
+        raise HTTPException(404, "fase non valida")
+    return out
 
 
 @app.get("/api/clients/{cid}/sport-science-report")
@@ -433,7 +441,7 @@ async def api_client_profile(cid: int, request: Request):
         database.update_client(cid, **prof)
     m = body.get("measurement", {})
     if m:
-        date = m.get("date") or datetime.date.today().isoformat()
+        date = m.pop("date", None) or datetime.date.today().isoformat()
         database.add_measurement(cid, date, **m)
     return {"ok": True}
 
@@ -632,13 +640,6 @@ def api_client_get(cid: int):
     return c
 
 
-@app.put("/api/clients/{cid}")
-async def api_client_update(cid: int, request: Request):
-    body = await request.json()
-    database.update_client(cid, **body)
-    return {"ok": True}
-
-
 @app.delete("/api/clients/{cid}")
 def api_client_delete(cid: int):
     database.delete_client(cid)
@@ -649,7 +650,8 @@ def api_client_delete(cid: int):
 @app.post("/api/clients/{cid}/measurements")
 async def api_measurement_add(cid: int, request: Request):
     body = await request.json()
-    database.add_measurement(cid, body.get("date", _today()), **body)
+    date = body.pop("date", None) or _today()
+    database.add_measurement(cid, date, **body)
     return {"ok": True}
 
 

@@ -301,3 +301,28 @@ def test_meal_planner_engine():
         for m in d["meals"]:
             assert m["totals"]["kcal"] > 0
     shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_meal_planner_scales_to_target():
+    """Il piano generato deve scalare verso il target kcal (regressione: era fisso ~2374)."""
+    import meal_planner
+    low = meal_planner.generate_plan({"kcal": 1500, "p": 110, "c": 150, "f": 50})
+    high = meal_planner.generate_plan({"kcal": 3000, "p": 180, "c": 350, "f": 90})
+    avg_low = low["week_totals"]["kcal"] / 7
+    avg_high = high["week_totals"]["kcal"] / 7
+    assert avg_high > avg_low * 1.4, (avg_low, avg_high)
+    assert abs(avg_low - 1500) / 1500 < 0.25
+    assert abs(avg_high - 3000) / 3000 < 0.25
+
+
+def test_add_measurement_date_kwarg_conflict():
+    """Regressione: body con 'date' non deve rompere add_measurement via API-path."""
+    import db, tempfile, os
+    d = tempfile.mkdtemp(prefix="hermes-meas-")
+    db.DB_PATH = os.path.join(d, "t.db")
+    cid = db.add_client("Meas", sex="M")
+    body = {"date": "2026-07-01", "weight_kg": 80}
+    date = body.pop("date", None)
+    db.add_measurement(cid, date, **body)
+    ms = db.list_measurements(cid)
+    assert ms and ms[0]["weight_kg"] == 80 and ms[0]["date"] == "2026-07-01"

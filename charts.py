@@ -48,7 +48,11 @@ def line_chart(values, labels=None, w=420, h=140, color="#0d9488", title="", uni
 
 
 def trend_block(weight_series, fat_series, bia_series, labels=None):
-    """Blocco SVG multi-trend per il riepilogo (3 mini-chart affiancati)."""
+    """Blocco SVG multi-trend per il riepilogo (3 mini-chart affiancati).
+
+    Ritorna un UNICO SVG valido (i chart annidati con offset x), cosi' puo'
+    essere servito come image/svg+xml e usato in <img src=...>.
+    """
     charts = []
     if weight_series:
         charts.append(line_chart(weight_series, labels, title="Peso (kg)", color="#0d9488"))
@@ -56,4 +60,14 @@ def trend_block(weight_series, fat_series, bia_series, labels=None):
         charts.append(line_chart(fat_series, labels, title="% grassa", color="#f59e0b"))
     if bia_series:
         charts.append(line_chart(bia_series, labels, title="BIA PhA (°)", color="#6366f1"))
-    return "".join(f'<div style="flex:1;min-width:200px">{c}</div>' for c in charts)
+    if not charts:
+        return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 140"><text x="10" y="70" fill="#64748b" font-size="12">Nessun dato</text></svg>'
+    W, H = 420, 140
+    inner = ""
+    for i, c in enumerate(charts):
+        # riusa il contenuto del chart come svg annidato con offset
+        c = c.replace("<svg ", f'<svg x="{i * W}" width="{W}" height="{H}" ', 1)
+        inner += c
+    total_w = W * len(charts)
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {total_w} {H}" '
+            f'width="100%" preserveAspectRatio="xMidYMid meet">{inner}</svg>')
