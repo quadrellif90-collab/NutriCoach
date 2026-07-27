@@ -101,7 +101,7 @@ tr:hover td{background:#f8fafc}
 <div class="nav-item" data-nav="archivio" onclick="switchNav('archivio')"><span class="ico">📁</span> Archivio</div>
 <div class="nav-item" data-nav="dieta" onclick="switchNav('dieta')"><span class="ico">🍽️</span> Dieta</div>
 <div class="spacer"></div>
-<div class="version">v1.6.8</div>
+<div class="version">v1.6.9</div>
 </div>
 <div class="main">
 <div class="topbar">
@@ -634,10 +634,39 @@ async function loadAnamnesi(){
   const conds=(a.conditions||[]).join(', ')||'—';
   const recs=a.recommendations||{};
   const recsArr=Array.isArray(recs)?recs:Object.values(recs||{});
-  p.innerHTML=`<div class="card"><b>Condizioni cliniche</b><br>${esc(conds)}</div>
+  p.innerHTML=`<div class="row" style="margin-bottom:8px"><b>🩺 Anamnesi clinica</b>
+<button class="btn primary" onclick="showAnamnesiForm()">✏️ Modifica</button></div>
+<div class="card"><b>Condizioni cliniche</b><br>${esc(conds)}</div>
 <div class="card"><b>Note anamnesi</b><br>${esc(a.notes||'—')}</div>
 <div class="card"><b>🎯 Raccomandazioni cliniche</b><div class="empty">${recsArr.length?'':'(nessuna)'}</div>
 ${recsArr.slice(0,3).map(r=>`<div style="margin:6px 0;padding:8px;background:#f8fafc;border-radius:6px;font-size:12px">${esc(typeof r==='string'?r:r.condition||r.key||JSON.stringify(r))}</div>`).join('')}</div>`;
+}
+
+async function showAnamnesiForm(){
+  let a={};
+  try{a=await jget('/api/clients/'+STATE.clientId+'/anamnesis');}catch(e){}
+  const sel=a.conditions||[];
+  const conds=await jget('/api/clinical-nutrition/conditions');
+  const all=conds.conditions||{};
+  const html=Object.keys(all).map(k=>{
+    const name=all[k].name||k; const on=sel.includes(k)?'checked':'';
+    return `<label class="chk" style="font-size:12px"><input type="checkbox" class="anam-cond" value="${k}" ${on}> ${name}</label>`;
+  }).join('');
+  modal(`<div class="card"><b>✏️ Modifica anamnesi</b>
+<label>Condizioni cliniche / sindromi</label>
+<div style="display:flex;flex-wrap:wrap;gap:6px;max-height:200px;overflow:auto;margin-bottom:8px">${html}</div>
+<label>Note anamnesi</label>
+<textarea id="anam-notes" rows="4" style="width:100%">${esc(a.notes||'')}</textarea>
+<div style="margin-top:10px;display:flex;gap:8px"><button class="btn primary" onclick="saveAnamnesi()">💾 Salva</button>
+<button class="btn outline" onclick="closeModal()">Annulla</button></div></div>`);
+}
+
+async function saveAnamnesi(){
+  const conds=Array.from(document.querySelectorAll('.anam-cond:checked')).map(c=>c.value);
+  const notes=$('anam-notes').value;
+  const r=await jpost('/api/clients/'+STATE.clientId+'/anamnesis',{conditions:conds,notes});
+  if(r&&r.ok){toast('Anamnesi salvata ✓');closeModal();loadAnamnesi();}
+  else toast('Errore salvataggio');
 }
 
 async function loadMisure(){
@@ -734,23 +763,42 @@ async function deleteFood(iid){
 }
 
 function showGenPlan(){
-  modal(`<div class="card"><b>✨ Genera piano automatico</b>
+  // carica condizioni cliniche dal client (anamnesi)
+  jget('/api/clients/'+STATE.clientId+'/anamnesis').then(a=>{
+    const sel=(a.conditions||[]);
+    modal(`<div class="card"><b>✨ Genera piano automatico</b>
 <div class="field-row"><div><label>kcal/die</label><input id="gp-kcal" type="number" value="2000"></div>
 <div><label>Proteine %</label><input id="gp-p" type="number" value="30"></div>
 <div><label>Carb %</label><input id="gp-c" type="number" value="45"></div>
 <div><label>Grassi %</label><input id="gp-f" type="number" value="25"></div></div>
 <label>Frequenza pasti</label><select id="gp-freq"><option value="3">3 (colazione/pranzo/cena)</option><option value="5" selected>5 (con spuntini)</option></select>
+<label style="margin-top:8px">Condizioni cliniche / sindromi (esclusioni automatiche FODMAP)</label>
+<div id="gp-conds" style="display:flex;flex-wrap:wrap;gap:6px;max-height:160px;overflow:auto">Caricamento...</div>
 <div style="margin-top:10px;display:flex;gap:8px"><button class="btn primary" onclick="genPlan()">⚡ Genera</button>
 <button class="btn outline" onclick="closeModal()">Annulla</button></div></div>`);
+    // popola condizioni da clinical-nutrition
+    jget('/api/clinical-nutrition/conditions').then(cl=>{
+      const conds=cl.conditions||{};
+      const keys=Object.keys(conds);
+      $('gp-conds').innerHTML=keys.map(k=>{
+        const name=conds[k].name||k; const on=sel.includes(k)?'checked':'';
+        return `<label class="chk" style="font-size:11px"><input type="checkbox" value="${k}" ${on}> ${name}</label>`;
+      }).join('');
+    }).catch(()=>{$('gp-conds').innerHTML='<i>errore caricamento condizioni</i>';});
+  });
 }
 
 async function genPlan(){
   const targets={kcal:parseFloat($('gp-kcal').value),protein_pct:parseFloat($('gp-p').value),carb_pct:parseFloat($('gp-c').value),fat_pct:parseFloat($('gp-f').value)};
-  const options={meals:parseInt($('gp-freq').value),days:['lun','mar','mer','gio','ven','sab','dom']};
+  const condInputs=document.querySelectorAll('#gp-conds input[type=checkbox]:checked');
+  const conditions=Array.from(condInputs).map(c=>c.value);
+  const options={meals:parseInt($('gp-freq').value),days:['lun','mar','mer','gio','ven','sab','dom'],conditions};
   closeModal();
   toast('Generazione...');
   const plan=await jpost('/api/clients/'+STATE.clientId+'/plan/generate',{targets,options});
-  if(plan&&plan.days){await applyPlan(plan);toast('Piano generato ✓');}
+  if(plan&&plan.days){await applyPlan(plan);
+    const ex=plan.clinical&&plan.clinical.excluded_foods?plan.clinical.excluded_foods.length:0;
+    toast('Piano generato ✓ ('+ex+' alimenti esclusi per sindromi)');}
   else toast('Errore generazione');
 }
 

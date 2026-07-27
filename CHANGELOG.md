@@ -1,4 +1,21 @@
 
+## [1.6.9] — 2026-07-27
+
+### BIA OCR reale (estrazione dati da PDF scansionati)
+- Installato Tesseract 5.4.0 + lingua italiana; bundlato nella cartella `tesseract/` (EXE include OCR)
+- Fix `ocr.py`: ricerca Tesseract di sistema + `TESSDATA_PREFIX` corretto
+- Fix `bia_parser.py`: parsing unità specifiche (TBW/ECW/ICW in litri `43.0L`, PhA in gradi `°`) + sanity-check (ECW 177→17.7)
+- Verificato sul PDF reale AKERN (`Report utente - F.Q.`): estrae peso/altezza/BMI/FM/FFM/TBW/ECW/ICW/SMM/ASMM
+
+### Dieta per sindromi (collegata al motore clinico)
+- `showGenPlan`: selezione condizioni cliniche (23 sindromi: IBS, SIBO, HIT, PCOS…)
+- `plan/generate` applica esclusioni FODMAP automatiche (avena, cavolfiore, ceci, lenticchie, mela…)
+- Raccomandazioni con fonti studi (PMC 2025, Lancet Gastro 2025)
+
+### Anamnesi modificabile
+- `showAnamnesiForm` + `saveAnamnesi`: form con 23 sindromi (checkbox) + note editabili
+- `PUT /api/clients/{cid}/anamnesis` già presente, ora usata dall'UI
+
 ## [1.6.8] — 2026-07-27
 
 ### BIA OCR — UI upload PDF (backend già pronto)

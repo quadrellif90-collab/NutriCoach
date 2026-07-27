@@ -32,7 +32,7 @@ import fitz  # PyMuPDF
 
 
 def _candidate_tesseract_dirs():
-    """Directory dove cercare il binario Tesseract bundlato."""
+    """Directory dove cercare il binario Tesseract bundlato O di sistema."""
     dirs = []
     # 1) dentro il bundle PyInstaller
     if getattr(sys, "frozen", False):
@@ -42,28 +42,44 @@ def _candidate_tesseract_dirs():
     here = os.path.dirname(os.path.abspath(__file__))
     dirs.append(os.path.join(here, "tesseract"))
     dirs.append(os.path.join(os.getcwd(), "tesseract"))
+    # 3) installazione di sistema (Windows: Program Files; Win/Linux/Mac PATH)
+    prog = os.environ.get("ProgramFiles", r"C:\Program Files")
+    dirs.append(os.path.join(prog, "Tesseract-OCR"))
+    dirs.append(os.path.join(prog + " (x86)", "Tesseract-OCR"))
+    # 4) PATH di sistema (pytesseract lo usa da solo se presente)
     return dirs
 
 
 def _find_tesseract():
-    """Ritorna (cmd_path, tessdata_dir) se Tesseract e' bundlato/disponibile."""
-    # se il binario di sistema e' gia' nel PATH, pytesseract lo usa da solo
-    if _HAVE_TESS:
-        try:
-            pytesseract.get_tesseract_version()
-            return (None, None)  # usa il default di sistema
-        except Exception:
-            pass
-    # altrimenti cerchiamo il bundle
+    """Ritorna (cmd_path, tessdata_dir) se Tesseract e' disponibile.
+
+    - Se il binario di sistema e' nel PATH, ritorna (None, system_tessdata_dir)
+      cosi' pytesseract lo usa ma noi impostiamo TESSDATA_PREFIX corretto.
+    - Altrimenti cerca un bundle/installazione in _candidate_tesseract_dirs().
+    """
+    # 1) bundle / installazione esplicita (anche fuori dal PATH)
     for d in _candidate_tesseract_dirs():
         if not os.path.isdir(d):
             continue
-        # windows: tesseract.exe ; altre: tesseract
         for name in ("tesseract.exe", "tesseract"):
             cmd = os.path.join(d, name)
             if os.path.isfile(cmd):
-                tessdata = os.path.join(d, "tessdata")
-                return (cmd, tessdata if os.path.isdir(tessdata) else None)
+                td = os.path.join(d, "tessdata")
+                return (cmd, td if os.path.isdir(td) else None)
+    # 2) fallback: binario di sistema nel PATH (pytesseract lo usa da solo)
+    if _HAVE_TESS:
+        try:
+            pytesseract.get_tesseract_version()
+            # prova a indovinare il tessdata di sistema
+            import shutil
+            tp = shutil.which("tesseract")
+            if tp:
+                d = os.path.dirname(tp)
+                td = os.path.join(d, "tessdata")
+                return (tp, td if os.path.isdir(td) else None)
+            return (None, None)
+        except Exception:
+            pass
     return (None, None)
 
 
@@ -75,8 +91,14 @@ def _configure_tesseract():
     try:
         if cmd:
             pytesseract.pytesseract.tesseract_cmd = cmd
+        # TESSDATA_PREFIX deve puntare alla CARTELLA GENITORE di tessdata
+        # (es. C:\Program Files\Tesseract-OCR  se tessdata sta dentro)
         if tessdata:
+            # TESSDATA_PREFIX deve puntare ALLA cartella che contiene i
+            # file .traineddata (es. C:\Program Files\Tesseract-OCR\tessdata)
             os.environ["TESSDATA_PREFIX"] = tessdata
+        # se non abbiamo un bundle ma tesseract e' nel PATH di sistema,
+        # lasciamo che pytesseract lo risolva da solo (il suo default e' ok)
         # verifica che risponda
         pytesseract.get_tesseract_version()
         return True

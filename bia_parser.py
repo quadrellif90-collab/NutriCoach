@@ -71,11 +71,13 @@ def parse_bia_text(text: str) -> dict:
     - una o piu righe, anche tutto su un'unica riga (PDF a 2 colonne, copia
       di un blob);
     - valori tra parentesi: "Peso (kg) (75.2)";
-    - unita attaccate al numero: "75.2kg";
+    - unita attaccate al numero: "75.2kg", "43.0L", "74°";
     - varianti italiane/inglesi delle label.
+    Per i campi con unita ambigue (TBW/ECW/ICW in litri, PhA in gradi) si
+    preferisce il numero seguito DALL'UNITA' corretta, ignorando le
+    percentuali o i rapporti che confondono il parser.
     """
     out = {"fields": {}, "raw_lines": 0}
-    # normalizza: minuscolo, accentati->ascii, virgola decimale->punto
     norm = _norm(text)
     out["raw_lines"] = len([l for l in text.splitlines() if l.strip()])
 
@@ -84,20 +86,32 @@ def parse_bia_text(text: str) -> dict:
         if field in out["fields"]:
             continue
         for p in patterns:
-            # confine di parola; le pattern con spazi interni restano intere
             pat = r"(?<![a-z])" + re.escape(p.strip()) + r"(?![a-z])"
             for m in re.finditer(pat, norm):
-                # cerca il numero nei prossimi ~30 char, anche tra parentesi;
-                # il numero NON deve essere preceduto da una lettera (es. "m2",
-                # "kg", "°" sono parti d'unita', non valori)
                 after = norm[m.end(): m.end() + 30]
-                nm = re.search(r"\(?\s*(?<![a-z0-9.])(\d+(?:\.\d+)?)", after)
+                if field in ("tbw", "ecw", "icw"):
+                    # preferisci numero seguito da 'l' (litri): "43.0l", "17.7l"
+                    nm = re.search(r"\(?\s*(\d+(?:\.\d+)?)\s*[lL]\b", after)
+                elif field == "pha":
+                    # preferisci numero seguito da '°' o 'deg': "6.8°"
+                    nm = re.search(r"\(?\s*(\d+(?:\.\d+)?)\s*[°\u00b0]|\(\s*(\d+(?:\.\d+)?)\s*deg", after)
+                else:
+                    nm = re.search(r"\(?\s*(?<![a-z0-9.])(\d+(?:\.\d+)?)", after)
                 if nm:
                     val = float(nm.group(1))
                     out["fields"][field] = val
                     break
             if field in out["fields"]:
                 break
+    # Sanity-check post-estrazione: alcuni valori OCR su PDF AKERN/Biavector
+    # hanno rumore (es. ECW letto come 177 invece di 17.7). Se ECW > TBW,
+    # probabilmente e' uno 0 mancante: correggiamo come TBW - ICW quando possibile.
+    f = out["fields"]
+    if f.get("tbw") and f.get("icw") and f.get("ecw") and f["ecw"] > f["tbw"]:
+        f["ecw"] = round(f["tbw"] - f["icw"], 1)
+    # PhA tipicamente 3-12 gradi; se fuori range, scartiamo (rumore OCR)
+    if f.get("pha") is not None and (f["pha"] > 20 or f["pha"] < 1):
+        f.pop("pha", None)
     return out
 
 
