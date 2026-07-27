@@ -379,8 +379,14 @@ def update_client(cid, **fields):
 
 def delete_client(cid):
     conn = _ensure(); cur = conn.cursor()
+    cur.execute("SELECT id FROM clients WHERE id=?", (cid,))
+    if not cur.fetchone():
+        conn.close()
+        return 0
     cur.execute("DELETE FROM clients WHERE id=?", (cid,))
+    n = cur.rowcount
     conn.commit(); conn.close()
+    return n
 
 
 # ---------------- Measurements ----------------
@@ -871,8 +877,14 @@ def delete_symptom(sid):
 # ---------------- Client CRUD (nuovo) ----------------
 def delete_client(cid):
     conn = _ensure(); cur = conn.cursor()
+    cur.execute("SELECT id FROM clients WHERE id=?", (cid,))
+    if not cur.fetchone():
+        conn.close()
+        return 0
     cur.execute("DELETE FROM clients WHERE id=?", (cid,))
+    n = cur.rowcount
     conn.commit(); conn.close()
+    return n
 
 
 def add_category(name, color="#6366f1", desc=""):

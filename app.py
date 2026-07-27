@@ -39,7 +39,7 @@ import version
 UPLOAD_DIR = os.path.join(database.DATA_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-app = FastAPI(title="NutriCoach", version="1.6.1")
+app = FastAPI(title="NutriCoach", version="1.6.2")
 
 app.add_middleware(
     CORSMiddleware,
@@ -700,7 +700,7 @@ async def api_appt_update(aid: int, request: Request):
     database.update_appointment(aid, **b)
     return {"ok": True}
 
-@app.put("/api/appointments/{aid}/done")
+@app.post("/api/appointments/{aid}/done")
 async def api_appt_done(aid: int, request: Request):
     b = await request.json()
     database.set_appointment_done(aid, int(b.get("done", 1)))
@@ -1011,7 +1011,8 @@ def api_client_get(cid: int):
 
 @app.delete("/api/clients/{cid}")
 def api_client_delete(cid: int):
-    database.delete_client(cid)
+    if not database.delete_client(cid):
+        raise HTTPException(status_code=404, detail="Client not found")
     return {"ok": True}
 
 
@@ -1558,7 +1559,8 @@ def api_food_analysis(food_name: str):
 # --- Client delete + categoria ---
 @app.delete("/api/clients/{cid}")
 def api_client_delete(cid: int):
-    database.delete_client(cid)
+    if not database.delete_client(cid):
+        raise HTTPException(status_code=404, detail="Client not found")
     return {"ok": True}
 
 

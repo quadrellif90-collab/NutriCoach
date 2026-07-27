@@ -1,4 +1,12 @@
 
+## [1.6.2] — 2026-07-27
+
+### Fix test autonomo post-1.6.1 (4 bug risolti)
+- **`DELETE /api/clients/{cid}`**: ora ritorna `404` se il paziente non esiste (prima `200` silenzioso)
+- **Chiusura appuntamento**: endpoint `/api/appointments/{aid}/done` cambiato da `PUT` → `POST` (il client usa `jpost` che fa POST)
+- **`saveAppt` in modifica**: rimossa doppia chiamata spuria (POST inutile + PUT reale)
+- **Duplicazioni rimosse**: due `delete_client` in `db.py` e due `api_client_delete` in `app.py` (conflitto router)
+
 ## [1.6.1] — 2026-07-27
 
 ### Agenda completa con stato, follow-up, outcome
