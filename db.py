@@ -803,6 +803,12 @@ def list_progress_notes(cid):
     conn.close(); return rows
 
 
+def delete_progress_note(nid):
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("DELETE FROM progress_notes WHERE id=?", (nid,))
+    conn.commit(); conn.close()
+
+
 # ---------------- Symptom Log (diario sintomi GI) ----------------
 def add_symptom(cid, date, time=None, bloating=0, pain=0, gas=0, nausea=0,
                 heartburn=0, constipation=0, diarrhea=0, brain_fog=0, fatigue=0,

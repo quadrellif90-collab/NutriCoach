@@ -88,7 +88,7 @@ tr:hover td{background:#f8fafc}
 <div class="nav-item" data-nav="archivio" onclick="switchNav('archivio')"><span class="ico">📁</span> Archivio</div>
 <div class="nav-item" data-nav="dieta" onclick="switchNav('dieta')"><span class="ico">🍽️</span> Dieta</div>
 <div class="spacer"></div>
-<div class="version">v1.6.4</div>
+<div class="version">v1.6.5</div>
 </div>
 <div class="main">
 <div class="topbar">
@@ -115,6 +115,14 @@ function jdel(u){return fetch(API+u,{method:'DELETE'}).then(r=>r.json())}
 function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function init(n){return (n||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}
 function today(){return new Date().toISOString().slice(0,10)}
+function trendSVG(values){
+  if(!values||values.length<2) return '';
+  const w=300,h=80,pad=10;
+  const min=Math.min(...values),max=Math.max(...values);
+  const range=(max-min)||1;
+  const pts=values.map((v,i)=>`${(pad+i*(w-2*pad)/(values.length-1)).toFixed(1)},${(h-pad-(v-min)/range*(h-2*pad)).toFixed(1)}`).join(' ');
+  return `<svg width="100%" viewBox="0 0 ${w} ${h}" style="background:var(--bg-card);border-radius:8px;margin-top:6px"><polyline points="${pts}" fill="none" stroke="var(--primary)" stroke-width="2"/><text x="${pad}" y="12" fill="var(--text-muted)" font-size="10">${max}</text><text x="${pad}" y="${h-2}" fill="var(--text-muted)" font-size="10">${min}</text></svg>`;
+}
 function clr(){return ['#10b981','#6366f1','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#06b6d4'][Math.floor(Math.random()*9)]}
 
 /* ============ NAV ============ */
@@ -643,7 +651,55 @@ async function loadAppuntamenti(){
 }
 
 async function loadSintomi(){
-  $('patient-pane').innerHTML=`<div class="empty">🩺 Sintomi (in arrivo)</div>`;
+  const[resp,sum]=await Promise.all([
+    jget('/api/clients/'+STATE.clientId+'/symptoms?limit=50'),
+    jget('/api/clients/'+STATE.clientId+'/symptoms/summary?days=30').catch(()=>({}))
+  ]);
+  const list=(resp&&resp.symptoms)||resp||[];
+  const score=sum.score||0;
+  const syms=['bloating','pain','gas','nausea','heartburn','constipation','diarrhea','brain_fog','fatigue'];
+  $('patient-pane').innerHTML=`
+<div class="row" style="margin-bottom:8px"><b>🩺 Diario sintomi GI</b>
+<button class="btn primary" onclick="showSintomoForm()">➕ Nuovo</button></div>
+<div class="card"><b>📊 Indice benessere (30gg)</b>
+<div class="progress"><div class="bar" style="width:${100-score}%"></div></div>
+<div class="meta">Score ${score}/100 ${score<50?'· ⚠️ attenzione':''}</div>
+<div class="row">${syms.map(s=>`<span class="badge">${s}: ${sum['avg_'+s]!=null?sum['avg_'+s].toFixed(1):0}</span>`).join('')}</div>
+</div>
+<div class="card"><b>📋 Registrazioni</b>
+${list.map(s=>`<div class="patient-card"><div class="info"><b>${s.date} ${s.time||''}</b><div class="meta">Bristol ${s.bristol_scale||'-'} · ${[s.bloating&&'Gonfiore',s.pain&&'Dolore',s.gas&&'Gas',s.nausea&&'Nausea',s.diarrhea&&'Diarrea',s.constipation&&'Stipsi',s.brain_fog&&'Nebbia',s.fatigue&&'Affaticamento'].filter(Boolean).join(', ')||'nessun sintomo'}</div>${s.foods_eaten?'<div class="meta">Cibi: '+esc(s.foods_eaten)+'</div>':''}</div>
+<button class="btn sm outline" onclick="deleteSintomo(${s.id})">✕</button></div>`).join('')||'<div class="empty">Nessuna registrazione</div>'}
+</div>`;
+}
+
+function showSintomoForm(){
+  const syms=['bloating','pain','gas','nausea','heartburn','constipation','diarrhea','brain_fog','fatigue'];
+  modal(`<div class="card"><b>➕ Nuovo sintomo</b>
+<div class="field-row"><div><label>Data</label><input type="date" id="sy-date" value="${today()}"></div>
+<div><label>Ora</label><input type="time" id="sy-time" value="12:00"></div>
+<div><label>Bristol</label><input id="sy-bristol" type="number" min="1" max="7" placeholder="1-7"></div></div>
+<div><b>Sintomi (0-3)</b>${syms.map(s=>`<div class="field-row"><label>${s}</label><input id="sy-${s}" type="number" min="0" max="3" value="0" style="width:60px"></div>`).join('')}
+<label>Note / Cibi assunti</label><textarea id="sy-note" rows="2"></textarea>
+<div style="margin-top:10px;display:flex;gap:8px"><button class="btn primary" onclick="saveSintomo()">💾 Salva</button>
+<button class="btn outline" onclick="closeModal()">Annulla</button></div></div>`);
+}
+
+async function saveSintomo(){
+  const syms={};
+  ['bloating','pain','gas','nausea','heartburn','constipation','diarrhea','brain_fog','fatigue'].forEach(s=>{
+    syms[s]=parseInt($('sy-'+s).value||0);
+  });
+  const body={date:$('sy-date').value,time:$('sy-time').value,
+    bristol_scale:$('sy-bristol').value?parseInt($('sy-bristol').value):null,
+    foods_eaten:$('sy-note').value,...syms};
+  const r=await jpost('/api/clients/'+STATE.clientId+'/symptoms',body);
+  if(r&&r.id){toast('Salvato ✓');closeModal();loadSintomi();}else toast('Errore');
+}
+
+async function deleteSintomo(sid){
+  if(!confirm('Eliminare?'))return;
+  await jdel('/api/symptoms/'+sid);
+  loadSintomi();
 }
 
 async function loadGruppi(){
@@ -655,7 +711,43 @@ ${all.map(g=>`<label class="row" style="cursor:pointer;padding:4px 0"><input typ
 }
 
 async function loadProgressi(){
-  $('patient-pane').innerHTML=`<div class="empty">📈 Progressi (in arrivo)</div>`;
+  const[notes,ms,bia]=await Promise.all([
+    jget('/api/clients/'+STATE.clientId+'/progress-notes'),
+    jget('/api/clients/'+STATE.clientId+'/measurements'),
+    jget('/api/clients/'+STATE.clientId+'/bia-readings')
+  ]);
+  // trend peso unificato
+  const series=[...ms.map(m=>({d:m.date,w:m.weight_kg})),...bia.map(b=>({d:b.date,w:b.weight_kg}))]
+    .filter(x=>x.w).sort((a,b)=>a.d<b.d?-1:1);
+  const svg=trendSVG(series.map(s=>s.w));
+  $('patient-pane').innerHTML=`
+<div class="row" style="margin-bottom:8px"><b>📈 Progressi</b>
+<button class="btn primary" onclick="showProgressForm()">➕ Nota</button></div>
+<div class="card"><b>📉 Andamento peso</b>${svg||'<div class="empty">Nessun dato</div>'}</div>
+<div class="card"><b>📝 Note di progresso</b>
+${notes.map(n=>`<div class="patient-card"><div class="info"><b>${n.date}</b><div class="meta">${esc(n.text)}</div></div>
+<button class="btn sm outline" onclick="deleteProgress(${n.id})">✕</button></div>`).join('')||'<div class="empty">Nessuna nota</div>'}
+</div>`;
+}
+
+function showProgressForm(){
+  modal(`<div class="card"><b>➕ Nota di progresso</b>
+<div class="field-row"><div><label>Data</label><input type="date" id="pr-date" value="${today()}"></div></div>
+<label>Testo</label><textarea id="pr-text" rows="3" placeholder="Es. peso stabile, più energia..."></textarea>
+<div style="margin-top:10px;display:flex;gap:8px"><button class="btn primary" onclick="saveProgress()">💾 Salva</button>
+<button class="btn outline" onclick="closeModal()">Annulla</button></div></div>`);
+}
+
+async function saveProgress(){
+  const body={date:$('pr-date').value,text:$('pr-text').value};
+  const r=await jpost('/api/clients/'+STATE.clientId+'/progress-note',body);
+  if(r&&r.id){toast('Salvato ✓');closeModal();loadProgressi();}else toast('Errore');
+}
+
+async function deleteProgress(pid){
+  if(!confirm('Eliminare?'))return;
+  await jdel('/api/clients/'+STATE.clientId+'/progress-note/'+pid);
+  loadProgressi();
 }
 
 /* ============ INIT ============ */

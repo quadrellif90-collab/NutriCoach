@@ -39,7 +39,7 @@ import version
 UPLOAD_DIR = os.path.join(database.DATA_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-app = FastAPI(title="NutriCoach", version="1.6.4")
+app = FastAPI(title="NutriCoach", version="1.6.5")
 
 app.add_middleware(
     CORSMiddleware,
@@ -735,6 +735,11 @@ async def api_prognote_add(cid: int, request: Request):
 @app.get("/api/clients/{cid}/progress-notes")
 def api_prognote_list(cid: int):
     return database.list_progress_notes(cid)
+
+@app.delete("/api/clients/{cid}/progress-note/{nid}")
+def api_prognote_del(cid: int, nid: int):
+    database.delete_progress_note(nid)
+    return {"ok": True}
 
 
 # ---------------- Clients ----------------

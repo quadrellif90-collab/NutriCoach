@@ -1,4 +1,13 @@
 
+## [1.6.5] — 2026-07-27
+
+### Tab Sintomi + Progressi (completamento scheda paziente)
+- **Tab Sintomi** (🩺 diario GI): indice benessere 30gg, medie 9 sintomi, form inserimento (Bristol, ora, cibi), eliminazione
+- **Tab Progressi** (📈): trend peso SVG unificato (misure + BIA), note di progresso, eliminazione
+- **Helper** `trendSVG()` per grafici SVG riusabili
+- **Endpoint**: `DELETE /api/clients/{cid}/progress-note/{nid}`, `delete_progress_note()` in db.py
+- **Bug fixati**: endpoint `/symptoms` ritorna `{"symptoms":[]}` (dict) → `.symptoms||[]`; summary usa `avg_*` non campo diretto; spread `...syms` non `**syms`
+
 ## [1.6.4] — 2026-07-27
 
 ### Notifiche + Tab Misure (2 feature richieste)
