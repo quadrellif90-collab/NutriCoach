@@ -32,20 +32,25 @@ import fitz  # PyMuPDF
 
 
 def _candidate_tesseract_dirs():
-    """Directory dove cercare il binario Tesseract bundlato O di sistema."""
+    """Directory dove cercare il binario Tesseract bundlato O di sistema.
+
+    Risoluzione DETERMINISTICA e indipendente dall'ambiente (PATH/cwd/env):
+    proviamo percorsi espliciti Windows noti, il bundle PyInstaller e la
+    directory sorgente, in modo che l'OCR funzioni sia in dev che nell'EXE.
+    """
     dirs = []
-    # 1) dentro il bundle PyInstaller
+    # 1) bundle PyInstaller (EXE: sys._MEIPASS/tesseract)
     if getattr(sys, "frozen", False):
         base = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
         dirs.append(os.path.join(base, "tesseract"))
-    # 2) directory corrente / sorgente
+    # 2) installazioni di sistema Windows (esplicite, NON dipendono da %ProgramFiles%)
+    for root in (r"C:\Program Files", r"C:\Program Files (x86)",
+                 r"C:\Tesseract-OCR", r"C:\Tesseract"):
+        dirs.append(os.path.join(root, "Tesseract-OCR"))
+    # 3) directory sorgente / cwd (dev: ./tesseract bundlato in repo)
     here = os.path.dirname(os.path.abspath(__file__))
     dirs.append(os.path.join(here, "tesseract"))
     dirs.append(os.path.join(os.getcwd(), "tesseract"))
-    # 3) installazione di sistema (Windows: Program Files; Win/Linux/Mac PATH)
-    prog = os.environ.get("ProgramFiles", r"C:\Program Files")
-    dirs.append(os.path.join(prog, "Tesseract-OCR"))
-    dirs.append(os.path.join(prog + " (x86)", "Tesseract-OCR"))
     # 4) PATH di sistema (pytesseract lo usa da solo se presente)
     return dirs
 
@@ -84,21 +89,19 @@ def _find_tesseract():
 
 
 def _configure_tesseract():
-    """Configura pytesseract se troviamo un bundle; ritorna True se utilizzabile."""
+    """Configura pytesseract se troviamo Tesseract; ritorna True se utilizzabile."""
     if not _HAVE_TESS or not _HAVE_PIL:
         return False
     cmd, tessdata = _find_tesseract()
     try:
         if cmd:
             pytesseract.pytesseract.tesseract_cmd = cmd
-        # TESSDATA_PREFIX deve puntare alla CARTELLA GENITORE di tessdata
-        # (es. C:\Program Files\Tesseract-OCR  se tessdata sta dentro)
-        if tessdata:
-            # TESSDATA_PREFIX deve puntare ALLA cartella che contiene i
-            # file .traineddata (es. C:\Program Files\Tesseract-OCR\tessdata)
+        # TESSDATA_PREFIX deve puntare ALLA cartella che contiene i
+        # file .traineddata (es. C:\Program Files\Tesseract-OCR\tessdata).
+        # Lo impostiamo SEMPRE se abbiamo trovato tessdata, così l'OCR non
+        # dipende da variabili d'ambiente o dal PATH del processo chiamante.
+        if tessdata and os.path.isdir(tessdata):
             os.environ["TESSDATA_PREFIX"] = tessdata
-        # se non abbiamo un bundle ma tesseract e' nel PATH di sistema,
-        # lasciamo che pytesseract lo risolva da solo (il suo default e' ok)
         # verifica che risponda
         pytesseract.get_tesseract_version()
         return True

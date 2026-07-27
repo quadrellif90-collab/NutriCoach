@@ -54,6 +54,8 @@ body{background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
 .diet-item{font-size:11px;background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:3px 6px;margin-bottom:3px;display:flex;justify-content:space-between;align-items:center;gap:4px}
 .diet-item .x{border:none;background:none;color:var(--danger);cursor:pointer;font-size:10px;padding:0 2px}
 .diet-empty{height:6px}
+.diet-alt{font-size:10px;color:var(--muted);font-style:italic;margin:-1px 0 3px 2px}
+.active-client{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px}
 @media(max-width:900px){.diet-grid{grid-template-columns:repeat(3,1fr)}}
 .cmp-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}
 .cmp-table th,.cmp-table td{border:1px solid var(--border);padding:6px 8px;text-align:left}
@@ -101,11 +103,15 @@ tr:hover td{background:#f8fafc}
 <div class="nav-item" data-nav="archivio" onclick="switchNav('archivio')"><span class="ico">📁</span> Archivio</div>
 <div class="nav-item" data-nav="dieta" onclick="switchNav('dieta')"><span class="ico">🍽️</span> Dieta</div>
 <div class="spacer"></div>
-<div class="version">v1.6.9</div>
+<div class="version">v1.7.0</div>
 </div>
 <div class="main">
 <div class="topbar">
 <h1 id="page-title">Dashboard</h1>
+<div id="active-client" class="active-client" style="display:none">
+  <span id="ac-name"></span>
+  <button class="btn outline sm" onclick="returnToDashboard()">← Dashboard</button>
+</div>
 <div class="search"><input id="global-search" placeholder="Cerca paziente..." oninput="onSearch(this.value)"></div>
 <button class="btn primary" onclick="openNewClient()">+ Nuovo</button>
 <div class="avatar">N</div>
@@ -117,8 +123,18 @@ tr:hover td{background:#f8fafc}
 <div id="modal-root"></div>
 
 <script>
-const API="";const V="1.6.0";
-let STATE={nav:"dashboard",clients:[],clientId:null,categories:[],groups:[]};
+const API="";const V="1.7.0";
+let STATE={nav:"dashboard",clients:[],clientId:null,categories:[],groups:[],name:null,weight:null,email:null,phone:null,dirty:false};
+let MODAL_OPEN=false;
+window.addEventListener("beforeunload",function(e){
+  // se c'e' lavoro non salvato (modifica paziente) o una modale aperta, chiedi conferma
+  if(STATE.dirty || MODAL_OPEN){
+    e.preventDefault();e.returnValue="";
+    return "Ci sono modifiche non salvate. Salvare prima di uscire?";
+  }
+});
+function markDirty(){STATE.dirty=true;}
+function clearDirty(){STATE.dirty=false;}
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600)}
 function $(id){return document.getElementById(id)}
 function jget(u){return fetch(API+u).then(r=>r.json())}
@@ -416,18 +432,20 @@ async function bulkNotifiche(){
 /* ============ BIA HUB ============ */
 async function loadBIA(){
   const clients=STATE.clients.length?STATE.clients:await jget('/api/clients');
+  const cur=STATE.clientId||'';
   $('view').innerHTML=`
 <div class="row" style="margin-bottom:10px">
   <b>🔬 BIA & Misure</b>
   <select id="bia-client" onchange="loadBIAReading()" style="width:auto;max-width:200px">
     <option value="">Seleziona paziente...</option>
-    ${clients.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}
+    ${clients.map(c=>`<option value="${c.id}" ${c.id===cur?'selected':''}>${esc(c.name)}</option>`).join('')}
   </select>
   <button class="btn primary" onclick="showBIAForm()">➕ Nuova misurazione</button>
   <button class="btn outline" onclick="uploadBIA()">📄 Carica PDF</button>
   <button class="btn outline" onclick="$('bia-client').value='';$('view').innerHTML='<div class=empty>Seleziona un paziente</div>'">Pulisci</button>
 </div>
 <div id="bia-view"><div class="empty">👆 Seleziona un paziente per vedere le misurazioni BIA</div></div>`;
+  if(cur){loadBIAReading();}
 }
 
 function uploadBIA(){
@@ -437,13 +455,15 @@ function uploadBIA(){
   inp.type='file';inp.accept='.pdf';
   inp.onchange=async()=>{
     const f=inp.files[0];if(!f)return;
-    toast('Estrazione dati...');
+    toast('Estrazione dati BIA in corso (può richiedere ~20s)...');
     const fd=new FormData();fd.append('file',f);
-    const r=await fetch(API+'/api/clients/'+cid+'/bia/upload',{method:'POST',body:fd});
-    const j=await r.json();
-    if(j.scanned){toast('PDF scansionato: copia il testo manualmente');modalOCRPages(j.pages);return;}
-    if(j.bia_id){toast('BIA importata ✓');loadBIAReading();}
-    else toast('Errore import');
+    try{
+      const r=await fetch(API+'/api/clients/'+cid+'/bia/upload',{method:'POST',body:fd});
+      const j=await r.json();
+      if(j.scanned){toast('PDF scansionato: copia il testo manualmente');modalOCRPages(j.pages);return;}
+      if(j.bia_id){toast('BIA importata ✓ (peso '+(j.fields&&j.fields.peso||'?')+' kg)');loadBIAReading();}
+      else toast('Errore import');
+    }catch(e){ toast('Errore di rete durante l\'upload'); }
   };
   inp.click();
 }
@@ -572,9 +592,10 @@ function uploadDoc(){
 
 /* ============ MODAL ============ */
 function modal(body){
+  MODAL_OPEN=true;
   $('modal-root').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-head"><span>NutriCoach</span><button onclick="closeModal()">✕</button></div><div class="modal-body">${body}</div></div></div>`;
 }
-function closeModal(){$('modal-root').innerHTML=''}
+function closeModal(){$('modal-root').innerHTML='';MODAL_OPEN=false;}
 
 /* ============ CLIENT OPEN ============ */
 function onSearch(q){
@@ -585,11 +606,15 @@ function onSearch(q){
 async function openPatient(cid){
   STATE.clientId=cid;
   const c=await jget('/api/clients/'+cid);
+  STATE.name=c.name; STATE.weight=c.weight_kg||c.weight||null; STATE.email=c.email; STATE.phone=c.phone;
   const groups=await jget('/api/clients/'+cid+'/groups');
   const cats=STATE.categories.length?STATE.categories:await jget('/api/categories');
   const cat=cats.find(x=>x.id===c.category_id);
   STATE.nav='dashboard';
   setActiveNav('dashboard');
+  // indicatore cliente attivo + ritorno dashboard
+  $('active-client').style.display='flex';
+  $('ac-name').textContent='👤 '+esc(c.name);
   $('page-title').textContent=esc(c.name);
   $('view').innerHTML=`
 <div class="card">
@@ -611,6 +636,17 @@ async function openPatient(cid){
 </div>
 <div id="patient-pane"></div>`;
   switchPatientTab(document.querySelector('#patient-tabs .tab-btn'),'anamnesi');
+}
+
+function returnToDashboard(){
+  // se ci sono modifiche non salvate, chiedi conferma prima di uscire dal paziente
+  if(STATE.dirty){
+    if(!confirm('Ci sono modifiche non salvate. Tornare alla Dashboard senza salvare?')) return;
+  }
+  STATE.clientId=null; STATE.dirty=false;
+  $('active-client').style.display='none';
+  setActiveNav('dashboard');
+  switchNav('dashboard');
 }
 
 function switchPatientTab(el,tab){
@@ -656,7 +692,7 @@ async function showAnamnesiForm(){
 <label>Condizioni cliniche / sindromi</label>
 <div style="display:flex;flex-wrap:wrap;gap:6px;max-height:200px;overflow:auto;margin-bottom:8px">${html}</div>
 <label>Note anamnesi</label>
-<textarea id="anam-notes" rows="4" style="width:100%">${esc(a.notes||'')}</textarea>
+<textarea id="anam-notes" rows="4" style="width:100%" oninput="markDirty()">${esc(a.notes||'')}</textarea>
 <div style="margin-top:10px;display:flex;gap:8px"><button class="btn primary" onclick="saveAnamnesi()">💾 Salva</button>
 <button class="btn outline" onclick="closeModal()">Annulla</button></div></div>`);
 }
@@ -665,7 +701,7 @@ async function saveAnamnesi(){
   const conds=Array.from(document.querySelectorAll('.anam-cond:checked')).map(c=>c.value);
   const notes=$('anam-notes').value;
   const r=await jpost('/api/clients/'+STATE.clientId+'/anamnesis',{conditions:conds,notes});
-  if(r&&r.ok){toast('Anamnesi salvata ✓');closeModal();loadAnamnesi();}
+  if(r&&r.ok){toast('Anamnesi salvata ✓');closeModal();clearDirty();loadAnamnesi();}
   else toast('Errore salvataggio');
 }
 
@@ -698,7 +734,7 @@ function showMisuraForm(){
 <div><label>Plica bicipite (mm)</label><input id="ms-bi" type="number" step="0.1"></div></div>
 <div class="field-row"><div><label>Plica sottoscapolare (mm)</label><input id="ms-sub" type="number" step="0.1"></div>
 <div><label>Plica sovrailiaca (mm)</label><input id="ms-sup" type="number" step="0.1"></div></div>
-<label>Note</label><textarea id="ms-note" rows="2"></textarea>
+<label>Note</label><textarea id="ms-note" rows="2" oninput="markDirty()"></textarea>
 <div style="margin-top:10px;display:flex;gap:8px"><button class="btn primary" onclick="saveMisura()">💾 Salva</button>
 <button class="btn outline" onclick="closeModal()">Annulla</button></div></div>`);
 }
@@ -715,7 +751,7 @@ async function saveMisura(){
     note: v('ms-note')
   };
   const r = await jpost('/api/clients/'+STATE.clientId+'/measurements', body);
-  if(r && r.id){ toast('Misura salvata ✓'); closeModal(); loadMisure(); }
+  if(r && r.id){ toast('Misura salvata ✓'); closeModal(); clearDirty(); loadMisure(); }
   else toast('Errore salvataggio');
 }
 
@@ -734,10 +770,14 @@ async function loadDieta(){
   $('patient-pane').innerHTML=`
 <div class="row" style="margin-bottom:8px"><b>🍽️ Diario alimentare</b>
 <button class="btn primary" onclick="showGenPlan()">✨ Genera piano</button>
-<button class="btn outline" onclick="showAddFood()" >➕ Aggiungi</button></div>
+<button class="btn outline" onclick="showAddFood()">➕ Aggiungi</button></div>
 <div class="diet-grid">${DIET_DAYS.map(d=>`
 <div class="diet-day"><b>${d.toUpperCase()}</b>${DIET_MEALS.map(([mk,ml])=>`
-<div class="diet-meal"><span class="meal-label">${ml}</span>${((byKey[d+'|'+mk])||[]).map(it=>`<div class="diet-item">${esc(it.food)} ${it.grams?it.grams+'g':''}<button class="x" onclick="deleteFood(${it.id})">✕</button></div>`).join('')||'<div class="diet-empty"></div>'}</div>`).join('')}</div>`).join('')}</div>`;
+<div class="diet-meal"><span class="meal-label">${ml}</span>${((byKey[d+'|'+mk])||[]).map(it=>{
+  let alts=[]; try{alts=it.alts?JSON.parse(it.alts):[];}catch(e){alts=[];}
+  const altHtml=alts.length?`<div class="diet-alt">o ${alts.map(a=>esc(a)).join(' · o ')}</div>`:'';
+  return `<div class="diet-item">${esc(it.food)} ${it.grams?it.grams+'g':''}${altHtml}<button class="x" onclick="deleteFood(${it.id})">✕</button></div>`;
+}).join('')||'<div class="diet-empty"></div>'}</div>`).join('')}</div>`).join('')}</div>`;
 }
 
 function showAddFood(){
@@ -767,6 +807,10 @@ function showGenPlan(){
   jget('/api/clients/'+STATE.clientId+'/anamnesis').then(a=>{
     const sel=(a.conditions||[]);
     modal(`<div class="card"><b>✨ Genera piano automatico</b>
+<label>Protocollo di dieta (preset basati su studi)</label>
+<select id="gp-preset" onchange="onPresetChange()">
+  <option value="">— Manuale —</option>
+</select>
 <div class="field-row"><div><label>kcal/die</label><input id="gp-kcal" type="number" value="2000"></div>
 <div><label>Proteine %</label><input id="gp-p" type="number" value="30"></div>
 <div><label>Carb %</label><input id="gp-c" type="number" value="45"></div>
@@ -776,6 +820,14 @@ function showGenPlan(){
 <div id="gp-conds" style="display:flex;flex-wrap:wrap;gap:6px;max-height:160px;overflow:auto">Caricamento...</div>
 <div style="margin-top:10px;display:flex;gap:8px"><button class="btn primary" onclick="genPlan()">⚡ Genera</button>
 <button class="btn outline" onclick="closeModal()">Annulla</button></div></div>`);
+    // popola preset protocolli
+    jget('/api/diet-presets').then(pr=>{
+      const presets=pr.presets||[];
+      const sel=$('gp-preset');
+      presets.forEach(p=>{
+        const o=document.createElement('option');o.value=p.key;o.textContent=p.label;sel.appendChild(o);
+      });
+    }).catch(()=>{});
     // popola condizioni da clinical-nutrition
     jget('/api/clinical-nutrition/conditions').then(cl=>{
       const conds=cl.conditions||{};
@@ -788,17 +840,31 @@ function showGenPlan(){
   });
 }
 
+function onPresetChange(){
+  const key=$('gp-preset').value;
+  if(!key)return;
+  const kcal=parseFloat($('gp-kcal').value)||2000;
+  jpost('/api/diet-presets/targets',{key,kcal,weight_kg:STATE.weight||null}).then(t=>{
+    if(t&&t.p_pct!=null){
+      $('gp-p').value=t.p_pct;$('gp-c').value=t.c_pct;$('gp-f').value=t.f_pct;
+      toast('Preset: '+key+' applicato');
+    }
+  }).catch(()=>{});
+}
+
 async function genPlan(){
+  const preset=$('gp-preset')?$('gp-preset').value:'';
   const targets={kcal:parseFloat($('gp-kcal').value),protein_pct:parseFloat($('gp-p').value),carb_pct:parseFloat($('gp-c').value),fat_pct:parseFloat($('gp-f').value)};
   const condInputs=document.querySelectorAll('#gp-conds input[type=checkbox]:checked');
   const conditions=Array.from(condInputs).map(c=>c.value);
-  const options={meals:parseInt($('gp-freq').value),days:['lun','mar','mer','gio','ven','sab','dom'],conditions};
+  const options={meals:parseInt($('gp-freq').value),days:['lun','mar','mer','gio','ven','sab','dom'],conditions,preset};
   closeModal();
   toast('Generazione...');
-  const plan=await jpost('/api/clients/'+STATE.clientId+'/plan/generate',{targets,options});
+  const plan=await jpost('/api/clients/'+STATE.clientId+'/plan/generate',{targets,options,preset});
   if(plan&&plan.days){await applyPlan(plan);
     const ex=plan.clinical&&plan.clinical.excluded_foods?plan.clinical.excluded_foods.length:0;
-    toast('Piano generato ✓ ('+ex+' alimenti esclusi per sindromi)');}
+    const pr=plan.clinical&&plan.clinical.preset?(' · preset '+plan.clinical.preset):'';
+    toast('Piano generato ✓ ('+ex+' alimenti esclusi'+pr+')');}
   else toast('Errore generazione');
 }
 
@@ -816,7 +882,10 @@ async function applyPlan(plan){
       const mk=mealsMap[mp.meal]||mp.meal;
       const foods=mp.items||[];
       for(const f of foods){
-        if(f&&f.food){await jpost('/api/clients/'+STATE.clientId+'/diet-item',{day:dk,meal:mk,food:f.food,grams:f.g||0});}
+        if(f&&f.food){
+          const alts=(f.alternatives||[]).filter(Boolean);
+          await jpost('/api/clients/'+STATE.clientId+'/diet-item',{day:dk,meal:mk,food:f.food,grams:f.g||0,alts:alts});
+        }
       }
     }
   }
@@ -928,8 +997,8 @@ ${notes.map(n=>`<div class="patient-card"><div class="info"><b>${n.date}</b><div
 
 function showProgressForm(){
   modal(`<div class="card"><b>➕ Nota di progresso</b>
-<div class="field-row"><div><label>Data</label><input type="date" id="pr-date" value="${today()}"></div></div>
-<label>Testo</label><textarea id="pr-text" rows="3" placeholder="Es. peso stabile, più energia..."></textarea>
+<div class="field-row"><div><label>Data</label><input type="date" id="pr-date" value="${today()}" onchange="markDirty()"></div></div>
+<label>Testo</label><textarea id="pr-text" rows="3" placeholder="Es. peso stabile, più energia..." oninput="markDirty()"></textarea>
 <div style="margin-top:10px;display:flex;gap:8px"><button class="btn primary" onclick="saveProgress()">💾 Salva</button>
 <button class="btn outline" onclick="closeModal()">Annulla</button></div></div>`);
 }
@@ -937,7 +1006,7 @@ function showProgressForm(){
 async function saveProgress(){
   const body={date:$('pr-date').value,text:$('pr-text').value};
   const r=await jpost('/api/clients/'+STATE.clientId+'/progress-note',body);
-  if(r&&r.id){toast('Salvato ✓');closeModal();loadProgressi();}else toast('Errore');
+  if(r&&r.id){toast('Salvato ✓');closeModal();clearDirty();loadProgressi();}else toast('Errore');
 }
 
 async function deleteProgress(pid){

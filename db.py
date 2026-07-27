@@ -677,10 +677,16 @@ def delete_custom_food(fid):
 
 
 # ---------------- Diet builder (diario alimentare manuale) ----------------
-def add_diet_item(cid, day, meal, food, grams, custom=0):
+def add_diet_item(cid, day, meal, food, grams, custom=0, alts=None):
     conn = _ensure(); cur = conn.cursor()
-    cur.execute("INSERT INTO diet_items (client_id,day,meal,food,grams,custom) VALUES (?,?,?,?,?,?)",
-                (cid, day, meal, food, float(grams or 0), int(bool(custom))))
+    # colonna alts (alternative per cibo, stile Dietowin) aggiunta in 1.7.0
+    try:
+        cur.execute("ALTER TABLE diet_items ADD COLUMN alts TEXT")
+    except Exception:
+        pass
+    alts_json = json.dumps(alts, ensure_ascii=False) if alts else None
+    cur.execute("INSERT INTO diet_items (client_id,day,meal,food,grams,custom,alts) VALUES (?,?,?,?,?,?,?)",
+                (cid, day, meal, food, float(grams or 0), int(bool(custom)), alts_json))
     iid = cur.lastrowid
     conn.commit(); conn.close(); return iid
 

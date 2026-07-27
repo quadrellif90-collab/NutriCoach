@@ -9,6 +9,7 @@ import datetime
 import subprocess
 import urllib.request
 import urllib.error
+import asyncio
 from fastapi import FastAPI, UploadFile, File, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -39,7 +40,7 @@ import version
 UPLOAD_DIR = os.path.join(database.DATA_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-app = FastAPI(title="NutriCoach", version="1.6.9")
+app = FastAPI(title="NutriCoach", version="1.7.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -87,7 +88,8 @@ async def api_diet_item_add(cid: int, request: Request):
     b = await request.json()
     iid = database.add_diet_item(cid, b.get("day", ""), b.get("meal", ""),
                                  b.get("food", ""), b.get("grams", 0),
-                                 int(bool(b.get("custom", 0))))
+                                 int(bool(b.get("custom", 0))),
+                                 b.get("alts"))
     return {"ok": True, "id": iid}
 
 @app.get("/api/clients/{cid}/diet-items")
@@ -106,31 +108,57 @@ def api_diary_totals(cid: int, day: str = None):
 @app.post("/api/clients/{cid}/plan/generate")
 async def api_plan_generate(cid: int, request: Request):
     b = await request.json()
-    targets = b.get("targets", {})
-    options = b.get("options", {})
+    targets = b.get("targets", {}) or {}
+    options = b.get("options", {}) or {}
+    preset = b.get("preset") or options.get("preset")
     # anamnesi + allergie del cliente -> esclusioni cliniche nel piano
     client = database.get_client(cid) or {}
     # SINGLE SOURCE OF TRUTH: parse_pathologies gestisce CSV e JSON
     parsed = clinical_nutrition.parse_pathologies(client.get("pathologies"))
     conditions = parsed["conditions"]
+    # condizioni passate dall'UI nel generatore (es. IBS/SIBO spuntate) hanno
+    # la priorita' e si sommano a quelle salvate nell'anamnesi del cliente
+    req_conditions = options.get("conditions") or []
+    if isinstance(req_conditions, list):
+        for c in req_conditions:
+            if c and c not in conditions:
+                conditions.append(c)
     # allergie da entrambe le fonti: campo cliente + anamnesi JSON
     allergies = client.get("allergies") or ""
     if parsed["allergies"]:
         allergies = (allergies + "," + ",".join(parsed["allergies"])).strip(",")
+    # Se e' stato scelto un preset di protocollo (Mediterranea, Zona, CKD,
+    # Keto, Carb Cycling, ecc.) calcola i target macro da li, altrimenti usa
+    # i target manuali passati dall'UI.
+    if preset and preset not in ("personalizzato", "none", ""):
+        kcal = float(targets.get("kcal") or client.get("target_kcal") or 2000)
+        weight_kg = float(client.get("weight_kg") or 0) or None
+        pt = diet_presets.preset_targets(preset, kcal, weight_kg)
+        targets = {
+            "kcal": int(kcal),
+            "protein_pct": pt.get("p_pct"),
+            "carb_pct": pt.get("c_pct"),
+            "fat_pct": pt.get("f_pct"),
+        }
+        options["preset"] = preset
     excl = meal_planner.excluded_foods(conditions, allergies)
     excl.update(options.get("exclude_foods") or [])
     options["exclude_foods"] = sorted(excl)
-    plan = meal_planner.generate_plan(targets, options)
+    # generazione piano puo' essere pesante: thread separato per non bloccare
+    plan = await asyncio.to_thread(meal_planner.generate_plan, targets, options)
     plan["clinical"] = {
         "conditions": conditions,
         "excluded_foods": sorted(excl),
+        "preset": preset,
         "recommendations": clinical_nutrition.get_dietary_recommendations(conditions) if conditions else [],
     }
     # Gap 1: persisti il piano come dieta per renderlo esportabile in PDF
     import datetime as _dt
     title = f"Piano {client.get('name','')} {_dt.date.today().isoformat()}"
+    if preset:
+        title += f" [{diet_presets.PRESETS.get(preset, {}).get('label', preset)}]"
     if conditions:
-        title += f" [{','.join(conditions)}]"
+        title += f" [{'+'.join(conditions)}]"
     did = database.add_diet(cid, plan, title=title, date=_dt.date.today().isoformat())
     plan["diet_id"] = did
     return plan
@@ -1040,7 +1068,10 @@ async def api_bia_upload(cid: int, file: UploadFile = File(...)):
     path = os.path.join(UPLOAD_DIR, f"bia_{cid}_{_timestamp()}_{file.filename}")
     with open(path, "wb") as f:
         shutil.copyfileobj(file.file, f)
-    res = bia_parser.parse_bia_pdf(path)
+    # OCR/parsing e' bloccante (render PDF + Tesseract): lo eseguiamo in un
+    # thread separato per non congelare l'event loop di uvicorn (l'app resta
+    # responsive durante l'upload di PDF scansionati).
+    res = await asyncio.to_thread(bia_parser.parse_bia_pdf, path)
     if res.get("scanned"):
         return {"scanned": True, "pages": res.get("pages", []), "file": path}
     # salva direttamente

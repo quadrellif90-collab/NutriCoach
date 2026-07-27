@@ -444,21 +444,33 @@ def aggregate(entries):
 # COMPOSIZIONE PASTO
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _meal_combo(protein, carb, veg, fat, fruit, t_kcal, t_p):
-    """Costruisce un pasto bilanciato e lo SCALA verso il target kcal."""
+def _meal_combo(protein, carb, veg, fat, fruit, t_kcal, t_p, alts=None):
+    """Costruisce un pasto bilanciato e lo SCALA verso il target kcal.
+
+    alts: dict {categoria: [lista alimenti]} da cui pescare le 'alternative'
+    per ciascun cibo (stile referto Dietowin: 'o [alternativa]'). Per ogni
+    cibo scelto si allegheranno fino a 2 swap della stessa categoria.
+    """
+    alts = alts or {}
     p_g = 150 if protein in ("petto di pollo", "tacchino", "manzo magro", "fesa di tacchino") else 100
     c_g = 70 if carb in ("pasta", "riso basmati") else 50
     v_g = 150
     f_ml = 10 if fat == "olio extravergine d'oliva" else 15
     fr_g = 120 if fruit else 0
     items = [
-        {"food": protein, "g": p_g},
-        {"food": carb, "g": c_g},
-        {"food": veg, "g": v_g},
-        {"food": fat, "g": f_ml},
+        {"food": protein, "g": p_g, "cat": "protein"},
+        {"food": carb, "g": c_g, "cat": "carb"},
+        {"food": veg, "g": v_g, "cat": "veg"},
+        {"food": fat, "g": f_ml, "cat": "fat"},
     ]
     if fruit:
-        items.append({"food": fruit, "g": fr_g})
+        items.append({"food": fruit, "g": fr_g, "cat": "fruit"})
+
+    # ── allegato alternative per ciascun cibo ──
+    for it in items:
+        pool = [x for x in alts.get(it["cat"], []) if x != it["food"]]
+        it["alternatives"] = pool[:2] if pool else []
+
     entries = [compute_entry(i["food"], i["g"]) for i in items]
     tot = aggregate(entries)
     # scala le grammature verso il target kcal del pasto (single source of truth:
@@ -637,8 +649,15 @@ def generate_plan(targets, options=None):
             if fruit:
                 fruit = _apply_substitution(fruit, conditions)
 
+            # ── pool di alternative per categoria (stile Dietowin: 'o alternativa') ──
+            alts = {
+                "protein": proteins, "carb": carbs, "veg": vegs,
+                "fat": fats, "fruit": fruits,
+            }
+
             tot, items = _meal_combo(protein, carb, veg, fat, fruit,
-                                     targets["kcal"] * share, targets["p"] * share)
+                                     targets["kcal"] * share, targets["p"] * share,
+                                     alts=alts)
 
             # ── calcolo FODMAP per pasto ──
             meal_fodmap = _compute_meal_fodmap(items)

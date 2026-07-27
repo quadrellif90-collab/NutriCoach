@@ -1,5 +1,25 @@
 
-## [1.6.9] — 2026-07-27
+## [1.7.0] — 2026-07-27
+
+### BIA OCR — fix root cause (estrazione affidabile)
+- `ocr.py`: risoluzione Tesseract **deterministica** (percorsi Windows espliciti + bundle EXE), `TESSDATA_PREFIX` impostato da codice senza dipendere da env/cwd. Prima l'app lanciata (uvicorn/EXE) non trovava Tesseract → "ancora non estrae dati".
+- Verificato end-to-end sul server: upload PDF `Report utente - F.Q.` → estrae 11 campi (peso 71.4, altezza 168, BMI 25.3, FM 8.7, FFM 56.8, TBW 43.0, ECW 17.7, ICW 25.3, BCM 29.3, SMM 32.2, ASMM 24.5) e salva `bia_id`.
+
+### Dieta — alternative per alimento (stile referto Dietowin)
+- `meal_planner._meal_combo`: ogni cibo genera 2 alternative della stessa categoria (`o petto di pollo · o tonno`).
+- `db.diet_items`: nuova colonna `alts` (JSON) per persistere le alternative nel diario.
+- `applyPlan`/`loadDieta`: salvano e mostrano le alternative nel diario settimanale.
+- Generatori protocolli confermati attivi: Mediterranea, Zona, CKD, Carb Cycling, Alto proteico, Vegano, Keto + 23 sindromi con esclusioni FODMAP.
+
+### Workflow paziente
+- Indicatore "cliente attivo" nell'header + pulsante "← Dashboard" (ritorna alla dashboard).
+- `beforeunload` chiede di salvare se ci sono modifiche non salvate (`STATE.dirty`).
+- Form Anamnesi/Misure/Progressi impostano `dirty` on input e lo puliscono al salvataggio.
+
+### Prestazioni
+- OCR e generazione piano eseguiti in `asyncio.to_thread` → l'app resta responsive durante operazioni pesanti.
+
+
 
 ### BIA OCR reale (estrazione dati da PDF scansionati)
 - Installato Tesseract 5.4.0 + lingua italiana; bundlato nella cartella `tesseract/` (EXE include OCR)
