@@ -39,7 +39,7 @@ import version
 UPLOAD_DIR = os.path.join(database.DATA_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-app = FastAPI(title="NutriCoach", version="1.6.2")
+app = FastAPI(title="NutriCoach", version="1.6.3")
 
 app.add_middleware(
     CORSMiddleware,
@@ -1007,13 +1007,6 @@ def api_client_get(cid: int):
     if not c:
         raise HTTPException(404, "Cliente non trovato")
     return c
-
-
-@app.delete("/api/clients/{cid}")
-def api_client_delete(cid: int):
-    if not database.delete_client(cid):
-        raise HTTPException(status_code=404, detail="Client not found")
-    return {"ok": True}
 
 
 # ---------------- Measurements ----------------

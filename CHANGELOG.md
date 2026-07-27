@@ -1,4 +1,11 @@
 
+## [1.6.3] — 2026-07-27
+
+### Cleanup duplicazioni (post-1.6.2)
+- Rimosso `delete_client` duplicato in `db.py` (rimasta solo la versione con controllo esistenza + return 0)
+- Rimosso `api_client_delete` duplicato in `app.py` (rimasta solo la versione con 404 su inesistente)
+- Verifica ad-hoc 26/26 passata
+
 ## [1.6.2] — 2026-07-27
 
 ### Fix test autonomo post-1.6.1 (4 bug risolti)

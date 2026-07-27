@@ -377,18 +377,6 @@ def update_client(cid, **fields):
     conn.commit(); conn.close()
 
 
-def delete_client(cid):
-    conn = _ensure(); cur = conn.cursor()
-    cur.execute("SELECT id FROM clients WHERE id=?", (cid,))
-    if not cur.fetchone():
-        conn.close()
-        return 0
-    cur.execute("DELETE FROM clients WHERE id=?", (cid,))
-    n = cur.rowcount
-    conn.commit(); conn.close()
-    return n
-
-
 # ---------------- Measurements ----------------
 def add_measurement(cid, date, **vals):
     conn = _ensure(); cur = conn.cursor()
