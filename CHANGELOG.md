@@ -1,4 +1,13 @@
 
+## [1.5.3] — 2026-07-27
+
+### Fix backend + OCR nota
+- **Notify /api/clients/{cid}/notify**: email (SMTP + fallback mailto) e WhatsApp (wa.me) testate OK
+- **PDF export /api/clients/{cid}/plan/export-pdf**: genera PDF clinico valido (ReportLab)
+- **Clinical summary /api/clients/{cid}/clinical-summary**: risponde 200 con dati completi
+- **Reminders / Agenda / Messaggi**: endpoint funzionanti (liste vuote = nessun dato, non errore)
+- **OCR BIA/Dieta**: nota — Tesseract OCR è dipendenza di **sistema** (non bundlabile in Python). Per PDF scansionati serve installare Tesseract su Windows; l'app rileva PDF senza testo e richiede incolla OCR manuale.
+
 ## [1.5.2] — 2026-07-27
 
 ### Overhaul UI — sidebar semplificata (6 voci) + fix tab
