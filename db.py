@@ -266,6 +266,70 @@ def _ensure():
         notes TEXT,
         FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
     )""")
+    # ── Nuove tabelle 1.6 (Dietowin-style) ──
+    cur.execute("""CREATE TABLE IF NOT EXISTS categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        color TEXT DEFAULT '#6366f1',
+        description TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS groups_ (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        description TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS client_groups (
+        client_id INTEGER NOT NULL,
+        group_id INTEGER NOT NULL,
+        PRIMARY KEY(client_id,group_id),
+        FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE,
+        FOREIGN KEY(group_id) REFERENCES groups_(id) ON DELETE CASCADE
+    )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS bia_readings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id INTEGER NOT NULL,
+        date TEXT NOT NULL,
+        pdf_path TEXT,
+        pdf_name TEXT,
+        weight_kg REAL, height_cm REAL, bmi REAL,
+        bf_pct REAL, bf_kg REAL, mm_pct REAL, mm_kg REAL, ffm_kg REAL,
+        tbw_l REAL, tbw_pct REAL, ecw_l REAL, icw_l REAL, ecw_ratio REAL,
+        pha REAL, bcm_kg REAL, smm_kg REAL, asmm_kg REAL,
+        bmr_kcal REAL, visceral_fat_level REAL, metabolic_age REAL,
+        segment_analysis TEXT,
+        raw_json TEXT, source TEXT DEFAULT 'upload', notes TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
+    )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS documents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id INTEGER,
+        title TEXT,
+        doc_type TEXT DEFAULT 'altro',
+        file_path TEXT NOT NULL,
+        original_name TEXT,
+        date TEXT,
+        notes TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
+    )""")
+    # migrazione: aggiungi category_id a clients
+    cols = {r[1] for r in cur.execute("PRAGMA table_info(clients)")}
+    if "category_id" not in cols:
+        try:
+            cur.execute("ALTER TABLE clients ADD COLUMN category_id INTEGER REFERENCES categories(id)")
+        except:
+            pass
+    # migrazione: estendi appointments con status/follow_up/outcome
+    appt_cols = {r[1] for r in cur.execute("PRAGMA table_info(appointments)")}
+    for col, ctype in [("status","TEXT DEFAULT 'open'"),("follow_up","INTEGER DEFAULT 0"),("outcome","TEXT")]:
+        if col not in appt_cols:
+            try:
+                cur.execute(f"ALTER TABLE appointments ADD COLUMN {col} {ctype}")
+            except:
+                pass
     conn.commit()
     return conn
 
@@ -303,7 +367,7 @@ def get_client(cid):
 
 def update_client(cid, **fields):
     allowed = {"name","dob","sex","age","height_cm","activity","athlete","email","phone",
-               "goal","allergies","pathologies","preferences","notes"}
+               "goal","allergies","pathologies","preferences","notes","category_id"}
     f = {k: v for k, v in fields.items() if k in allowed}
     if not f:
         return
@@ -656,31 +720,54 @@ def list_messages(cid):
 
 
 # ---------------- Appuntamenti ----------------
-def add_appointment(client_id, title, note="", appt_date=None):
+def add_appointment(client_id, title, note="", appt_date=None, status="open", follow_up=0):
     conn = _ensure(); cur = conn.cursor()
-    cur.execute("INSERT INTO appointments (client_id,title,note,appt_date) VALUES (?,?,?,?)",
-                (client_id, title, note, appt_date))
+    cur.execute("INSERT INTO appointments (client_id,title,note,appt_date,status,follow_up) VALUES (?,?,?,?,?,?)",
+                (client_id, title, note, appt_date, status, follow_up))
     aid = cur.lastrowid
     conn.commit(); conn.close(); return aid
 
-def list_appointments(client_id=None, only_open=True):
+def list_appointments(client_id=None, status_filter=None):
     conn = _ensure(); cur = conn.cursor()
-    q = "SELECT * FROM appointments"
+    q = "SELECT a.*, c.name AS client_name FROM appointments a LEFT JOIN clients c ON a.client_id=c.id"
     where = []; args = []
     if client_id is not None:
-        where.append("client_id=?"); args.append(client_id)
-    if only_open:
-        where.append("done=0")
+        where.append("a.client_id=?"); args.append(client_id)
+    if status_filter:
+        if status_filter == "open":
+            where.append("a.status='open'")
+        elif status_filter == "closed":
+            where.append("a.status='closed'")
+        elif status_filter == "cancelled":
+            where.append("a.status='cancelled'")
     if where:
         q += " WHERE " + " AND ".join(where)
-    q += " ORDER BY appt_date IS NULL, appt_date ASC"
+    q += " ORDER BY a.appt_date IS NULL, a.appt_date ASC"
     cur.execute(q, args)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close(); return rows
+
+def update_appointment(aid, **kw):
+    allowed = {"title","note","appt_date","status","follow_up","outcome"}
+    f = {k:v for k,v in kw.items() if k in allowed and v is not None}
+    if not f: return
+    conn = _ensure(); cur = conn.cursor()
+    q = "UPDATE appointments SET " + ",".join(f"{k}=?" for k in f) + " WHERE id=?"
+    cur.execute(q, list(f.values()) + [aid])
+    conn.commit(); conn.close()
+
+def get_follow_ups():
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("""SELECT a.*, c.name AS client_name FROM appointments a 
+        JOIN clients c ON a.client_id=c.id 
+        WHERE a.follow_up=1 AND a.status='open' 
+        ORDER BY a.appt_date ASC""")
     rows = [dict(r) for r in cur.fetchall()]
     conn.close(); return rows
 
 def set_appointment_done(aid, done=1):
     conn = _ensure(); cur = conn.cursor()
-    cur.execute("UPDATE appointments SET done=? WHERE id=?", (done, aid))
+    cur.execute("UPDATE appointments SET status=? WHERE id=?", ("closed" if done else "open", aid))
     conn.commit(); conn.close()
 
 
@@ -779,6 +866,189 @@ def delete_symptom(sid):
     conn = _ensure(); cur = conn.cursor()
     cur.execute("DELETE FROM symptom_log WHERE id=?", (sid,))
     conn.commit(); conn.close()
+
+
+# ---------------- Client CRUD (nuovo) ----------------
+def delete_client(cid):
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("DELETE FROM clients WHERE id=?", (cid,))
+    conn.commit(); conn.close()
+
+
+def add_category(name, color="#6366f1", desc=""):
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("INSERT OR IGNORE INTO categories (name,color,description) VALUES (?,?,?)",
+                (name, color, desc))
+    cid = cur.lastrowid
+    conn.commit(); conn.close()
+    return cid
+
+
+def list_categories():
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("SELECT * FROM categories ORDER BY name")
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def delete_category(cid):
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("UPDATE clients SET category_id=NULL WHERE category_id=?", (cid,))
+    cur.execute("DELETE FROM categories WHERE id=?", (cid,))
+    conn.commit(); conn.close()
+
+
+# ---------------- Groups ----------------
+def add_group(name, desc=""):
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("INSERT INTO groups_ (name,description) VALUES (?,?)", (name, desc))
+    gid = cur.lastrowid
+    conn.commit(); conn.close()
+    return gid
+
+
+def list_groups():
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("SELECT g.*, (SELECT COUNT(*) FROM client_groups cg WHERE cg.group_id=g.id) AS member_count FROM groups_ g ORDER BY g.name")
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def delete_group(gid):
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("DELETE FROM client_groups WHERE group_id=?", (gid,))
+    cur.execute("DELETE FROM groups_ WHERE id=?", (gid,))
+    conn.commit(); conn.close()
+
+
+def add_client_to_group(cid, gid):
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("INSERT OR IGNORE INTO client_groups (client_id,group_id) VALUES (?,?)", (cid, gid))
+    conn.commit(); conn.close()
+
+
+def remove_client_from_group(cid, gid):
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("DELETE FROM client_groups WHERE client_id=? AND group_id=?", (cid, gid))
+    conn.commit(); conn.close()
+
+
+def get_client_groups(cid):
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("SELECT g.* FROM groups_ g JOIN client_groups cg ON g.id=cg.group_id WHERE cg.client_id=? ORDER BY g.name", (cid,))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_group_members(gid):
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("SELECT c.* FROM clients c JOIN client_groups cg ON c.id=cg.client_id WHERE cg.group_id=? ORDER BY c.name", (gid,))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+# ---------------- BIA Readings (strutturato) ----------------
+def add_bia_reading(cid, date, pdf_path="", pdf_name="", **kw):
+    conn = _ensure(); cur = conn.cursor()
+    fields = ["client_id","date","pdf_path","pdf_name",
+              "weight_kg","height_cm","bmi",
+              "bf_pct","bf_kg","mm_pct","mm_kg","ffm_kg",
+              "tbw_l","tbw_pct","ecw_l","icw_l","ecw_ratio",
+              "pha","bcm_kg","smm_kg","asmm_kg",
+              "bmr_kcal","visceral_fat_level","metabolic_age",
+              "segment_analysis","raw_json","source","notes"]
+    vals = [cid, date, pdf_path, pdf_name]
+    for f in fields[4:]:
+        vals.append(kw.get(f))
+    ph = ",".join(["?"]*len(fields))
+    q = f"INSERT INTO bia_readings ({','.join(fields)}) VALUES ({ph})"
+    cur.execute(q, vals)
+    bid = cur.lastrowid
+    conn.commit(); conn.close()
+    return bid
+
+
+def list_bia_readings(cid, limit=50):
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("SELECT * FROM bia_readings WHERE client_id=? ORDER BY date DESC LIMIT ?", (cid, limit))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_bia_reading(bid):
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("SELECT * FROM bia_readings WHERE id=?", (bid,))
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def delete_bia_reading(bid):
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("SELECT pdf_path FROM bia_readings WHERE id=?", (bid,))
+    row = cur.fetchone()
+    pdf_path = row["pdf_path"] if row else None
+    cur.execute("DELETE FROM bia_readings WHERE id=?", (bid,))
+    conn.commit(); conn.close()
+    if pdf_path and os.path.exists(pdf_path):
+        try: os.remove(pdf_path)
+        except: pass
+
+
+def get_bia_trend(cid, field="weight_kg", days=365):
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute(f"SELECT date, {field} FROM bia_readings WHERE client_id=? AND date>=date('now',?) AND {field} IS NOT NULL ORDER BY date",
+                (cid, f'-{days} days'))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+# ---------------- Documents ----------------
+def add_document(cid, title, doc_type, file_path, original_name="", date="", notes=""):
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("INSERT INTO documents (client_id,title,doc_type,file_path,original_name,date,notes) VALUES (?,?,?,?,?,?,?)",
+                (cid, title, doc_type, file_path, original_name, date, notes))
+    did = cur.lastrowid
+    conn.commit(); conn.close()
+    return did
+
+
+def list_documents(cid=None, doc_type=None):
+    conn = _ensure(); cur = conn.cursor()
+    q = "SELECT d.*, c.name AS client_name FROM documents d LEFT JOIN clients c ON d.client_id=c.id"
+    params = []
+    wheres = []
+    if cid is not None:
+        wheres.append("d.client_id=?")
+        params.append(cid)
+    if doc_type:
+        wheres.append("d.doc_type=?")
+        params.append(doc_type)
+    if wheres:
+        q += " WHERE " + " AND ".join(wheres)
+    q += " ORDER BY d.created_at DESC"
+    cur.execute(q, params)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def delete_document(did):
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("SELECT file_path FROM documents WHERE id=?", (did,))
+    row = cur.fetchone()
+    fp = row["file_path"] if row else None
+    cur.execute("DELETE FROM documents WHERE id=?", (did,))
+    conn.commit(); conn.close()
+    if fp and os.path.exists(fp):
+        try: os.remove(fp)
+        except: pass
 
 
 # ---------------- Supplement Log ----------------

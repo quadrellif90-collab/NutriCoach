@@ -5,574 +5,531 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NutriCoach</title>
 <style>
-:root{
-  --bg:#f5f7fb; --surface:#ffffff; --surface2:#f0f3f9; --border:#e2e8f0;
-  --text:#1a2233; --muted:#64748b; --accent:#16a34a; --accent2:#0ea5e9; --accent3:#8b5cf6;
-  --amber:#f59e0b; --danger:#ef4444; --ok:#16a34a;
-  --shadow:0 1px 3px rgba(15,23,42,.08),0 1px 2px rgba(15,23,42,.04);
-  --radius:14px;
-}
-*{box-sizing:border-box}
-body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;background:var(--bg);color:var(--text);font-size:14px}
-a{color:var(--accent2);text-decoration:none}
-button{font-family:inherit}
-/* ---- layout ---- */
-.app{display:flex;min-height:100vh}
-.sidebar{width:226px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:18px 12px;position:sticky;top:0;height:100vh}
-.brand{display:flex;align-items:center;gap:10px;padding:6px 8px 18px;font-weight:700;font-size:17px}
-.brand .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px}
-.nav-item{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:10px;color:var(--muted);cursor:pointer;font-weight:600;margin-bottom:4px;transition:.12s}
-.nav-item:hover{background:var(--surface2);color:var(--text)}
-.nav-item.active{background:var(--accent);color:#fff}
-.nav-item .ico{width:20px;text-align:center;font-size:16px}
-.side-foot{margin-top:auto;font-size:11px;color:var(--muted);padding:8px}
-.main{flex:1;display:flex;flex-direction:column;min-width:0}
-.topbar{height:62px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;padding:0 22px;position:sticky;top:0;z-index:20}
-.topbar h1{font-size:18px;margin:0;font-weight:700}
-.search{flex:1;max-width:420px;position:relative}
-.search input{width:100%;padding:9px 12px 9px 34px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px}
-.search .si{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted)}
-.btn{border:1px solid var(--border);background:var(--surface);color:var(--text);padding:9px 14px;border-radius:10px;cursor:pointer;font-weight:600;font-size:13px;transition:.12s}
-.btn:hover{background:var(--surface2)}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-.btn.primary:hover{filter:brightness(1.05)}
-.btn.amber{background:var(--amber);border-color:var(--amber);color:#fff}
-.btn.ghost{background:transparent}
-.btn.sm{padding:6px 10px;font-size:12px}
-.view{padding:24px;overflow:auto;flex:1}
-.hidden{display:none!important}
-/* ---- cards / grid ---- */
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow)}
-.stat{display:flex;flex-direction:column;gap:4px}
-.stat .n{font-size:26px;font-weight:800}
-.stat .l{color:var(--muted);font-size:12px;font-weight:600}
-.stat .ic{font-size:18px}
-.section-title{font-size:15px;font-weight:700;margin:22px 0 12px;display:flex;align-items:center;gap:8px}
-.row{display:flex;gap:12px;flex-wrap:wrap}
-.client-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;cursor:pointer;transition:.12s;box-shadow:var(--shadow)}
-.client-card:hover{border-color:var(--accent);transform:translateY(-1px)}
-.client-card .nm{font-weight:700;font-size:15px}
-.client-card .meta{color:var(--muted);font-size:12px;margin-top:3px}
-.avatar{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,var(--accent2),var(--accent3));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px}
-.badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;background:var(--surface2);color:var(--muted)}
-.badge.warn{background:#fef3c7;color:#b45309}
-.badge.ok{background:#dcfce7;color:#15803d}
-.badge.blue{background:#e0f2fe;color:#0369a1}
-/* ---- patient detail ---- */
-.patient-head{display:flex;align-items:center;gap:16px;margin-bottom:18px}
-.patient-head .nm{font-size:22px;font-weight:800}
-.patient-head .sub{color:var(--muted);font-size:13px}
-.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:18px;flex-wrap:wrap}
-.tab{border:none;background:none;padding:11px 15px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;font-size:13px}
-.tab:hover{color:var(--text)}
-.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
-.pane{display:none}
-.pane.active{display:block}
-/* ---- forms ---- */
-label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:10px 0 5px}
-input,select,textarea{width:100%;padding:9px 11px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;font-family:inherit}
-textarea{resize:vertical}
-.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.check{display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--border);border-radius:9px;margin-bottom:6px;cursor:pointer;font-weight:600}
-.check input{width:auto}
-/* ---- modal ---- */
-.overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
-.modal{background:var(--surface);border-radius:18px;width:100%;max-width:560px;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)}
-.modal-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface)}
-.modal-head h3{margin:0;font-size:17px}
-.modal-body{padding:22px}
-.modal-foot{padding:16px 22px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:10px;position:sticky;bottom:0;background:var(--surface)}
-.steps{display:flex;gap:6px;margin-bottom:18px}
-.step{flex:1;height:5px;border-radius:5px;background:var(--surface2)}
-.step.on{background:var(--accent)}
-/* ---- toast ---- */
-#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:#1a2233;color:#fff;padding:11px 18px;border-radius:10px;opacity:0;transition:.2s;z-index:99;font-weight:600}
-#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-/* ---- misc ---- */
-.empty{color:var(--muted);text-align:center;padding:40px;font-style:italic}
-.kv{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--surface2);font-size:13px}
-.kv b{font-weight:700}
-.list-item{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:11px;margin-bottom:8px;background:var(--surface)}
-.list-item .meta{color:var(--muted);font-size:12px}
-.tbl{width:100%;border-collapse:collapse;font-size:13px}
-.tbl th,.tbl td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--surface2)}
-.tbl th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
-@media(max-width:900px){.sidebar{width:64px}.brand span{display:none}.nav-item span{display:none}.field-row{grid-template-columns:1fr}}
+*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,-apple-system,'Segoe UI',sans-serif}
+:root{--bg:#f1f4f9;--surface:#fff;--text:#1e293b;--text2:#64748b;--border:#e2e8f0;--primary:#10b981;--primary2:#059669;--danger:#ef4444;--warn:#f59e0b;--radius:10px;--shadow:0 1px 3px rgba(0,0,0,.06);--nav-w:210px;--top-h:54px}
+body{background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
+.layout{display:flex;min-height:100vh}
+.sidebar{width:var(--nav-w);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100}
+.sidebar .logo{padding:16px 18px;font-size:17px;font-weight:700;color:var(--primary);border-bottom:1px solid var(--border)}
+.nav-item{display:flex;align-items:center;gap:8px;padding:10px 18px;cursor:pointer;color:var(--text2);transition:.15s;font-size:13px;margin:1px 8px;border-radius:8px}
+.nav-item:hover{background:#f8fafc;color:var(--text)}
+.nav-item.active{color:var(--primary);background:#ecfdf5;font-weight:600}
+.nav-item .ico{font-size:16px;width:20px;text-align:center}
+.sidebar .spacer{flex:1}
+.sidebar .version{padding:10px 18px;font-size:11px;color:var(--text2);border-top:1px solid var(--border)}
+.main{margin-left:var(--nav-w);flex:1}
+.topbar{height:var(--top-h);display:flex;align-items:center;padding:0 18px;background:var(--surface);border-bottom:1px solid var(--border);gap:10px;position:sticky;top:0;z-index:50}
+.topbar h1{font-size:16px;font-weight:600}
+.search{flex:1;max-width:280px}
+.search input{width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;outline:none}
+.search input:focus{border-color:var(--primary)}
+.btn{padding:6px 14px;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:500;transition:.15s;display:inline-flex;align-items:center;gap:5px}
+.btn.primary{background:var(--primary);color:#fff}
+.btn.primary:hover{background:var(--primary2)}
+.btn.danger{background:var(--danger);color:#fff}
+.btn.sm{padding:3px 8px;font-size:11px}
+.btn.outline{background:transparent;border:1px solid var(--border);color:var(--text)}
+.btn.outline:hover{background:#f8fafc}
+.avatar{width:30px;height:30px;border-radius:50%;background:#6366f1;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px}
+.view{padding:16px 18px}
+.card{background:var(--surface);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);margin-bottom:12px}
+.grid{display:grid;gap:10px}
+.grid-4{grid-template-columns:repeat(4,1fr)}
+.stat-card{text-align:center;padding:14px 10px}
+.stat-card .num{font-size:26px;font-weight:700;color:var(--primary)}
+.stat-card .label{font-size:11px;color:var(--text2);margin-top:3px}
+.empty{padding:24px;text-align:center;color:var(--text2);font-size:13px}
+.patient-card{display:flex;align-items:center;gap:10px;padding:10px;cursor:pointer;border-radius:6px;transition:.15s}
+.patient-card:hover{background:#f8fafc}
+.patient-card .init{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;color:#fff;flex-shrink:0}
+.patient-card .info{flex:1;min-width:0}
+.patient-card .name{font-weight:500;font-size:13px}
+.patient-card .meta{font-size:11px;color:var(--text2)}
+.patient-card .cat{font-size:10px;padding:1px 6px;border-radius:10px;display:inline-block}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:center;justify-content:center}
+.modal{background:var(--surface);border-radius:12px;width:540px;max-width:90vw;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);font-weight:600;font-size:14px}
+.modal-head button{background:none;border:none;font-size:18px;cursor:pointer;color:var(--text2);padding:0 4px}
+.modal-body{padding:14px 18px}
+.modal-foot{padding:10px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+label{display:block;font-size:11px;font-weight:500;color:var(--text2);margin-bottom:2px;margin-top:8px}
+label:first-child{margin-top:0}
+input,select,textarea{width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:6px;font-size:13px;outline:none;font-family:inherit}
+input:focus,select:focus,textarea:focus{border-color:var(--primary)}
+textarea{resize:vertical;min-height:40px}
+.field-row{display:flex;gap:8px}
+.field-row>*{flex:1}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:8px 20px;border-radius:6px;font-size:13px;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none}
+#toast.show{opacity:1}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{padding:6px 8px;text-align:left;font-weight:500;color:var(--text2);border-bottom:2px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.4px}
+td{padding:6px 8px;border-bottom:1px solid var(--border)}
+tr:hover td{background:#f8fafc}
+.badge{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500}
+.badge.green{background:#ecfdf5;color:#059669}
+.badge.red{background:#fef2f2;color:#dc2626}
+.badge.yellow{background:#fffbeb;color:#d97706}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tab-bar{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:14px}
+.tab-btn{padding:8px 14px;font-size:12px;border:none;background:none;cursor:pointer;color:var(--text2);border-bottom:2px solid transparent;margin-bottom:-1px;transition:.15s}
+.tab-btn.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:500}
+@media(max-width:768px){.sidebar{display:none}.main{margin-left:0}.grid-4{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
-<div class="app">
-  <!-- SIDEBAR -->
-  <aside class="sidebar">
-    <div class="brand"><div class="logo">🥗</div><span>NutriCoach</span></div>
-    <div class="nav-item active" data-nav="dashboard"><span class="ico">🏠</span><span>Dashboard</span></div>
-    <div class="nav-item" data-nav="pazienti"><span class="ico">👥</span><span>Pazienti</span></div>
-    <div class="nav-item" data-nav="agenda"><span class="ico">📅</span><span>Agenda</span></div>
-    <div class="side-foot" id="side-foot"></div>
-  </aside>
-
-  <!-- MAIN -->
-  <div class="main">
-    <div class="topbar">
-      <h1 id="page-title">Dashboard</h1>
-      <div class="search"><span class="si">🔍</span><input id="global-search" placeholder="Cerca paziente…" oninput="onGlobalSearch(this.value)"></div>
-      <button class="btn primary" onclick="openNewClient()">+ Nuovo paziente</button>
-      <div class="avatar" id="user-avatar" title="Nutrizionista">N</div>
-    </div>
-    <div class="view" id="view"></div>
-  </div>
+<div class="layout">
+<div class="sidebar">
+<div class="logo">🥗 NutriCoach</div>
+<div class="nav-item active" data-nav="dashboard" onclick="switchNav('dashboard')"><span class="ico">📊</span> Dashboard</div>
+<div class="nav-item" data-nav="pazienti" onclick="switchNav('pazienti')"><span class="ico">👥</span> Pazienti</div>
+<div class="nav-item" data-nav="bia" onclick="switchNav('bia')"><span class="ico">🔬</span> BIA</div>
+<div class="nav-item" data-nav="agenda" onclick="switchNav('agenda')"><span class="ico">📅</span> Agenda</div>
+<div class="nav-item" data-nav="notifiche" onclick="switchNav('notifiche')"><span class="ico">📨</span> Notifiche</div>
+<div class="nav-item" data-nav="archivio" onclick="switchNav('archivio')"><span class="ico">📁</span> Archivio</div>
+<div class="nav-item" data-nav="dieta" onclick="switchNav('dieta')"><span class="ico">🍽️</span> Dieta</div>
+<div class="spacer"></div>
+<div class="version">v1.6.0</div>
 </div>
-
+<div class="main">
+<div class="topbar">
+<h1 id="page-title">Dashboard</h1>
+<div class="search"><input id="global-search" placeholder="Cerca paziente..." oninput="onSearch(this.value)"></div>
+<button class="btn primary" onclick="openNewClient()">+ Nuovo</button>
+<div class="avatar">N</div>
+</div>
+<div class="view" id="view"></div>
+</div>
+</div>
 <div id="toast"></div>
 <div id="modal-root"></div>
 
 <script>
-const API = "";
-let STATE = { clients:[], clientId:null, nav:"dashboard", patientTab:"anamnesi" };
+const API="";const V="1.6.0";
+let STATE={nav:"dashboard",clients:[],clientId:null,categories:[],groups:[]};
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600)}
+function $(id){return document.getElementById(id)}
+function jget(u){return fetch(API+u).then(r=>r.json())}
+function jpost(u,b){return fetch(API+u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json())}
+function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function init(n){return (n||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}
+function today(){return new Date().toISOString().slice(0,10)}
+function clr(){return ['#10b981','#6366f1','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#06b6d4'][Math.floor(Math.random()*9)]}
 
-function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);}
-function jget(u){return fetch(API+u).then(r=>r.json());}
-function jpost(u,b){return fetch(API+u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json().then(d=>{d._status=r.status;return d;}));}
-function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-function initials(n){return (n||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();}
-function todayISO(){return new Date().toISOString().slice(0,10);}
-
-/* ---- native bridge ---- */
-function ncHasNative(){return (typeof window.pywebview!=='undefined'&&window.pywebview&&window.pywebview.api);}
-function ncOpenExternal(url){if(ncHasNative()){try{window.pywebview.api.open_external(url);return;}catch(e){}}window.open(url,'_blank');}
-async function ncDownload(filename,blob){if(ncHasNative()){try{const b64=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(fr.result.split(',')[1]);fr.onerror=rej;fr.readAsDataURL(blob);});const r=await window.pywebview.api.download(filename,b64);if(r&&r.ok)return true;if(r&&r.error==='cancelled')return false;}catch(e){}}const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;a.click();return true;}
-
-/* ---- nav ---- */
-document.querySelectorAll('.nav-item').forEach(el=>el.onclick=()=>{
-  const nav=el.dataset.nav;
-  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-  el.classList.add('active');
+/* ============ NAV ============ */
+async function switchNav(nav){
   STATE.nav=nav;
-  if(nav==='dashboard')renderDashboard();
-  else if(nav==='pazienti')renderPazienti();
-  else if(nav==='agenda')renderAgenda();
-});
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.nav===nav));
+  $('page-title').textContent={dashboard:'Dashboard',pazienti:'Pazienti',bia:'BIA & Misure',agenda:'Agenda',notifiche:'Notifiche',archivio:'Archivio',dieta:'Dieta'}[nav]||'NutriCoach';
+  const v=$('view');
+  if(nav==='dashboard'){await loadDashboard();return}
+  if(nav==='pazienti'){await loadPazienti();return}
+  if(nav==='bia'){await loadBIA();return}
+  if(nav==='agenda'){await loadAgenda();return}
+  if(nav==='notifiche'){v.innerHTML='<div class="empty">📨 Notifiche (in arrivo)</div>';return}
+  if(nav==='archivio'){await loadArchivio();return}
+  if(nav==='dieta'){v.innerHTML='<div class="empty">🍽️ Generatore dieta (in arrivo)</div>';return}
+}
 
 /* ============ DASHBOARD ============ */
-async function renderDashboard(){
-  document.getElementById('page-title').textContent='Dashboard';
-  const view=document.getElementById('view');
-  view.innerHTML='<div class="empty">Carico…</div>';
-  let today={}, appts=[], rems=[], clients=[];
-  try{
-    today=await jget('/api/studio/today');
-    clients=await jget('/api/clients');
-    appts=await jget('/api/appointments');
-    rems=await jget('/api/reminders');
-  }catch(e){}
-  // /api/studio/today restituisce {today:[...], count_attention:N}
-  const todayClients=(today.today||[]);
-  const stats=[
-    {n:(clients||[]).length,l:'Pazienti',ic:'👥'},
-    {n:(appts||[]).filter(a=>!a.done&&(a.appt_date||'').slice(0,10)===todayISO()).length,l:'Appuntamenti oggi',ic:'📅'},
-    {n:(rems||[]).filter(r=>!r.done).length,l:'Promemoria attivi',ic:'🔔'},
-    {n:(today.count_attention||0),l:'Da monitorare',ic:'⚠️'},
-  ];
-  const statHTML=`<div class="grid">${stats.map(s=>`<div class="card stat"><span class="ic">${s.ic}</span><span class="n">${s.n}</span><span class="l">${s.l}</span></div>`).join('')}</div>`;
-  const cliHTML=todayClients.length?`<div class="grid">${todayClients.map(c=>`<div class="client-card" onclick="openPatient(${c.id})"><div class="row" style="align-items:center;gap:10px"><div class="avatar">${esc(initials(c.name))}</div><div><div class="nm">${esc(c.name)}</div><div class="meta">${esc(c.goal||'—')}</div></div></div></div>`).join('')}</div>`:`<div class="grid">${(clients||[]).slice(0,6).map(c=>`<div class="client-card" onclick="openPatient(${c.id})"><div class="row" style="align-items:center;gap:10px"><div class="avatar">${esc(initials(c.name))}</div><div><div class="nm">${esc(c.name)}</div><div class="meta">${esc(c.goal||'—')}</div></div></div></div>`).join('')}</div>`;
-  const remHTML=(rems||[]).filter(r=>!r.done).slice(0,5).map(r=>`<div class="list-item"><span>🔔</span><div><div><b>${esc(r.title)}</b></div><div class="meta">${esc((r.due_date||'').slice(0,10)||'')} · ${esc(r.channel||'app')}</div></div></div>`).join('')||'<div class="empty">Nessun promemoria</div>';
-  view.innerHTML=`
-    <div class="row" style="justify-content:space-between;align-items:flex-end">
-      <div><h2 style="margin:0 0 2px">Ciao 👋</h2><div class="meta" style="color:var(--muted)">${new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})}</div></div>
-    </div>
-    ${statHTML}
-    <div class="section-title">📋 Pazienti</div>
-    ${cliHTML}
-    <div class="section-title">🔔 Promemoria</div>
-    ${remHTML}`;
+async function loadDashboard(){
+  const[todayData,clients,reminders]=await Promise.all([
+    jget('/api/studio/today'),jget('/api/clients'),jget('/api/reminders')
+  ]);
+  const countPaz=clients.length;
+  const countOggi=todayData.today?todayData.today.length:0;
+  const countAlert=todayData.count_attention||0;
+  const countProm=reminders.filter(r=>!r.done).length;
+  const cats=await jget('/api/categories');
+  // arricchisci clienti con categoria
+  const catMap={};cats.forEach(c=>catMap[c.id]=c);
+  clients.forEach(c=>{if(c.category_id)c._cat=catMap[c.category_id]||null});
+  STATE.clients=clients;STATE.categories=cats;
+  $('view').innerHTML=`
+<div class="grid grid-4">
+  <div class="card stat-card"><div class="num">${countPaz}</div><div class="label">👥 Pazienti</div></div>
+  <div class="card stat-card"><div class="num">${countOggi}</div><div class="label">📅 Oggi</div></div>
+  <div class="card stat-card"><div class="num">${countProm}</div><div class="label">🔔 Promemoria</div></div>
+  <div class="card stat-card"><div class="num">${countAlert}</div><div class="label">⚠️ Da monitorare</div></div>
+</div>
+<div class="card"><b>👥 Pazienti (${countPaz})</b><div class="row" style="margin:6px 0">${cats.map(c=>`<span class="badge" style="background:${c.color}22;color:${c.color}">${esc(c.name)}</span>`).join('')}</div>
+  ${clients.map(c=>`<div class="patient-card" onclick="openPatient(${c.id})"><div class="init" style="background:${c._cat?c._cat.color:clr()}">${init(c.name)}</div><div class="info"><div class="name">${esc(c.name)} ${c._cat?`<span class="cat" style="background:${c._cat.color}22;color:${c._cat.color}">${esc(c._cat.name)}</span>`:''}</div><div class="meta">${c.sex||'?'} · ${c.goal||'—'}</div></div></div>`).join('')}
+</div>
+<div class="card"><b>🔔 Promemoria</b>${reminders.filter(r=>!r.done).slice(0,5).map(r=>`
+  <div class="patient-card"><div class="info"><div class="name">${esc(r.title)}</div><div class="meta">${r.due_date||''} · ${r.channel||'app'}</div></div></div>`).join('')||'<div class="empty">Nessun promemoria</div>'}
+</div>`;
 }
 
 /* ============ PAZIENTI ============ */
-async function renderPazienti(){
-  document.getElementById('page-title').textContent='Pazienti';
-  const view=document.getElementById('view');
-  view.innerHTML='<div class="empty">Carico…</div>';
-  let clients=[];
-  try{clients=await jget('/api/clients');}catch(e){}
-  STATE.clients=clients;
-  if(!clients.length){view.innerHTML='<div class="empty">Nessun paziente. Clicca “+ Nuovo paziente”.</div>';return;}
-  view.innerHTML=`<div class="grid">${clients.map(c=>`<div class="client-card" onclick="openPatient(${c.id})"><div class="row" style="align-items:center;gap:10px"><div class="avatar">${esc(initials(c.name))}</div><div style="flex:1"><div class="nm">${esc(c.name)}</div><div class="meta">${esc(c.goal||'—')} · ${esc(c.sex||'')}</div></div><span class="badge">${esc((c.pathologies||'').length>2?'+ clinica':'base')}</span></div></div>`).join('')}</div>`;
+async function loadPazienti(){
+  const[clients,cats,grps]=await Promise.all([jget('/api/clients'),jget('/api/categories'),jget('/api/groups')]);
+  STATE.clients=clients;STATE.categories=cats;STATE.groups=grps;
+  const catMap={};cats.forEach(c=>catMap[c.id]=c);
+  clients.forEach(c=>{if(c.category_id)c._cat=catMap[c.category_id]||null});
+  $('view').innerHTML=`
+<div class="row" style="margin-bottom:10px">
+  <select id="pz-filter-cat" onchange="loadPazienti()" style="width:auto">
+    <option value="">Tutte le categorie</option>
+    ${cats.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}
+  </select>
+  <button class="btn outline" onclick="showCategoryModal()">📂 Gestisci categorie</button>
+  <button class="btn outline" onclick="showGroupModal()">👥 Gestisci gruppi</button>
+</div>
+<div class="card">
+  <div class="row" style="margin-bottom:8px"><b>👥 Pazienti (${clients.length})</b></div>
+  ${clients.filter(c=>!$('pz-filter-cat').value||c.category_id==+$('pz-filter-cat').value).map(c=>`
+  <div class="patient-card" onclick="openPatient(${c.id})">
+    <div class="init" style="background:${c._cat?c._cat.color:clr()}">${init(c.name)}</div>
+    <div class="info"><div class="name">${esc(c.name)} ${c._cat?`<span class="cat" style="background:${c._cat.color}22;color:${c._cat.color}">${esc(c._cat.name)}</span>`:''}</div>
+    <div class="meta">${c.sex||'?'} · ${c.goal||'—'} · ${c.email||''}</div></div>
+    <button class="btn sm danger" onclick="event.stopPropagation();deleteClient(${c.id})">✕</button>
+  </div>`).join('')||'<div class="empty">Nessun paziente</div>'}
+</div>`;
 }
 
-function onGlobalSearch(v){
-  if(STATE.nav!=='pazienti'){document.querySelector('.nav-item[data-nav="pazienti"]').click();}
-  const f=v.toLowerCase();
-  const grid=document.querySelector('#view .grid');
-  if(!grid)return;
-  grid.querySelectorAll('.client-card').forEach(c=>{
-    c.style.display=c.textContent.toLowerCase().includes(f)?'':'none';
-  });
+async function deleteClient(cid){
+  if(!confirm('Eliminare questo paziente e tutti i suoi dati?'))return;
+  await jpost('/api/clients/{cid}'.replace('{cid}',cid),{_method:'DELETE'});
+  // use DELETE method properly
+  await fetch(API+'/api/clients/'+cid,{method:'DELETE'});
+  toast('Paziente eliminato');loadPazienti();
 }
 
-/* ============ NUOVO PAZIENTE (wizard anamnesi) ============ */
-function openNewClient(){
-  STATE._wizard={step:0,conditions:[],allergies:'',notes:'',goal:'Dimagrimento',activity:'moderato'};
-  loadConditions().then(()=>showWizard()).catch(()=>showWizard());
+function showCategoryModal(){
+  const c=STATE.categories;
+  modal(`
+<div class="card"><b>📂 Categorie</b><div class="empty">${c.length?'':'Nessuna categoria'}</div>
+${c.map(cat=>`<div class="patient-card"><div class="info"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${cat.color};margin-right:6px"></span> ${esc(cat.name)}</div><button class="btn sm danger" onclick="if(confirm('Eliminare?')){fetch('/api/categories/${cat.id}',{method:'DELETE'}).then(()=>{closeModal();showCategoryModal()})}">✕</button></div>`).join('')}
+<hr style="margin:10px 0">
+<div class="field-row"><input id="nc-name" placeholder="Nome"><input id="nc-color" type="color" value="#6366f1"></div>
+<button class="btn primary" onclick="const n=$('nc-name').value;if(!n)return;fetch('/api/categories',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n,color:$('nc-color').value})}).then(()=>{closeModal();loadPazienti()})">➕ Aggiungi</button></div>`);
 }
-let _CONDITIONS=[];
-async function loadConditions(){
-  try{
-    const d=await jget('/api/clinical-nutrition/conditions');
-    const c=d.conditions||{};
-    // l'endpoint puo' restituire dict {key:{name,...}} o lista
-    _CONDITIONS=Array.isArray(c)?c:Object.entries(c).map(([key,v])=>({key,label:(v&&v.name)||key}));
-  }catch(e){_CONDITIONS=[];}
+
+function showGroupModal(){
+  modal(`
+<div class="card"><b>👥 Gruppi</b>
+${STATE.groups.map(g=>`<div class="patient-card"><div class="info"><b>${esc(g.name)}</b><div class="meta">${g.member_count||0} membri</div></div>
+<button class="btn sm danger" onclick="if(confirm('Eliminare?')){fetch('/api/groups/${g.id}',{method:'DELETE'}).then(()=>{closeModal();showGroupModal()})}">✕</button></div>`).join('')||'<div class="empty">Nessun gruppo</div>'}
+<hr style="margin:10px 0">
+<div class="field-row"><input id="ng-name" placeholder="Nome gruppo"><button class="btn primary" onclick="const n=$('ng-name').value;if(!n)return;fetch('/api/groups',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})}).then(()=>{closeModal();showGroupModal()})">➕ Crea</button></div></div>`);
 }
-function showWizard(){
-  const w=STATE._wizard;
-  const root=document.getElementById('modal-root');
-  const steps=['Anagrafica','Obiettivi','Clinica','Conferma'];
-  root.innerHTML=`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">
-    <div class="modal-head"><h3>➕ Nuovo paziente — Anamnesi</h3><button class="btn ghost" onclick="closeModal()">✕</button></div>
-    <div class="modal-body">
-      <div class="steps">${steps.map((s,i)=>`<div class="step ${i<=w.step?'on':''}"></div>`).join('')}</div>
-      <div id="wizard-body"></div>
-    </div>
-    <div class="modal-foot">
-      <button class="btn" ${w.step===0?'disabled':''} onclick="wizardPrev()">← Indietro</button>
-      ${w.step<3?`<button class="btn primary" onclick="wizardNext()">Avanti →</button>`:`<button class="btn primary" onclick="wizardSave()">✓ Salva paziente</button>`}
-    </div>
-  </div></div>`;
-  renderWizardStep();
+
+/* ============ AGENDA ============ */
+async function loadAgenda(){
+  const[openAppts,closedAppts,fups]=await Promise.all([
+    jget('/api/appointments?status=open'),
+    jget('/api/appointments?status=closed'),
+    jget('/api/follow-ups')
+  ]);
+  const today=new Date().toISOString().slice(0,10);
+  const oggi=openAppts.filter(a=>a.appt_date===today);
+  const prox=openAppts.filter(a=>a.appt_date&&a.appt_date>today).slice(0,10);
+  $('view').innerHTML=`
+<div class="row" style="margin-bottom:10px"><b>📅 Agenda</b>
+<button class="btn primary" onclick="showApptModal()">➕ Nuovo appuntamento</button></div>
+<div class="grid grid-4">${[
+  ['📅 Oggi',oggi.length],
+  ['🔄 In programma',openAppts.length],
+  ['✅ Completati',closedAppts.length],
+  ['📌 Follow-up',fups.length]
+].map(x=>`<div class="card stat-card"><div class="num">${x[1]}</div><div class="label">${x[0]}</div></div>`).join('')}</div>
+<div class="card"><b>📅 Oggi (${today})</b>${oggi.map(a=>apptCard(a)).join('')||'<div class="empty">Nessun appuntamento oggi</div>'}</div>
+<div class="card"><b>🔜 Prossimi</b>${prox.map(a=>apptCard(a)).join('')||'<div class="empty">Nessun appuntamento in programma</div>'}</div>
+<div class="card"><b>📌 Follow-up attivi</b>${fups.map(a=>apptCard(a)).join('')||'<div class="empty">Nessun follow-up attivo</div>'}</div>`;
 }
-function renderWizardStep(){
-  const w=STATE._wizard;const b=document.getElementById('wizard-body');
-  if(w.step===0){
-    b.innerHTML=`<div class="field-row">
-      <div><label>Nome *</label><input id="w-name" value="${esc(w.name||'')}" placeholder="Mario Rossi"></div>
-      <div><label>Data di nascita</label><input id="w-dob" type="date" value="${esc(w.dob||'')}"></div>
-    </div>
-    <div class="field-row">
-      <div><label>Sesso</label><select id="w-sex"><option value="M" ${w.sex==='M'?'selected':''}>Maschio</option><option value="F" ${w.sex==='F'?'selected':''}>Femmina</option></select></div>
-      <div><label>Altezza (cm)</label><input id="w-h" type="number" value="${esc(w.height_cm||'')}"></div>
-    </div>
-    <div class="field-row">
-      <div><label>Email</label><input id="w-email" value="${esc(w.email||'')}" placeholder="nome@email.it"></div>
-      <div><label>Telefono</label><input id="w-phone" value="${esc(w.phone||'')}" placeholder="+39…"></div>
-    </div>`;
-  }else if(w.step===1){
-    b.innerHTML=`<label>Obiettivo</label><select id="w-goal">
-      ${['Dimagrimento','Mantenimento','Massa','Ridefinizione','Performance'].map(g=>`<option ${w.goal===g?'selected':''}>${g}</option>`).join('')}
-    </select>
-    <label>Livello attività</label><select id="w-act">
-      ${['sedentario','leggero','moderato','attivo','atleta'].map(a=>`<option ${w.activity===a?'selected':''}>${a}</option>`).join('')}
-    </select>
-    <label>Note anagrafiche</label><textarea id="w-notes0" rows="2" placeholder="Lavoro, stile di vita…">${esc(w.notes0||'')}</textarea>`;
-  }else if(w.step===2){
-    const conds=(_CONDITIONS||[]).map(c=>`<label class="check"><input type="checkbox" value="${esc(c.key)}" ${w.conditions.includes(c.key)?'checked':''} onchange="toggleCond(this)"> ${esc(c.label||c.key)}</label>`).join('')||'<div class="empty">Nessuna condizione disponibile</div>';
-    b.innerHTML=`<label>Condizioni cliniche</label>${conds}
-    <label>Allergie / intolleranze</label><input id="w-all" value="${esc(w.allergies||'')}" placeholder="glutine, lattosio…">
-    <label>Note anamnesi</label><textarea id="w-notes" rows="3" placeholder="Cronologia, farmaci…">${esc(w.notes||'')}</textarea>`;
-  }else{
-    b.innerHTML=`<div class="card"><div class="kv"><span>Nome</span><b>${esc(w.name||'—')}</b></div>
-      <div class="kv"><span>Sesso</span><b>${esc(w.sex||'—')}</b></div>
-      <div class="kv"><span>Obiettivo</span><b>${esc(w.goal)}</b></div>
-      <div class="kv"><span>Attività</span><b>${esc(w.activity)}</b></div>
-      <div class="kv"><span>Condizioni</span><b>${w.conditions.length||'—'}</b></div>
-      <div class="kv"><span>Allergie</span><b>${esc(w.allergies||'—')}</b></div></div>`;
+
+function apptCard(a){
+  return `<div class="patient-card" style="border-left:3px solid ${a.status==='closed'?'var(--primary)':a.status==='cancelled'?'var(--danger)':'var(--warn)'}">
+<div class="info"><b>${esc(a.title)}</b><div class="meta">${esc(a.client_name||'')} · ${a.appt_date||'—'} ${a.follow_up?'· 🔄 Follow-up':''}</div></div>
+<button class="btn sm outline" onclick="jpost('/api/appointments/${a.id}/done',{done:${a.status==='closed'?0:1}}).then(()=>loadAgenda())">${a.status==='closed'?'✓ Fatto':'✗ Chiudi'}</button>
+</div>`;
+}
+
+function showApptModal(cid,aid){
+  let title="Nuovo appuntamento",data={client_id:cid||'',title:'',note:'',appt_date:'',status:'open',follow_up:0};
+  if(aid){
+    // prefetch per modifica
+    jget('/api/appointments').then(all=>{
+      const a=all.find(x=>x.id===aid);
+      if(!a)return;
+      const clientSel=STATE.clients.find(c=>c.id===a.client_id);
+      data=a;
+      renderApptModal(aid,data);
+    });
+    return;
+  }
+  renderApptModal(0,data);
+
+  function renderApptModal(aid,d){
+    const clients=STATE.clients.length?STATE.clients:[];
+    modal(`
+<div class="card"><b>${aid?'Modifica':'Nuovo'} appuntamento</b>
+<label>Paziente</label><select id="ap-cid">${clients.map(c=>`<option value="${c.id}" ${d.client_id==c.id?'selected':''}>${esc(c.name)}</option>`).join('')||'<option value="">—</option>'}</select>
+<div class="field-row"><div><label>Titolo</label><input id="ap-title" value="${esc(d.title)}" placeholder="Controllo peso"></div>
+<div><label>Data</label><input type="date" id="ap-date" value="${d.appt_date||''}"></div></div>
+<label>Note</label><textarea id="ap-note" rows="2">${esc(d.note||'')}</textarea>
+<label class="row" style="margin-top:6px"><input type="checkbox" id="ap-fup" ${d.follow_up?'checked':''}> 🔄 Richiede follow-up</label>
+<div style="margin-top:10px;display:flex;gap:8px">
+<button class="btn primary" onclick="saveAppt(${aid})">💾 Salva</button>
+${aid?`<button class="btn danger" onclick="jpost('/api/appointments/${aid}/done',{done:1}).then(()=>{closeModal();loadAgenda()})">✓ Chiudi</button>`:''}
+<button class="btn outline" onclick="closeModal()">Annulla</button></div></div>`);
   }
 }
-function grabWizard(){
-  const w=STATE._wizard;
-  w.name=document.getElementById('w-name')?.value||'';
-  w.dob=document.getElementById('w-dob')?.value||'';
-  w.sex=document.getElementById('w-sex')?.value||'';
-  w.height_cm=document.getElementById('w-h')?.value||'';
-  w.email=document.getElementById('w-email')?.value||'';
-  w.phone=document.getElementById('w-phone')?.value||'';
-  w.goal=document.getElementById('w-goal')?.value||w.goal;
-  w.activity=document.getElementById('w-act')?.value||w.activity;
-  w.notes=document.getElementById('w-notes')?.value||w.notes||'';
-  w.allergies=document.getElementById('w-all')?.value||w.allergies;
-}
-function toggleCond(el){const k=el.value;const w=STATE._wizard;if(el.checked){if(!w.conditions.includes(k))w.conditions.push(k);}else{w.conditions=w.conditions.filter(x=>x!==k);}}
-function wizardPrev(){grabWizard();if(STATE._wizard.step>0){STATE._wizard.step--;showWizard();}}
-function wizardNext(){grabWizard();if(STATE._wizard.step<3){STATE._wizard.step++;showWizard();}}
-async function wizardSave(){
-  const w=STATE._wizard;
-  if(!w.name||!w.name.trim()){toast('Inserisci il nome');return;}
-  try{
-    const r=await jpost('/api/clients',{name:w.name,dob:w.dob,sex:w.sex,height_cm:w.height_cm,activity:w.activity,email:w.email,phone:w.phone,goal:w.goal,allergies:w.allergies,notes:w.notes0||''});
-    if(r&&r.id){
-      if(w.conditions.length||w.notes){await jpost('/api/clients/'+r.id+'/anamnesis',{conditions:w.conditions,notes:w.notes});}
-      closeModal();toast('Paziente salvato ✓');
-      renderPazienti();
-    }else{toast('Errore salvataggio');}
-  }catch(e){toast('Errore: '+e.message);}
+
+async function saveAppt(aid){
+  const cid=+$('ap-cid').value;
+  if(!cid){toast('Seleziona un paziente');return}
+  const body={client_id:cid,title:$('ap-title').value,appt_date:$('ap-date').value,
+    note:$('ap-note').value,follow_up:$('ap-fup').checked?1:0};
+  if(aid){
+    await jpost('/api/appointments/'+aid,{method:'PUT',...body});
+    // use PUT
+    await fetch(API+'/api/appointments/'+aid,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  }else{
+    await jpost('/api/appointments',body);
+  }
+  toast('Salvato ✓');closeModal();
+  if(STATE.nav==='agenda')loadAgenda();else loadAppuntamenti();
 }
 
-/* ============ SCHEDA PAZIENTE ============ */
+/* ============ BIA HUB ============ */
+async function loadBIA(){
+  const clients=STATE.clients.length?STATE.clients:await jget('/api/clients');
+  $('view').innerHTML=`
+<div class="row" style="margin-bottom:10px">
+  <b>🔬 BIA & Misure</b>
+  <select id="bia-client" onchange="loadBIAReading()" style="width:auto;max-width:200px">
+    <option value="">Seleziona paziente...</option>
+    ${clients.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}
+  </select>
+  <button class="btn primary" onclick="showBIAForm()">➕ Nuova misurazione</button>
+  <button class="btn outline" onclick="$('bia-client').value='';$('view').innerHTML='<div class=empty>Seleziona un paziente</div>'">Pulisci</button>
+</div>
+<div id="bia-view"><div class="empty">👆 Seleziona un paziente per vedere le misurazioni BIA</div></div>`;
+}
+
+async function loadBIAReading(){
+  const cid=+$('bia-client').value;
+  if(!cid){$('bia-view').innerHTML='<div class=empty>Seleziona un paziente</div>';return}
+  const[readings,trends]=await Promise.all([
+    jget('/api/clients/'+cid+'/bia-readings'),
+    jget('/api/clients/'+cid+'/bia-trend?field=weight_kg&days=365')
+  ]);
+  let html=`<div class="card"><b>📊 Trend peso</b><div class="empty">${trends.length?'':'Nessun dato'}</div>`;
+  if(trends.length>1){
+    const min=Math.min(...trends.map(t=>t.weight_kg))-2;
+    const max=Math.max(...trends.map(t=>t.weight_kg))+2;
+    const rng=max-min||1;const h=100;
+    html+=`<svg viewBox="0 0 ${(trends.length-1)*50} ${h}" width="100%" height="120" style="margin:6px 0">`;
+    const pts=trends.map((t,i)=>`${i*50},${h-((t.weight_kg-min)/rng)*h}`);
+    html+=`<polyline points="${pts.join(' ')}" fill="none" stroke="var(--primary)" stroke-width="2"/>`;
+    pts.forEach((p,i)=>html+=`<circle cx="${p.split(',')[0]}" cy="${p.split(',')[1]}" r="3" fill="var(--primary)"/>`);
+    const last=trends[trends.length-1];const first=trends[0];
+    const chg=(last.weight_kg-first.weight_kg).toFixed(1);
+    html+=`</svg><div style="font-size:11px;color:var(--text2)">${first.weight_kg} → ${last.weight_kg} (${chg>0?'+':''}${chg} kg)</div>`;
+  }
+  html+=`</div><div class="card"><b>📋 Storico BIA</b>`;
+  if(readings.length){
+    html+=`<table><tr><th>Data</th><th>Peso</th><th>BF%</th><th>MM%</th><th>PhA</th><th>TBW</th><th>BMR</th><th></th></tr>`;
+    readings.forEach(r=>{
+      html+=`<tr><td>${esc(r.date)}</td><td>${r.weight_kg||'—'}</td><td>${r.bf_pct||'—'}</td>
+        <td>${r.mm_pct||'—'}</td><td>${r.pha||'—'}</td><td>${r.tbw_l||'—'}</td>
+        <td>${r.bmr_kcal||'—'}</td>
+        <td><button class="btn sm outline" onclick="showBIAForm(${r.id})">📝</button>
+        <button class="btn sm danger" onclick="if(confirm('Eliminare?')){fetch('/api/bia-readings/${r.id}',{method:'DELETE'}).then(()=>loadBIAReading())}">✕</button></td></tr>`;
+    });
+    html+=`</table>`;
+  }else{html+=`<div class="empty">Nessuna misurazione. Carica un PDF BIA o inserisci manualmente.</div>`}
+  html+=`</div>`;
+  $('bia-view').innerHTML=html;
+}
+
+function showBIAForm(bid){
+  if(bid){
+    jget('/api/bia-readings/'+bid).then(r=>{
+      modal(renderBIAForm(r.id,r.date,r.weight_kg,r.bf_pct,r.mm_pct,r.pha,r.bmr_kcal,r.tbw_l,r.bmi,r.bf_kg,r.ffm_kg,r.visceral_fat_level,r.ecw_l,r.icw_l,r.height_cm,r.notes));
+    });
+    return;
+  }
+  modal(renderBIAForm());
+}
+
+function renderBIAForm(id,date,weight,bf,mm,pha,bmr,tbw,bmi,bfkg,ffm,vfat,ecw,icw,height,notes){
+  return `
+<div class="card"><b>${id?'Modifica':'Nuova'} misurazione BIA</b>
+<div class="field-row"><div><label>Data</label><input type="date" id="bf-date" value="${date||today()}"></div>
+<div><label>Peso (kg)</label><input type="number" step="0.1" id="bf-weight" value="${weight||''}"></div>
+<div><label>Altezza (cm)</label><input type="number" id="bf-height" value="${height||''}"></div></div>
+<div class="field-row"><div><label>BF%</label><input type="number" step="0.1" id="bf-bf" value="${bf||''}"></div>
+<div><label>MM%</label><input type="number" step="0.1" id="bf-mm" value="${mm||''}"></div>
+<div><label>BMI</label><input type="number" step="0.1" id="bf-bmi" value="${bmi||''}"></div></div>
+<div class="field-row"><div><label>Angolo di fase (PhA)</label><input type="number" step="0.1" id="bf-pha" value="${pha||''}"></div>
+<div><label>TBW (L)</label><input type="number" step="0.1" id="bf-tbw" value="${tbw||''}"></div></div>
+<div class="field-row"><div><label>ECW (L)</label><input type="number" step="0.1" id="bf-ecw" value="${ecw||''}"></div>
+<div><label>ICW (L)</label><input type="number" step="0.1" id="bf-icw" value="${icw||''}"></div></div>
+<div class="field-row"><div><label>BMR (kcal)</label><input type="number" id="bf-bmr" value="${bmr||''}"></div>
+<div><label>BF (kg)</label><input type="number" step="0.1" id="bf-bfkg" value="${bfkg||''}"></div>
+<div><label>FFM (kg)</label><input type="number" step="0.1" id="bf-ffm" value="${ffm||''}"></div></div>
+<div class="field-row"><div><label>Grasso viscerale</label><input type="number" step="0.1" id="bf-vfat" value="${vfat||''}"></div></div>
+<label>Note</label><textarea id="bf-notes" rows="2">${notes||''}</textarea>
+<div style="margin-top:10px;display:flex;gap:8px">
+<button class="btn primary" onclick="saveBIA(${id||0})">💾 Salva</button>
+<button class="btn outline" onclick="closeModal()">Annulla</button>
+</div></div>`;
+}
+
+async function saveBIA(id){
+  const cid=+$('bia-client').value;
+  if(!cid){toast('Seleziona un paziente');return}
+  const body={date:$('bf-date').value,weight_kg:$('bf-weight').value,height_cm:$('bf-height').value,
+    bf_pct:$('bf-bf').value,mm_pct:$('bf-mm').value,pha:$('bf-pha').value,bmr_kcal:$('bf-bmr').value,
+    tbw_l:$('bf-tbw').value,bmi:$('bf-bmi').value,bf_kg:$('bf-bfkg').value,
+    ffm_kg:$('bf-ffm').value,visceral_fat_level:$('bf-vfat').value,
+    ecw_l:$('bf-ecw').value,icw_l:$('bf-icw').value,
+    notes:$('bf-notes').value,source:'manual'};
+  if(id){
+    toast('Modifica BIA non ancora implementata via API diretta');
+    closeModal();return;
+  }
+  await jpost('/api/clients/'+cid+'/bia-reading',body);
+  toast('Misurazione salvata ✓');closeModal();loadBIAReading();
+}
+
+/* ============ ARCHIVIO ============ */
+async function loadArchivio(){
+  const docs=await jget('/api/documents');
+  $('view').innerHTML=`
+<div class="row" style="margin-bottom:10px"><b>📁 Archivio documenti</b>
+<button class="btn primary" onclick="uploadDoc()">📄 Carica</button></div>
+<div class="card"><table><tr><th>Paziente</th><th>Titolo</th><th>Tipo</th><th>Data</th><th></th></tr>
+${docs.map(d=>`<tr><td>${esc(d.client_name||'—')}</td><td>${esc(d.title||'—')}</td>
+<td><span class="badge green">${esc(d.doc_type)}</span></td><td>${d.date||''}</td>
+<td><button class="btn sm outline" onclick="window.open('/api/files/${encodeURIComponent(d.file_path.split('\\\\').pop().split('/').pop())}')">👁️</button>
+<button class="btn sm danger" onclick="if(confirm('Eliminare?')){fetch('/api/documents/${d.id}',{method:'DELETE'}).then(()=>loadArchivio())}">✕</button></td></tr>`).join('')||'<tr><td colspan="5"><div class="empty">Nessun documento</div></td></tr>'}
+</table></div>`;
+}
+
+function uploadDoc(){
+  modal('<div class="card"><b>📄 Carica documento</b><input type="file" id="doc-file" style="margin:10px 0"><div class="field-row"><input id="doc-title" placeholder="Titolo"><select id="doc-type"><option>bia</option><option>referto</option><option>dieta</option><option>foto</option><option>altro</option></select></div><button class="btn primary" onclick="const f=$(\'doc-file\').files[0];if(!f){toast(\'Seleziona un file\');return};const fd=new FormData();fd.append(\'file\',f);fd.append(\'title\',$(\'doc-title\').value);fd.append(\'doc_type\',$(\'doc-type\').value);fetch(\'/api/documents\',{method:\'POST\',body:fd}).then(r=>r.json()).then(()=>{toast(\'Caricato\');closeModal();loadArchivio()})">📤 Carica</button></div>');
+}
+
+/* ============ MODAL ============ */
+function modal(body){
+  $('modal-root').innerHTML=`<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-head"><span>NutriCoach</span><button onclick="closeModal()">✕</button></div><div class="modal-body">${body}</div></div></div>`;
+}
+function closeModal(){$('modal-root').innerHTML=''}
+
+/* ============ CLIENT OPEN ============ */
+function onSearch(q){
+  const match=STATE.clients.find(c=>c.name&&c.name.toLowerCase().includes(q.toLowerCase()));
+  if(match&&q.length>1)openPatient(match.id);
+}
+
 async function openPatient(cid){
   STATE.clientId=cid;
-  const view=document.getElementById('view');
-  view.innerHTML='<div class="empty">Carico paziente…</div>';
-  let c=null;
-  try{c=await jget('/api/clients/'+cid);}catch(e){}
-  if(!c){view.innerHTML='<div class="empty">Paziente non trovato</div>';return;}
-  document.getElementById('page-title').textContent=c.name;
-  const tabs=[['anamnesi','📋 Anamnesi'],['misure','⚖️ Misure'],['dieta','🍽️ Dieta'],['referti','📄 Referti'],['appuntamenti','📅 Appuntamenti'],['sintomi','🩺 Sintomi'],['integratori','💊 Integratori'],['progressi','📈 Progressi']];
-  view.innerHTML=`
-    <div class="patient-head">
-      <div class="avatar" style="width:54px;height:54px;font-size:20px">${esc(initials(c.name))}</div>
-      <div style="flex:1"><div class="nm">${esc(c.name)}</div><div class="sub">${esc(c.sex||'—')} · ${esc(c.age||'—')} anni · ${esc(c.goal||'—')} · ${esc(c.email||'')}</div></div>
-      <button class="btn" onclick="notifyClient(${cid},'email')">✉️ Email</button>
-      <button class="btn amber" onclick="notifyClient(${cid},'whatsapp')">💬 WhatsApp</button>
-    </div>
-    <div class="tabs">${tabs.map(t=>`<button class="tab ${t[0]===STATE.patientTab?'active':''}" data-tab="${t[0]}" onclick="switchPatientTab('${t[0]}')">${t[1]}</button>`).join('')}</div>
-    <div id="patient-pane"></div>`;
-  switchPatientTab(STATE.patientTab);
+  const c=await jget('/api/clients/'+cid);
+  const groups=await jget('/api/clients/'+cid+'/groups');
+  const cats=STATE.categories.length?STATE.categories:await jget('/api/categories');
+  const cat=cats.find(x=>x.id===c.category_id);
+  switchNav('dashboard'); // naviga a dashboard per ora
+  $('page-title').textContent=esc(c.name);
+  $('view').innerHTML=`
+<div class="card">
+  <div class="row"><div style="width:40px;height:40px;border-radius:50%;background:${cat?cat.color:clr()};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700">${init(c.name)}</div>
+  <div style="flex:1"><b style="font-size:16px">${esc(c.name)}</b><div class="meta">${c.sex||'?'} · ${c.goal||'—'} · ${c.email||''} · ${c.phone||''}</div></div>
+  <button class="btn outline" onclick="window.open('mailto:${c.email}')">✉️</button>
+  <button class="btn outline" onclick="window.open('https://wa.me/${c.phone?.replace(/[^0-9]/g,'')}','_blank')">💬</button>
+  <button class="btn danger sm" onclick="deleteClient(${c.id})">✕ Elimina</button></div>
+</div>
+<div class="tab-bar" id="patient-tabs">
+  <button class="tab-btn active" onclick="switchPatientTab(this,'anamnesi')">Anamnesi</button>
+  <button class="tab-btn" onclick="switchPatientTab(this,'misure')">Misure</button>
+  <button class="tab-btn" onclick="switchPatientTab(this,'dieta')">Dieta</button>
+  <button class="tab-btn" onclick="switchPatientTab(this,'referti')">Referti</button>
+  <button class="tab-btn" onclick="switchPatientTab(this,'appuntamenti')">Appuntamenti</button>
+  <button class="tab-btn" onclick="switchPatientTab(this,'sintomi')">Sintomi</button>
+  <button class="tab-btn" onclick="switchPatientTab(this,'gruppi')">Gruppi</button>
+  <button class="tab-btn" onclick="switchPatientTab(this,'progressi')">Progressi</button>
+</div>
+<div id="patient-pane"></div>`;
+  switchPatientTab(document.querySelector('#patient-tabs .tab-btn'),'anamnesi');
 }
-function switchPatientTab(tab){
-  STATE.patientTab=tab;
-  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===tab));
-  const pane=document.getElementById('patient-pane');
-  pane.innerHTML='<div class="empty">Carico…</div>';
+
+function switchPatientTab(el,tab){
+  document.querySelectorAll('#patient-tabs .tab-btn').forEach(b=>b.classList.remove('active'));
+  if(el)el.classList.add('active');
+  const p=$('patient-pane');
   if(tab==='anamnesi')loadAnamnesi();
   else if(tab==='misure')loadMisure();
   else if(tab==='dieta')loadDieta();
   else if(tab==='referti')loadReferti();
   else if(tab==='appuntamenti')loadAppuntamenti();
   else if(tab==='sintomi')loadSintomi();
-  else if(tab==='integratori')loadIntegratori();
+  else if(tab==='gruppi')loadGruppi();
   else if(tab==='progressi')loadProgressi();
 }
 
-/* ---- Anamnesi ---- */
 async function loadAnamnesi(){
-  const pane=document.getElementById('patient-pane');
+  const p=$('patient-pane');
   let a={};
-  try{a=await jget('/api/clients/'+STATE.clientId+'/anamnesis');}
-  catch(e){pane.innerHTML='<div class="empty">Errore anamnesi: '+esc(e.message)+'</div>';return;}
+  try{a=await jget('/api/clients/'+STATE.clientId+'/anamnesis');}catch(e){}
   const conds=(a.conditions||[]).join(', ')||'—';
-  const recsRaw=a.recommendations||[];
-  const recsArr=Array.isArray(recsRaw)?recsRaw:Object.values(recsRaw||{});
-  const recs=recsArr.map(r=>`<li>${esc(typeof r==='string'?r:(r.label||r.key||r.title||JSON.stringify(r)))}</li>`).join('')||'<li class="empty">Nessuna raccomandazione</li>';
-  pane.innerHTML=`<div class="card"><div class="kv"><span>Condizioni cliniche</span><b>${esc(conds)}</b></div><div class="kv"><span>Note anamnesi</span><b>${esc(a.notes||'—')}</b></div></div>
-    <div class="section-title">🎯 Raccomandazioni cliniche</div><ul>${recs}</ul>
-    <button class="btn" onclick="editAnamnesi()">✏️ Modifica anamnesi</button>`;
-}
-function editAnamnesi(){
-  STATE._wizard={step:2,conditions:[],allergies:'',notes:'',goal:'',activity:''};
-  jget('/api/clients/'+STATE.clientId+'/anamnesis').then(a=>{
-    STATE._wizard.conditions=a.conditions||[];STATE._wizard.notes=a.notes||'';
-    STATE._wizard._edit=true;loadConditions().then(showWizard);
-  });
+  const recs=a.recommendations||{};
+  const recsArr=Array.isArray(recs)?recs:Object.values(recs||{});
+  p.innerHTML=`<div class="card"><b>Condizioni cliniche</b><br>${esc(conds)}</div>
+<div class="card"><b>Note anamnesi</b><br>${esc(a.notes||'—')}</div>
+<div class="card"><b>🎯 Raccomandazioni cliniche</b><div class="empty">${recsArr.length?'':'(nessuna)'}</div>
+${recsArr.slice(0,3).map(r=>`<div style="margin:6px 0;padding:8px;background:#f8fafc;border-radius:6px;font-size:12px">${esc(typeof r==='string'?r:r.condition||r.key||JSON.stringify(r))}</div>`).join('')}</div>`;
 }
 
-/* ---- Misure ---- */
 async function loadMisure(){
-  const pane=document.getElementById('patient-pane');
-  let ms=[];try{ms=await jget('/api/clients/'+STATE.clientId+'/measurements');}catch(e){}
-  let bia=[];try{bia=await jget('/api/clients/'+STATE.clientId+'/bia');}catch(e){}
-  const form=`<div class="card" style="margin-bottom:14px"><div class="field-row">
-      <div><label>Data</label><input id="m-date" type="date" value="${todayISO()}"></div>
-      <div><label>Peso (kg)</label><input id="m-w" type="number" step="0.1" placeholder="78.5"></div>
-    </div>
-    <div class="field-row">
-      <div><label>Vita (cm)</label><input id="m-waist" type="number" step="0.1"></div>
-      <div><label>Fianchi (cm)</label><input id="m-hip" type="number" step="0.1"></div>
-    </div>
-    <button class="btn primary" onclick="saveMisura()">+ Aggiungi misura</button>
-    <button class="btn" onclick="document.getElementById('bia-file').click()">📄 Importa BIA (PDF)</button>
-    <input id="bia-file" type="file" accept=".pdf" style="display:none" onchange="uploadBia(this)"></div>`;
-  const rows=ms.slice().reverse().map(m=>`<tr><td>${esc((m.date||'').slice(0,10))}</td><td>${esc(m.weight_kg||'—')}</td><td>${esc(m.waist_cm||'—')}</td><td>${esc(m.hip_cm||'—')}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">Nessuna misura</td></tr>';
-  const biaRows=(bia||[]).map(b=>`<div class="list-item"><span>🧪</span><div><b>BIA ${esc((b.date||'').slice(0,10))}</b> · ${esc(Object.keys(b.fields||{}).length)} campi</div></div>`).join('')||'';
-  pane.innerHTML=`${form}<div class="card"><div class="section-title" style="margin-top:0">Storico misure</div><table class="tbl"><thead><tr><th>Data</th><th>Peso</th><th>Vita</th><th>Fianchi</th></tr></thead><tbody>${rows}</tbody></table></div>${biaRows}`;
-}
-async function saveMisura(){
-  const d={date:document.getElementById('m-date').value,weight_kg:document.getElementById('m-w').value,waist_cm:document.getElementById('m-waist').value,hip_cm:document.getElementById('m-hip').value};
-  try{await jpost('/api/clients/'+STATE.clientId+'/measurements',d);toast('Misura salvata ✓');loadMisure();}catch(e){toast('Errore');}
-}
-async function uploadBia(input){
-  const f=input.files[0];if(!f)return;
-  const fd=new FormData();fd.append('file',f);
-  try{
-    const r=await fetch(API+'/api/clients/'+STATE.clientId+'/bia/upload',{method:'POST',body:fd}).then(r=>r.json());
-    if(r.scanned){toast('PDF scansionato: incolla il testo OCR nella tab Referti');}else{toast('BIA importata ✓');}
-    loadMisure();
-  }catch(e){toast('Errore upload BIA');}
+  $('patient-pane').innerHTML=`<div class="empty">⚖️ Misure (in arrivo)</div>`;
 }
 
-/* ---- Dieta / Pianifica per data ---- */
 async function loadDieta(){
-  const pane=document.getElementById('patient-pane');
-  let diets=[];try{diets=await jget('/api/clients/'+STATE.clientId+'/diets');}catch(e){}
-  pane.innerHTML=`<div class="card" style="margin-bottom:14px">
-      <div class="section-title" style="margin-top:0">🤖 Pianifica per periodo</div>
-      <div class="field-row">
-        <div><label>Data inizio</label><input id="p-start" type="date" value="${todayISO()}"></div>
-        <div><label>Data fine</label><input id="p-end" type="date" onchange="calcWeeks()"></div>
-      </div>
-      <div class="field-row">
-        <div><label>Settimane (auto)</label><input id="p-weeks" type="number" value="4" readonly></div>
-        <div><label>kcal target</label><input id="p-kcal" type="number" value="2000"></div>
-      </div>
-      <div class="field-row">
-        <div><label>Proteine (g)</label><input id="p-prot" type="number" value="140"></div>
-        <div><label>Carbo (g)</label><input id="p-carb" type="number" value="220"></div>
-      </div>
-      <button class="btn primary" onclick="generatePlan()">⚡ Genera piano</button>
-      <span id="p-status" style="margin-left:10px;color:var(--muted)"></span>
-    </div>
-    <div class="card"><div class="section-title" style="margin-top:0">Diete salvate</div>
-    ${(diets||[]).map(d=>`<div class="list-item"><span>🍽️</span><div style="flex:1"><b>${esc(d.title||'Dieta')}</b> <span class="meta">${esc(d.date||'')}</span></div><button class="btn sm" onclick="exportDiet(${d.id})">PDF</button></div>`).join('')||'<div class="empty">Nessuna dieta</div>'}</div>`;
-}
-function calcWeeks(){
-  const s=document.getElementById('p-start').value,e=document.getElementById('p-end').value;
-  if(s&&e){const days=(new Date(e)-new Date(s))/86400000;document.getElementById('p-weeks').value=Math.max(1,Math.round(days/7));}
-}
-async function generatePlan(){
-  const targets={kcal:+document.getElementById('p-kcal').value,protein:+document.getElementById('p-prot').value,carbs:+document.getElementById('p-carb').value};
-  const weeks=+document.getElementById('p-weeks').value;
-  document.getElementById('p-status').textContent='Genero…';
-  try{
-    const r=await jpost('/api/clients/'+STATE.clientId+'/plan/generate',{targets,options:{weeks}});
-    if(r&&r.diet_id){toast('Piano generato ✓');document.getElementById('p-status').textContent='✓ '+weeks+' settimane';loadDieta();}
-    else{document.getElementById('p-status').textContent='errore';}
-  }catch(e){document.getElementById('p-status').textContent='errore';toast('Errore piano');}
-}
-async function exportDiet(did){
-  try{
-    const r=await fetch(API+'/api/diets/'+did+'/export-html',{method:'POST',body:JSON.stringify({})}).then(r=>r.blob());
-    ncDownload('dieta_'+did+'.html',r);toast('Dieta esportata ✓');
-  }catch(e){toast('Errore export');}
+  $('patient-pane').innerHTML=`<div class="empty">🍽️ Dieta (in arrivo)</div>`;
 }
 
-/* ---- Referti ---- */
 async function loadReferti(){
-  const pane=document.getElementById('patient-pane');
-  pane.innerHTML=`<div class="card"><div class="section-title" style="margin-top:0">📄 Referti / BIA</div>
-    <button class="btn" onclick="document.getElementById('ref-file').click()">📄 Carica referto PDF</button>
-    <input id="ref-file" type="file" accept=".pdf" style="display:none" onchange="uploadRef(this)">
-    <div id="ref-list" class="empty" style="margin-top:12px">Carico…</div></div>`;
-  let bia=[];try{bia=await jget('/api/clients/'+STATE.clientId+'/bia');}catch(e){}
-  document.getElementById('ref-list').innerHTML=(bia||[]).map(b=>`<div class="list-item"><span>🧪</span><div style="flex:1"><b>BIA ${esc((b.date||'').slice(0,10))}</b></div><button class="btn sm" onclick="pasteOcr(${STATE.clientId})">OCR testo</button></div>`).join('')||'<div class="empty">Nessun referto</div>';
-}
-async function uploadRef(input){
-  const f=input.files[0];if(!f)return;const fd=new FormData();fd.append('file',f);
-  try{const r=await fetch(API+'/api/clients/'+STATE.clientId+'/bia/upload',{method:'POST',body:fd}).then(r=>r.json());
-    if(r.scanned){toast('PDF scansionato: incolla il testo OCR');pasteOcr(STATE.clientId,r);}else{toast('Referto importato ✓');loadReferti();}}catch(e){toast('Errore');}
-}
-function pasteOcr(cid,r){
-  const root=document.getElementById('modal-root');
-  root.innerHTML=`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><div class="modal-head"><h3>Incolla testo OCR</h3><button class="btn ghost" onclick="closeModal()">✕</button></div>
-    <div class="modal-body"><textarea id="ocr-text" rows="10" placeholder="Incolla qui il testo estratto dal PDF scansionato…"></textarea></div>
-    <div class="modal-foot"><button class="btn primary" onclick="sendOcr(${cid})">Estrai misure</button></div></div></div>`;
-}
-async function sendOcr(cid){
-  const t=document.getElementById('ocr-text').value;
-  try{await jpost('/api/clients/'+cid+'/bia/paste',{text:t,date:todayISO()});closeModal();toast('BIA da OCR importata ✓');loadReferti();}catch(e){toast('Errore');}
+  const docs=await jget('/api/documents?cid='+STATE.clientId);
+  const bia=await jget('/api/clients/'+STATE.clientId+'/bia-readings');
+  $('patient-pane').innerHTML=`<div class="card"><b>📄 Documenti</b>${docs.map(d=>`
+<div class="patient-card"><div class="info"><b>${esc(d.title||d.original_name)}</b><div class="meta">${d.doc_type} · ${d.date||''}</div></div>
+<button class="btn sm outline" onclick="window.open('/api/files/${encodeURIComponent(d.file_path.split('\\\\').pop().split('/').pop())}')">👁️</button></div>`).join('')||'<div class="empty">Nessun documento</div>'}
+</div><div class="card"><b>🔬 BIA</b>${bia.map(r=>`
+<div class="patient-card"><div class="info"><b>${r.date}</b><div class="meta">Peso ${r.weight_kg||'—'} · BF ${r.bf_pct||'—'}% · PhA ${r.pha||'—'}</div></div></div>`).join('')||'<div class="empty">Nessuna BIA</div>'}</div>`;
 }
 
-/* ---- Appuntamenti ---- */
 async function loadAppuntamenti(){
-  const pane=document.getElementById('patient-pane');
-  let appts=[];try{appts=await jget('/api/appointments?client_id='+STATE.clientId);}catch(e){}
-  pane.innerHTML=`<div class="card" style="margin-bottom:14px"><div class="field-row">
-      <div><label>Titolo</label><input id="a-title" placeholder="Controllo peso"></div>
-      <div><label>Data</label><input id="a-date" type="date" value="${todayISO()}"></div>
-    </div>
-    <button class="btn primary" onclick="saveAppt()">+ Aggiungi appuntamento</button></div>
-    <div>${(appts||[]).map(a=>`<div class="list-item"><span>📅</span><div style="flex:1"><b>${esc(a.title)}</b> <span class="meta">${esc((a.appt_date||'').slice(0,10))}</span></div>${a.done?'<span class="badge ok">fatto</span>':`<button class="btn sm" onclick="doneAppt(${a.id})">✓</button>`}</div>`).join('')||'<div class="empty">Nessun appuntamento</div>'}</div>`;
+  const appts=await jget('/api/appointments?client_id='+STATE.clientId);
+  $('patient-pane').innerHTML=`
+<div class="row" style="margin-bottom:8px"><b>📅 Appuntamenti</b>
+<button class="btn primary" onclick="showApptModal(${STATE.clientId})">➕ Nuovo</button></div>
+<div class="card">${appts.map(a=>`<div class="patient-card" style="border-left:3px solid ${a.status==='closed'?'var(--primary)':a.status==='cancelled'?'var(--danger)':'var(--warn)'}">
+<div class="info"><b>${esc(a.title)}</b><div class="meta">${a.appt_date||'—'} ${a.follow_up?'· 🔄 Follow-up':''} ${a.outcome?'· '+esc(a.outcome):''}</div></div>
+<button class="btn sm outline" onclick="showApptModal(${STATE.clientId},${a.id})">📝</button>
+<button class="btn sm ${a.status==='closed'?'outline':'primary'}" onclick="jpost('/api/appointments/${a.id}/done',{done:${a.status==='closed'?0:1}}).then(()=>loadAppuntamenti())">${a.status==='closed'?'✓ Fatto':'🔴 Apri'}</button>
+</div>`).join('')||'<div class="empty">Nessun appuntamento</div>'}
+</div>`;
 }
-async function saveAppt(){
-  const title=document.getElementById('a-title').value;const date=document.getElementById('a-date').value;
-  if(!title){toast('Inserisci titolo');return;}
-  try{await jpost('/api/clients/'+STATE.clientId+'/appointments',{title,note:'',appt_date:date});toast('Appuntamento salvato ✓');loadAppuntamenti();}catch(e){toast('Errore');}
-}
-async function doneAppt(aid){try{await fetch(API+'/api/appointments/'+aid+'/done',{method:'PUT'}).then(r=>r.json());loadAppuntamenti();}catch(e){}}
 
-/* ---- Sintomi ---- */
 async function loadSintomi(){
-  const pane=document.getElementById('patient-pane');
-  pane.innerHTML=`<div class="card"><div class="field-row">
-      <div><label>Data</label><input id="s-date" type="date" value="${todayISO()}"></div>
-      <div><label>Gonfiore</label><input id="s-bloat" type="number" min="0" max="10"></div>
-    </div>
-    <div class="field-row">
-      <div><label>Dolore</label><input id="s-pain" type="number" min="0" max="10"></div>
-      <div><label>Gas</label><input id="s-gas" type="number" min="0" max="10"></div>
-    </div>
-    <button class="btn primary" onclick="saveSint()">+ Registra sintomo</button></div>`;
-}
-async function saveSint(){
-  const d={date:document.getElementById('s-date').value,bloating:+document.getElementById('s-bloat').value||0,pain:+document.getElementById('s-pain').value||0,gas:+document.getElementById('s-gas').value||0};
-  try{await jpost('/api/clients/'+STATE.clientId+'/symptoms',d);toast('Sintomo salvato ✓');loadSintomi();}catch(e){toast('Errore');}
+  $('patient-pane').innerHTML=`<div class="empty">🩺 Sintomi (in arrivo)</div>`;
 }
 
-/* ---- Integratori ---- */
-async function loadIntegratori(){
-  const pane=document.getElementById('patient-pane');
-  pane.innerHTML=`<div class="card"><div class="field-row">
-      <div><label>Nome</label><input id="sup-name" placeholder="Vitamina D"></div>
-      <div><label>Dose</label><input id="sup-dose" placeholder="2000 UI"></div>
-    </div>
-    <button class="btn primary" onclick="saveSup()">+ Aggiungi integratore</button></div>`;
-}
-async function saveSup(){
-  const name=document.getElementById('sup-name').value;if(!name){toast('Inserisci nome');return;}
-  try{await jpost('/api/clients/'+STATE.clientId+'/supplements',{date:todayISO(),name,dose:document.getElementById('sup-dose').value});toast('Integratore salvato ✓');loadIntegratori();}catch(e){toast('Errore');}
+async function loadGruppi(){
+  const gs=await jget('/api/clients/'+STATE.clientId+'/groups');
+  const all=await jget('/api/groups');
+  $('patient-pane').innerHTML=`<div class="card"><b>👥 Gruppi</b>
+${all.map(g=>`<label class="row" style="cursor:pointer;padding:4px 0"><input type="checkbox" ${gs.find(x=>x.id===g.id)?'checked':''} onchange="if(this.checked){fetch('/api/groups/${g.id}/members',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id:${STATE.clientId}})}).then(()=>toast('Aggiunto'))}else{fetch('/api/groups/${g.id}/members/${STATE.clientId}',{method:'DELETE'}).then(()=>toast('Rimosso'))}"> <b>${esc(g.name)}</b> <span class="meta">(${g.member_count||0})</span></label>`).join('')||'<div class="empty">Nessun gruppo. Creane uno dalla pagina Pazienti.</div>'}
+</div>`;
 }
 
-/* ---- Progressi ---- */
 async function loadProgressi(){
-  const pane=document.getElementById('patient-pane');
-  pane.innerHTML=`<div class="card"><div class="field-row">
-      <div><label>Data</label><input id="pn-date" type="date" value="${todayISO()}"></div>
-      <div></div>
-    </div>
-    <label>Nota di progresso</label><textarea id="pn-text" rows="3" placeholder="Compliance, energia, umore…"></textarea>
-    <button class="btn primary" onclick="savePn()">+ Aggiungi nota</button></div>`;
-}
-async function savePn(){
-  const text=document.getElementById('pn-text').value;if(!text){toast('Scrivi una nota');return;}
-  try{await jpost('/api/clients/'+STATE.clientId+'/progress-note',{date:document.getElementById('pn-date').value,text});toast('Nota salvata ✓');loadProgressi();}catch(e){toast('Errore');}
+  $('patient-pane').innerHTML=`<div class="empty">📈 Progressi (in arrivo)</div>`;
 }
 
-/* ---- Email / WhatsApp ---- */
-async function notifyClient(cid,channel){
-  const subject=prompt('Oggetto '+channel+':','Piano nutrizionale');
-  if(subject===null)return;
-  const body=prompt('Messaggio:','In allegato il tuo piano.');
-  if(body===null)return;
-  try{
-    const r=await jpost('/api/clients/'+cid+'/notify',{type:'piano',channel,subject,body});
-    if(r.mailto)ncOpenExternal(r.mailto);
-    else if(r.wa_link)ncOpenExternal(r.wa_link);
-    toast(channel==='email'?'Email pronta ✓':'WhatsApp pronto ✓');
-  }catch(e){toast('Errore invio');}
-}
-
-/* ---- Agenda ---- */
-async function renderAgenda(){
-  document.getElementById('page-title').textContent='Agenda';
-  const view=document.getElementById('view');
-  view.innerHTML='<div class="empty">Carico…</div>';
-  let appts=[];try{appts=await jget('/api/appointments');}catch(e){}
-  const open=(appts||[]).filter(a=>!a.done);
-  const done=(appts||[]).filter(a=>a.done);
-  const render=a=>`<div class="list-item"><span>📅</span><div style="flex:1"><b>${esc(a.title)}</b> <span class="meta">${esc((a.appt_date||'').slice(0,10))} · cliente #${a.client_id}</span></div>${a.done?'<span class="badge ok">fatto</span>':`<button class="btn sm" onclick="doneAppt(${a.id})">✓</button>`}</div>`;
-  view.innerHTML=`<div class="section-title">Da fare</div>${open.map(render).join('')||'<div class="empty">Nessun appuntamento</div>'}
-    <div class="section-title">Completati</div>${done.map(render).join('')||'<div class="empty">—</div>'}`;
-}
-
-/* ---- modal utils ---- */
-function closeModal(){document.getElementById('modal-root').innerHTML='';}
-
-/* ---- boot ---- */
-(async function(){
-  try{
-    const v=await jget('/api/version');
-    document.getElementById('side-foot').textContent='v'+(v.version||'?');
-  }catch(e){document.getElementById('side-foot').textContent='';}
-  renderDashboard();
-})();
+/* ============ INIT ============ */
+switchNav('dashboard');
 </script>
 </body>
 </html>

@@ -1,4 +1,24 @@
 
+## [1.6.1] — 2026-07-27
+
+### Agenda completa con stato, follow-up, outcome
+- **DB**: colonne `status` (open/closed/cancelled), `follow_up`, `outcome` su appointments
+- **Backend**: `PUT /api/appointments/{aid}` per modifica, `GET /api/follow-ups` per follow-up attivi
+- **UI Agenda** (7-card): statistiche oggi/programmati/completati/follow-up + lista oggi + prossimi + follow-up attivi
+- **Tab Appuntamenti** (scheda paziente): creazione/chiusura/modifica con stato, follow-up, outcome
+- **Modale appuntamento**: seleziona paziente, titolo, data, note, flag follow-up, chiusura
+- Migrazione automatica dei dati esistenti (vecchi appuntamenti con `done=0` → `status='open'`)
+
+## [1.6.0] — 2026-07-27
+
+### Refactoring Dietowin-style: BIA hub + categorie + gruppi
+- **Nuove tabelle DB**: `bia_readings` (campi strutturati + pdf_path), `documents` (archivio), `categories` (categorie colore), `groups_`/`client_groups` (gruppi bulk)
+- **BIA Hub** (sidebar 🔬): upload PDF, storico con trend SVG, form inserimento completo (Peso, BF%, MM%, PhA, TBW, ECW/ICW, BMR, grasso viscerale), elimina
+- **Pazienti**: elimina cliente (`DELETE /api/clients/{cid}`), categorie con colore, gruppi per invii bulk
+- **Archivio documenti**: upload, lista per paziente/tipo, visualizzazione inline
+- **Sidebar 7 voci**: Dashboard · Pazienti · BIA · Agenda · Notifiche · Archivio · Dieta
+- **Scheda paziente** (8 tab): Anamnesi · Misure · Dieta · Referti · Appuntamenti · Sintomi · Gruppi · Progressi
+
 ## [1.5.5] — 2026-07-27
 
 ### Fix wizard anamnesi (condizioni cliniche)

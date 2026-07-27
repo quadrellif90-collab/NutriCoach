@@ -9,7 +9,7 @@ import datetime
 import subprocess
 import urllib.request
 import urllib.error
-from fastapi import FastAPI, UploadFile, File, Request, HTTPException
+from fastapi import FastAPI, UploadFile, File, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,7 +39,7 @@ import version
 UPLOAD_DIR = os.path.join(database.DATA_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-app = FastAPI(title="NutriCoach", version="1.5.5")
+app = FastAPI(title="NutriCoach", version="1.6.1")
 
 app.add_middleware(
     CORSMiddleware,
@@ -687,18 +687,28 @@ def api_messages(cid: int):
 async def api_appt_add(request: Request):
     b = await request.json()
     aid = database.add_appointment(b.get("client_id"), b.get("title", ""),
-                                   b.get("note", ""), b.get("appt_date"))
+        b.get("note", ""), b.get("appt_date"), b.get("status","open"), b.get("follow_up",0))
     return {"ok": True, "id": aid}
 
 @app.get("/api/appointments")
-def api_appointments(client_id: int = None):
-    return database.list_appointments(client_id)
+def api_appointments(client_id: int = None, status: str = None):
+    return database.list_appointments(client_id, status)
+
+@app.put("/api/appointments/{aid}")
+async def api_appt_update(aid: int, request: Request):
+    b = await request.json()
+    database.update_appointment(aid, **b)
+    return {"ok": True}
 
 @app.put("/api/appointments/{aid}/done")
 async def api_appt_done(aid: int, request: Request):
     b = await request.json()
     database.set_appointment_done(aid, int(b.get("done", 1)))
     return {"ok": True}
+
+@app.get("/api/follow-ups")
+def api_follow_ups():
+    return database.get_follow_ups()
 
 
 # ---------------- Acqua ----------------
@@ -1541,6 +1551,159 @@ def api_food_analysis(food_name: str):
         "lectin": ndb.food_lectin_level(key),
         "nutrition": ndb.nutrition_for(key, 100),
     }
+
+
+# ================ NUOVI ENDPOINT 1.6 (Dietowin) ================
+
+# --- Client delete + categoria ---
+@app.delete("/api/clients/{cid}")
+def api_client_delete(cid: int):
+    database.delete_client(cid)
+    return {"ok": True}
+
+
+@app.get("/api/categories")
+def api_categories():
+    return database.list_categories()
+
+
+@app.post("/api/categories")
+def api_category_add(body: dict):
+    cid = database.add_category(body.get("name",""), body.get("color","#6366f1"), body.get("description",""))
+    return {"id": cid, "ok": True}
+
+
+@app.delete("/api/categories/{cid}")
+def api_category_delete(cid: int):
+    database.delete_category(cid)
+    return {"ok": True}
+
+
+# --- Groups ---
+@app.get("/api/groups")
+def api_groups():
+    return database.list_groups()
+
+
+@app.post("/api/groups")
+def api_group_add(body: dict):
+    gid = database.add_group(body.get("name",""), body.get("description",""))
+    return {"id": gid, "ok": True}
+
+
+@app.delete("/api/groups/{gid}")
+def api_group_delete(gid: int):
+    database.delete_group(gid)
+    return {"ok": True}
+
+
+@app.post("/api/groups/{gid}/members")
+def api_group_add_member(gid: int, body: dict):
+    database.add_client_to_group(body["client_id"], gid)
+    return {"ok": True}
+
+
+@app.delete("/api/groups/{gid}/members/{cid}")
+def api_group_remove_member(gid: int, cid: int):
+    database.remove_client_from_group(cid, gid)
+    return {"ok": True}
+
+
+@app.get("/api/groups/{gid}/members")
+def api_group_members(gid: int):
+    return database.get_group_members(gid)
+
+
+@app.get("/api/clients/{cid}/groups")
+def api_client_groups(cid: int):
+    return database.get_client_groups(cid)
+
+
+# --- BIA Readings (nuovo strutturato) ---
+@app.post("/api/clients/{cid}/bia-reading")
+def api_bia_reading_add(cid: int, body: dict):
+    bid = database.add_bia_reading(cid, body.get("date", _today()), pdf_path=body.get("pdf_path",""),
+        pdf_name=body.get("pdf_name",""), weight_kg=body.get("weight_kg"),
+        bf_pct=body.get("bf_pct"), mm_pct=body.get("mm_pct"), pha=body.get("pha"),
+        bmr_kcal=body.get("bmr_kcal"), tbw_l=body.get("tbw_l"),
+        bmi=body.get("bmi"), bf_kg=body.get("bf_kg"), ffm_kg=body.get("ffm_kg"),
+        bcm_kg=body.get("bcm_kg"), smm_kg=body.get("smm_kg"),
+        ecw_l=body.get("ecw_l"), icw_l=body.get("icw_l"), ecw_ratio=body.get("ecw_ratio"),
+        visceral_fat_level=body.get("visceral_fat_level"),
+        source=body.get("source","manual"), notes=body.get("notes"),
+        raw_json=body.get("raw_json"))
+    return {"id": bid, "ok": True}
+
+
+@app.get("/api/clients/{cid}/bia-readings")
+def api_bia_readings(cid: int):
+    return database.list_bia_readings(cid)
+
+
+@app.get("/api/bia-readings/{bid}")
+def api_bia_reading_get(bid: int):
+    r = database.get_bia_reading(bid)
+    if not r:
+        raise HTTPException(404, "BIA non trovata")
+    return r
+
+
+@app.delete("/api/bia-readings/{bid}")
+def api_bia_reading_delete(bid: int):
+    database.delete_bia_reading(bid)
+    return {"ok": True}
+
+
+@app.get("/api/clients/{cid}/bia-trend")
+def api_bia_trend(cid: int, field: str = "weight_kg", days: int = 365):
+    return database.get_bia_trend(cid, field, days)
+
+
+@app.post("/api/clients/{cid}/bia-reading/upload")
+async def api_bia_reading_upload(cid: int, file: UploadFile = File(...)):
+    path = os.path.join(UPLOAD_DIR, f"bia_{cid}_{_timestamp()}_{file.filename}")
+    with open(path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    parsed = bia_parser.parse_bia_pdf(path) if os.path.getsize(path) > 0 else {"scanned": True}
+    fields = parsed.get("fields", {}) if not parsed.get("scanned") else {}
+    bid = database.add_bia_reading(cid, _today(), pdf_path=path, pdf_name=file.filename,
+        source="upload", weight_kg=fields.get("peso"),
+        bf_pct=fields.get("fm"), bf_kg=fields.get("fat_kg"),
+        mm_pct=fields.get("ffm"), pha=fields.get("pha"),
+        bmi=fields.get("bmi"), tbw_l=fields.get("tbw"),
+        bmr_kcal=fields.get("bmr"),
+        raw_json=json.dumps(fields))
+    return {"bia_id": bid, "parsed": fields, "pdf_path": path}
+
+
+@app.get("/api/files/{filepath:path}")
+def api_serve_file(filepath: str):
+    full = os.path.join(UPLOAD_DIR, filepath)
+    if not os.path.exists(full):
+        raise HTTPException(404, "File non trovato")
+    return FileResponse(full)
+
+
+# --- Documents ---
+@app.post("/api/documents")
+async def api_doc_upload(cid: int = Form(None), title: str = Form(""), doc_type: str = Form("altro"),
+                          file: UploadFile = File(...)):
+    path = os.path.join(UPLOAD_DIR, f"doc_{_timestamp()}_{file.filename}")
+    with open(path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    did = database.add_document(cid, title, doc_type, path, original_name=file.filename, date=_today())
+    return {"id": did, "path": path}
+
+
+@app.get("/api/documents")
+def api_docs(cid: int = None, doc_type: str = None):
+    return database.list_documents(cid, doc_type)
+
+
+@app.delete("/api/documents/{did}")
+def api_doc_delete(did: int):
+    database.delete_document(did)
+    return {"ok": True}
 
 
 if __name__ == "__main__":
