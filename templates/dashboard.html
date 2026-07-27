@@ -88,7 +88,7 @@ tr:hover td{background:#f8fafc}
 <div class="nav-item" data-nav="archivio" onclick="switchNav('archivio')"><span class="ico">📁</span> Archivio</div>
 <div class="nav-item" data-nav="dieta" onclick="switchNav('dieta')"><span class="ico">🍽️</span> Dieta</div>
 <div class="spacer"></div>
-<div class="version">v1.6.3</div>
+<div class="version">v1.6.4</div>
 </div>
 <div class="main">
 <div class="topbar">
@@ -110,22 +110,27 @@ function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');set
 function $(id){return document.getElementById(id)}
 function jget(u){return fetch(API+u).then(r=>r.json())}
 function jpost(u,b){return fetch(API+u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json())}
+function jput(u,b){return fetch(API+u,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})}).then(r=>r.json())}
+function jdel(u){return fetch(API+u,{method:'DELETE'}).then(r=>r.json())}
 function esc(s){return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 function init(n){return (n||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}
 function today(){return new Date().toISOString().slice(0,10)}
 function clr(){return ['#10b981','#6366f1','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#06b6d4'][Math.floor(Math.random()*9)]}
 
 /* ============ NAV ============ */
-async function switchNav(nav){
+function setActiveNav(nav){
   STATE.nav=nav;
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.nav===nav));
+}
+async function switchNav(nav){
+  setActiveNav(nav);
   $('page-title').textContent={dashboard:'Dashboard',pazienti:'Pazienti',bia:'BIA & Misure',agenda:'Agenda',notifiche:'Notifiche',archivio:'Archivio',dieta:'Dieta'}[nav]||'NutriCoach';
   const v=$('view');
   if(nav==='dashboard'){await loadDashboard();return}
   if(nav==='pazienti'){await loadPazienti();return}
   if(nav==='bia'){await loadBIA();return}
   if(nav==='agenda'){await loadAgenda();return}
-  if(nav==='notifiche'){v.innerHTML='<div class="empty">📨 Notifiche (in arrivo)</div>';return}
+if(nav==='notifiche'){await loadNotifiche();return}
   if(nav==='archivio'){await loadArchivio();return}
   if(nav==='dieta'){v.innerHTML='<div class="empty">🍽️ Generatore dieta (in arrivo)</div>';return}
 }
@@ -289,6 +294,80 @@ async function saveAppt(aid){
   if(STATE.nav==='agenda')loadAgenda();else loadAppuntamenti();
 }
 
+/* ============ NOTIFICHE ============ */
+async function loadNotifiche(){
+  const[notifs,clients,groups]=await Promise.all([
+    jget('/api/notifications?status=pending'),
+    jget('/api/clients'),
+    jget('/api/groups')
+  ]);
+  STATE.clients=clients;
+  const sent=await jget('/api/notifications?status=sent');
+  const cMap={};clients.forEach(c=>cMap[c.id]=c);
+  $('view').innerHTML=`
+<div class="row" style="margin-bottom:10px"><b>📨 Notifiche & Promemoria</b>
+<button class="btn primary" onclick="genNotifiche()">🔄 Genera dovute</button></div>
+<div class="card"><b>📤 Invio bulk per gruppo</b>
+<div class="field-row"><div><label>Gruppo</label><select id="nt-grp">${groups.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('')||'<option value="">—</option>'}</select></div>
+<div><label>Canale</label><select id="nt-ch"><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select></div>
+<button class="btn primary" onclick="bulkNotifiche()">📨 Invia a gruppo</button></div></div>
+<div class="card"><b>📋 Coda (${notifs.length} da inviare)</b>
+${notifs.map(n=>`<div class="patient-card"><div class="info"><b>${esc((cMap[n.client_id]||{}).name||'Cliente '+n.client_id)}</b><div class="meta">${n.type} · ${n.channel} · ${n.due_date||''}</div></div>
+<button class="btn sm outline" onclick="sendNotifica(${n.id},'${(cMap[n.client_id]||{}).channel||n.channel}')">📨 Invia</button></div>`).join('')||'<div class="empty">Nessuna notifica in coda</div>'}
+</div>
+<div class="card"><b>✅ Inviata (${sent.length})</b>
+${sent.slice(0,20).map(n=>`<div class="patient-card"><div class="info"><b>${esc((cMap[n.client_id]||{}).name||'Cliente '+n.client_id)}</b><div class="meta">${n.type} · ${n.channel} · ${n.due_date||''}</div></div></div>`).join('')||'<div class="empty">Nessuna inviata</div>'}
+</div>`;
+}
+
+async function genNotifiche(){
+  // genera per ogni cliente
+  const clients=STATE.clients.length?STATE.clients:await jget('/api/clients');
+  let tot=0;
+  for(const c of clients){
+    const r=await jpost('/api/clients/'+c.id+'/notifications/generate',{});
+    tot+=(r&&r.count)||0;
+  }
+  toast(`Generate ${tot} notifiche`);
+  loadNotifiche();
+}
+
+async function sendNotifica(nid,channel){
+  const n=await jget('/api/notifications?status=pending').then(list=>list.find(x=>x.id===nid));
+  if(!n)return;
+  const client=await jget('/api/clients/'+n.client_id).catch(()=>({}));
+  channel=channel||n.channel;
+  if(channel==='whatsapp'){
+    const phone=(client.phone||'').replace(/\D/g,'');
+    if(phone) window.open('https://wa.me/'+phone+'?text='+encodeURIComponent('Ciao '+client.name+', ti scrivo da NutriCoach per il tuo '+n.type),'_blank');
+    else toast('Telefono mancante per WhatsApp');
+  }else if(channel==='email'){
+    if(client.email) window.open('mailto:'+client.email+'?subject='+encodeURIComponent('NutriCoach — '+n.type)+'&body='+encodeURIComponent('Ciao '+client.name),'_blank');
+    else toast('Email mancante');
+  }
+  await jput('/api/notifications/'+nid+'/sent',{sent:true});
+  loadNotifiche();
+}
+
+async function bulkNotifiche(){
+  const gid=+$('nt-grp').value;
+  const ch=$('nt-ch').value;
+  if(!gid){toast('Seleziona un gruppo');return;}
+  const members=await jget('/api/groups/'+gid+'/members');
+  let ok=0;
+  for(const m of members){
+    const client=await jget('/api/clients/'+m.client_id).catch(()=>({}));
+    if(ch==='whatsapp'){
+      const phone=(client.phone||'').replace(/\D/g,'');
+      if(phone) window.open('https://wa.me/'+phone+'?text='+encodeURIComponent('Ciao '+client.name+' da NutriCoach'),'_blank');
+    }else if(ch==='email'&&client.email){
+      window.open('mailto:'+client.email+'?subject='+encodeURIComponent('NutriCoach')+'&body='+encodeURIComponent('Ciao '+client.name),'_blank');
+    }
+    ok++;
+  }
+  toast('Aperte '+ok+' finestre di invio');
+}
+
 /* ============ BIA HUB ============ */
 async function loadBIA(){
   const clients=STATE.clients.length?STATE.clients:await jget('/api/clients');
@@ -428,7 +507,8 @@ async function openPatient(cid){
   const groups=await jget('/api/clients/'+cid+'/groups');
   const cats=STATE.categories.length?STATE.categories:await jget('/api/categories');
   const cat=cats.find(x=>x.id===c.category_id);
-  switchNav('dashboard'); // naviga a dashboard per ora
+  STATE.nav='dashboard';
+  setActiveNav('dashboard');
   $('page-title').textContent=esc(c.name);
   $('view').innerHTML=`
 <div class="card">
@@ -480,7 +560,59 @@ ${recsArr.slice(0,3).map(r=>`<div style="margin:6px 0;padding:8px;background:#f8
 }
 
 async function loadMisure(){
-  $('patient-pane').innerHTML=`<div class="empty">⚖️ Misure (in arrivo)</div>`;
+  const ms = await jget('/api/clients/'+STATE.clientId+'/measurements');
+  const c = (STATE.clients.find(x=>x.id===STATE.clientId))||{};
+  $('patient-pane').innerHTML=`
+<div class="row" style="margin-bottom:8px"><b>⚖️ Misure antropometriche</b>
+<button class="btn primary" onclick="showMisuraForm()">➕ Nuova misura</button></div>
+<div class="card"><b>📋 Storico</b>
+<table class="tbl"><thead><tr>
+<th>DATA</th><th>PESO</th><th>ALTEZZA</th><th>VITA</th><th>FIANCHI</th><th>PETTO</th><th>BRACCIO</th><th>COSCIA</th><th>POLPACCIO</th><th>TRICIP.</th><th>BICIP.</th><th>SOTTOSCAP.</th><th>SOVRAPOP.</th><th></th>
+</tr></thead><tbody>
+${ms.map(m=>`<tr><td>${m.date||''}</td><td>${m.weight_kg??''}</td><td>${m.height_cm??''}</td><td>${m.waist_cm??''}</td><td>${m.hip_cm??''}</td><td>${m.chest_cm??''}</td><td>${m.arm_cm??''}</td><td>${m.thigh_cm??''}</td><td>${m.calf_cm??''}</td><td>${m.skinfold_triceps??''}</td><td>${m.skinfold_biceps??''}</td><td>${m.skinfold_subscapular??''}</td><td>${m.skinfold_suprailiac??''}</td><td><button class="btn sm outline" onclick="deleteMisura(${m.id})">✕</button></td></tr>`).join('')}
+</tbody></table>${ms.length?'':'<div class="empty">Nessuna misura</div>'}</div>`;
+}
+
+function showMisuraForm(){
+  modal(`<div class="card"><b>➕ Nuova misura</b>
+<div class="field-row"><div><label>Data</label><input type="date" id="ms-date" value="${new Date().toISOString().slice(0,10)}"></div>
+<div><label>Peso (kg)</label><input id="ms-weight" type="number" step="0.1" placeholder="70.5"></div>
+<div><label>Altezza (cm)</label><input id="ms-height" type="number" step="0.1"></div></div>
+<div class="field-row"><div><label>Vita (cm)</label><input id="ms-waist" type="number" step="0.1"></div>
+<div><label>Fianchi (cm)</label><input id="ms-hip" type="number" step="0.1"></div>
+<div><label>Petto (cm)</label><input id="ms-chest" type="number" step="0.1"></div></div>
+<div class="field-row"><div><label>Braccio (cm)</label><input id="ms-arm" type="number" step="0.1"></div>
+<div><label>Coscia (cm)</label><input id="ms-thigh" type="number" step="0.1"></div>
+<div><label>Polpaccio (cm)</label><input id="ms-calf" type="number" step="0.1"></div></div>
+<div class="field-row"><div><label>Plica tricipite (mm)</label><input id="ms-tri" type="number" step="0.1"></div>
+<div><label>Plica bicipite (mm)</label><input id="ms-bi" type="number" step="0.1"></div></div>
+<div class="field-row"><div><label>Plica sottoscapolare (mm)</label><input id="ms-sub" type="number" step="0.1"></div>
+<div><label>Plica sovrailiaca (mm)</label><input id="ms-sup" type="number" step="0.1"></div></div>
+<label>Note</label><textarea id="ms-note" rows="2"></textarea>
+<div style="margin-top:10px;display:flex;gap:8px"><button class="btn primary" onclick="saveMisura()">💾 Salva</button>
+<button class="btn outline" onclick="closeModal()">Annulla</button></div></div>`);
+}
+
+async function saveMisura(){
+  const v = id => $(id).value;
+  const body = {
+    date: v('ms-date'),
+    weight_kg: v('ms-weight')||null, height_cm: v('ms-height')||null,
+    waist_cm: v('ms-waist')||null, hip_cm: v('ms-hip')||null, chest_cm: v('ms-chest')||null,
+    arm_cm: v('ms-arm')||null, thigh_cm: v('ms-thigh')||null, calf_cm: v('ms-calf')||null,
+    skinfold_triceps: v('ms-tri')||null, skinfold_biceps: v('ms-bi')||null,
+    skinfold_subscapular: v('ms-sub')||null, skinfold_suprailiac: v('ms-sup')||null,
+    note: v('ms-note')
+  };
+  const r = await jpost('/api/clients/'+STATE.clientId+'/measurements', body);
+  if(r && r.id){ toast('Misura salvata ✓'); closeModal(); loadMisure(); }
+  else toast('Errore salvataggio');
+}
+
+async function deleteMisura(mid){
+  if(!confirm('Eliminare questa misura?')) return;
+  await jdel('/api/clients/'+STATE.clientId+'/measurements/'+mid);
+  loadMisure();
 }
 
 async function loadDieta(){

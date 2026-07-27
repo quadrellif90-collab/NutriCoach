@@ -1,4 +1,14 @@
 
+## [1.6.4] — 2026-07-27
+
+### Notifiche + Tab Misure (2 feature richieste)
+- **Tab Misure** (scheda paziente): storico tabelle (peso, altezza, circonferenze, pliche), form inserimento, eliminazione
+- **Endpoint**: `POST /api/clients/{cid}/measurements` ritorna `id`, `DELETE /api/clients/{cid}/measurements/{mid}`, `delete_measurement()` in db.py
+- **Pagina Notifiche** (sidebar 📨): coda notifiche, generazione dovute, invio singolo (wa.me/mailto), invio bulk per gruppo
+- **Helpers frontend**: `jput`, `jdel`, `setActiveNav`
+- **Bug critico fixato**: `openPatient()` non apriva la scheda (chiamava `switchNav('dashboard')` che sovrascriveva `#view`); ora usa `setActiveNav` senza ricaricare
+- **Bug fixato**: endpoint POST misure non ritornava `id` → frontend diceva "Errore salvataggio"
+
 ## [1.6.3] — 2026-07-27
 
 ### Cleanup duplicazioni (post-1.6.2)

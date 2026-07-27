@@ -39,7 +39,7 @@ import version
 UPLOAD_DIR = os.path.join(database.DATA_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-app = FastAPI(title="NutriCoach", version="1.6.3")
+app = FastAPI(title="NutriCoach", version="1.6.4")
 
 app.add_middleware(
     CORSMiddleware,
@@ -1014,13 +1014,19 @@ def api_client_get(cid: int):
 async def api_measurement_add(cid: int, request: Request):
     body = await request.json()
     date = body.pop("date", None) or _today()
-    database.add_measurement(cid, date, **body)
-    return {"ok": True}
+    mid = database.add_measurement(cid, date, **body)
+    return {"ok": True, "id": mid}
 
 
 @app.get("/api/clients/{cid}/measurements")
 def api_measurements(cid: int):
     return database.list_measurements(cid)
+
+
+@app.delete("/api/clients/{cid}/measurements/{mid}")
+def api_measurement_del(cid: int, mid: int):
+    database.delete_measurement(mid)
+    return {"ok": True}
 
 
 # ---------------- BIA ----------------

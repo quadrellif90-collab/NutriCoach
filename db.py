@@ -405,6 +405,10 @@ def latest_measurement(cid):
     rows = list_measurements(cid)
     return rows[0] if rows else {}
 
+def delete_measurement(mid):
+    conn = _ensure(); cur = conn.cursor()
+    cur.execute("DELETE FROM measurements WHERE id=?", (mid,))
+    conn.commit(); conn.close()
 
 def compute_anthropometry(cid):
     """Unisce profilo cliente + ultima misura e ritorna i calcoli antropometrici."""
