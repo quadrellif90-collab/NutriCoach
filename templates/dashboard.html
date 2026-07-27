@@ -101,7 +101,7 @@ tr:hover td{background:#f8fafc}
 <div class="nav-item" data-nav="archivio" onclick="switchNav('archivio')"><span class="ico">📁</span> Archivio</div>
 <div class="nav-item" data-nav="dieta" onclick="switchNav('dieta')"><span class="ico">🍽️</span> Dieta</div>
 <div class="spacer"></div>
-<div class="version">v1.6.7</div>
+<div class="version">v1.6.8</div>
 </div>
 <div class="main">
 <div class="topbar">
@@ -424,9 +424,45 @@ async function loadBIA(){
     ${clients.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}
   </select>
   <button class="btn primary" onclick="showBIAForm()">➕ Nuova misurazione</button>
+  <button class="btn outline" onclick="uploadBIA()">📄 Carica PDF</button>
   <button class="btn outline" onclick="$('bia-client').value='';$('view').innerHTML='<div class=empty>Seleziona un paziente</div>'">Pulisci</button>
 </div>
 <div id="bia-view"><div class="empty">👆 Seleziona un paziente per vedere le misurazioni BIA</div></div>`;
+}
+
+function uploadBIA(){
+  const cid=+$('bia-client').value;
+  if(!cid){toast('Seleziona prima un paziente');return;}
+  const inp=document.createElement('input');
+  inp.type='file';inp.accept='.pdf';
+  inp.onchange=async()=>{
+    const f=inp.files[0];if(!f)return;
+    toast('Estrazione dati...');
+    const fd=new FormData();fd.append('file',f);
+    const r=await fetch(API+'/api/clients/'+cid+'/bia/upload',{method:'POST',body:fd});
+    const j=await r.json();
+    if(j.scanned){toast('PDF scansionato: copia il testo manualmente');modalOCRPages(j.pages);return;}
+    if(j.bia_id){toast('BIA importata ✓');loadBIAReading();}
+    else toast('Errore import');
+  };
+  inp.click();
+}
+
+function modalOCRPages(pages){
+  modal(`<div class="card"><b>📄 PDF scansionato</b><p class="meta">OCR non disponibile. Copia il testo e incollalo sotto:</p>
+  ${pages.map((p,i)=>`<div style="margin:6px 0"><b>Pagina ${i+1}</b><textarea rows="4" style="width:100%">${p.text||''}</textarea></div>`).join('')}
+  <label>Testo BIA completo</label><textarea id="ocr-text" rows="5" placeholder="Incolla qui i valori BIA..."></textarea>
+  <div style="margin-top:10px;display:flex;gap:8px"><button class="btn primary" onclick="pasteBIA()">📥 Importa testo</button>
+  <button class="btn outline" onclick="closeModal()">Annulla</button></div></div>`);
+}
+
+async function pasteBIA(){
+  const cid=+$('bia-client').value;
+  const text=$('ocr-text').value;
+  if(!text.trim()){toast('Incolla il testo');return;}
+  const r=await jpost('/api/clients/'+cid+'/bia/paste',{text});
+  if(r&&r.bia_id){toast('BIA importata ✓');closeModal();loadBIAReading();}
+  else toast('Errore');
 }
 
 async function loadBIAReading(){

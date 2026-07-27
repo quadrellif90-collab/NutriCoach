@@ -1,4 +1,19 @@
 
+## [1.6.8] — 2026-07-27
+
+### BIA OCR — UI upload PDF (backend già pronto)
+- **Pulsante "📄 Carica PDF"** nel tab BIA (hub)
+- `uploadBIA()`: POST `/api/clients/{cid}/bia/upload` (FormData), parsing automatico via `bia_parser`+`ocr`
+- **PDF scansionato** (no testo): `modalOCRPages()` mostra le pagine estratte, `pasteBIA()` importa il testo via `/api/clients/{cid}/bia/paste`
+- **PDF con testo**: import automatico + toast "BIA importata ✓"
+- Backend verificato: upload PDF finto → parsing (peso/TBW/PhA/BMR) → `bia_id` salvato
+
+### Self-update EXE — verifica meccanismo
+- `/api/self-update/check`: confronta `version.VERSION` con release `latest` (cache 6h)
+- `/api/self-update/apply`: scarica EXE da GitHub e lancia `Setup.exe /S` (silenzioso Windows)
+- `run.py`: check non bloccante al boot (thread daemon)
+- Verificato: check ritorna `update_available` corretto + `download_url` presente
+
 ## [1.6.7] — 2026-07-27
 
 ### Confronto clienti (UI su endpoint esistente)
