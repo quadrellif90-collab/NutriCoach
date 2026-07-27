@@ -1,4 +1,14 @@
 
+## [1.6.6] — 2026-07-27
+
+### Tab Dieta (generatore piano + diario settimanale)
+- **Diario alimentare**: griglia 7 giorni × 5 pasti (colazione/spuntino/pranzo/spuntino2/cena)
+- **Genera piano**: chiama `/api/clients/{cid}/plan/generate` (meal_planner + esclusioni cliniche da condizioni/allergie), applica il piano al diario
+- **Aggiungi alimento**: manuale per giorno/pasto con grammi
+- **Elimina**: `DELETE /api/clients/{cid}/diet-item/{iid}`
+- **CSS**: `.diet-grid`, `.diet-day`, `.diet-meal`, `.diet-item` (responsive 7→3 col)
+- **Bug fixati**: `plan.days` è lista di `{day, meals:[{meal, items:[{food,g}]}]}` → mapping corretto `f.food`/`f.g` (non `name`/`grams`); `options.days` deve essere lista non int
+
 ## [1.6.5] — 2026-07-27
 
 ### Tab Sintomi + Progressi (completamento scheda paziente)

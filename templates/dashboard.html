@@ -46,6 +46,15 @@ body{background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
 .patient-card .name{font-weight:500;font-size:13px}
 .patient-card .meta{font-size:11px;color:var(--text2)}
 .patient-card .cat{font-size:10px;padding:1px 6px;border-radius:10px;display:inline-block}
+.diet-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-top:10px}
+.diet-day{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:8px;min-height:200px}
+.diet-day>b{font-size:11px;color:var(--text2);display:block;margin-bottom:6px;text-align:center}
+.diet-meal{margin-bottom:6px}
+.meal-label{font-size:10px;font-weight:600;color:var(--primary);display:block;margin-bottom:2px}
+.diet-item{font-size:11px;background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:3px 6px;margin-bottom:3px;display:flex;justify-content:space-between;align-items:center;gap:4px}
+.diet-item .x{border:none;background:none;color:var(--danger);cursor:pointer;font-size:10px;padding:0 2px}
+.diet-empty{height:6px}
+@media(max-width:900px){.diet-grid{grid-template-columns:repeat(3,1fr)}}
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:center;justify-content:center}
 .modal{background:var(--surface);border-radius:12px;width:540px;max-width:90vw;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
 .modal-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);font-weight:600;font-size:14px}
@@ -88,7 +97,7 @@ tr:hover td{background:#f8fafc}
 <div class="nav-item" data-nav="archivio" onclick="switchNav('archivio')"><span class="ico">📁</span> Archivio</div>
 <div class="nav-item" data-nav="dieta" onclick="switchNav('dieta')"><span class="ico">🍽️</span> Dieta</div>
 <div class="spacer"></div>
-<div class="version">v1.6.5</div>
+<div class="version">v1.6.6</div>
 </div>
 <div class="main">
 <div class="topbar">
@@ -623,8 +632,83 @@ async function deleteMisura(mid){
   loadMisure();
 }
 
+const DIET_DAYS=['lun','mar','mer','gio','ven','sab','dom'];
+const DIET_MEALS=[['colazione','Colazione'],['spuntino','Spuntino'],['pranzo','Pranzo'],['spuntino2','Spuntino PM'],['cena','Cena']];
 async function loadDieta(){
-  $('patient-pane').innerHTML=`<div class="empty">🍽️ Dieta (in arrivo)</div>`;
+  const items=await jget('/api/clients/'+STATE.clientId+'/diet-items');
+  const byKey={};
+  items.forEach(i=>{byKey[i.day+'|'+i.meal]=(byKey[i.day+'|'+i.meal]||[]);byKey[i.day+'|'+i.meal].push(i);});
+  $('patient-pane').innerHTML=`
+<div class="row" style="margin-bottom:8px"><b>🍽️ Diario alimentare</b>
+<button class="btn primary" onclick="showGenPlan()">✨ Genera piano</button>
+<button class="btn outline" onclick="showAddFood()" >➕ Aggiungi</button></div>
+<div class="diet-grid">${DIET_DAYS.map(d=>`
+<div class="diet-day"><b>${d.toUpperCase()}</b>${DIET_MEALS.map(([mk,ml])=>`
+<div class="diet-meal"><span class="meal-label">${ml}</span>${((byKey[d+'|'+mk])||[]).map(it=>`<div class="diet-item">${esc(it.food)} ${it.grams?it.grams+'g':''}<button class="x" onclick="deleteFood(${it.id})">✕</button></div>`).join('')||'<div class="diet-empty"></div>'}</div>`).join('')}</div>`).join('')}</div>`;
+}
+
+function showAddFood(){
+  modal(`<div class="card"><b>➕ Aggiungi alimento</b>
+<div class="field-row"><div><label>Giorno</label><select id="fd-day">${DIET_DAYS.map(d=>`<option>${d}</option>`).join('')}</select></div>
+<div><label>Pasto</label><select id="fd-meal">${DIET_MEALS.map(([mk,ml])=>`<option value="${mk}">${ml}</option>`).join('')}</select></div></div>
+<label>Alimento</label><input id="fd-food" placeholder="Es. petto di pollo">
+<label>Grammi</label><input id="fd-grams" type="number" value="100">
+<div style="margin-top:10px;display:flex;gap:8px"><button class="btn primary" onclick="addFood()">💾 Salva</button>
+<button class="btn outline" onclick="closeModal()">Annulla</button></div></div>`);
+}
+
+async function addFood(){
+  const body={day:$('fd-day').value,meal:$('fd-meal').value,food:$('fd-food').value,grams:parseInt($('fd-grams').value||0)};
+  const r=await jpost('/api/clients/'+STATE.clientId+'/diet-item',body);
+  if(r&&r.id){toast('Aggiunto ✓');closeModal();loadDieta();}else toast('Errore');
+}
+
+async function deleteFood(iid){
+  if(!confirm('Eliminare?'))return;
+  await jdel('/api/clients/'+STATE.clientId+'/diet-item/'+iid);
+  loadDieta();
+}
+
+function showGenPlan(){
+  modal(`<div class="card"><b>✨ Genera piano automatico</b>
+<div class="field-row"><div><label>kcal/die</label><input id="gp-kcal" type="number" value="2000"></div>
+<div><label>Proteine %</label><input id="gp-p" type="number" value="30"></div>
+<div><label>Carb %</label><input id="gp-c" type="number" value="45"></div>
+<div><label>Grassi %</label><input id="gp-f" type="number" value="25"></div></div>
+<label>Frequenza pasti</label><select id="gp-freq"><option value="3">3 (colazione/pranzo/cena)</option><option value="5" selected>5 (con spuntini)</option></select>
+<div style="margin-top:10px;display:flex;gap:8px"><button class="btn primary" onclick="genPlan()">⚡ Genera</button>
+<button class="btn outline" onclick="closeModal()">Annulla</button></div></div>`);
+}
+
+async function genPlan(){
+  const targets={kcal:parseFloat($('gp-kcal').value),protein_pct:parseFloat($('gp-p').value),carb_pct:parseFloat($('gp-c').value),fat_pct:parseFloat($('gp-f').value)};
+  const options={meals:parseInt($('gp-freq').value),days:['lun','mar','mer','gio','ven','sab','dom']};
+  closeModal();
+  toast('Generazione...');
+  const plan=await jpost('/api/clients/'+STATE.clientId+'/plan/generate',{targets,options});
+  if(plan&&plan.days){await applyPlan(plan);toast('Piano generato ✓');}
+  else toast('Errore generazione');
+}
+
+async function applyPlan(plan){
+  // svuota diario esistente
+  const existing=await jget('/api/clients/'+STATE.clientId+'/diet-items');
+  for(const it of existing){await jdel('/api/clients/'+STATE.clientId+'/diet-item/'+it.id);}
+  // inserisci nuovi item dal piano
+  const mealsMap={colazione:'colazione',spuntino:'spuntino',pranzo:'pranzo',spuntino2:'spuntino2',cena:'cena'};
+  const daysArr=Array.isArray(plan.days)?plan.days:Object.values(plan.days||{});
+  for(const d of daysArr){
+    const dk=(d.day||'').slice(0,3).toLowerCase();
+    const meals=Array.isArray(d.meals)?d.meals:[];
+    for(const mp of meals){
+      const mk=mealsMap[mp.meal]||mp.meal;
+      const foods=mp.items||[];
+      for(const f of foods){
+        if(f&&f.food){await jpost('/api/clients/'+STATE.clientId+'/diet-item',{day:dk,meal:mk,food:f.food,grams:f.g||0});}
+      }
+    }
+  }
+  loadDieta();
 }
 
 async function loadReferti(){
