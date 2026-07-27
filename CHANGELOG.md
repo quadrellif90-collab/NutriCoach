@@ -1,4 +1,13 @@
 
+## [1.5.5] — 2026-07-27
+
+### Fix wizard anamnesi (condizioni cliniche)
+- **Bug critico**: `loadConditions` assumeva un array, ma `/api/clinical-nutrition/conditions` ritorna un **dict** `{key:{name,...}}` → lo step 3 (Clinica) crashava e restava vuoto. Ora converte il dict in array (`Object.entries` → `{key,label}`).
+- `openNewClient` ora ha `.catch(()=>showWizard())` per robustezza se l'endpoint fallisce.
+- `renderWizardStep` (step 2) usa `(_CONDITIONS||[])` guard.
+- Verificato live: wizard 4-step completo (Anagrafica → Obiettivi → Clinica con 23 condizioni → Conferma → salvataggio cliente+anamnesi OK).
+- Verificato live: scheda paziente (8 tab), tab Dieta → `calcWeeks()` auto-calcola N settimane da data inizio/fine, `generatePlan` crea il piano (`/plan/generate` → diet_id).
+
 ## [1.5.4] — 2026-07-27
 
 ### Riscrittura UI — stile Nutrium + funzioni Dietowin

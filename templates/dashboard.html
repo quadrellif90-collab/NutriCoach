@@ -213,11 +213,16 @@ function onGlobalSearch(v){
 /* ============ NUOVO PAZIENTE (wizard anamnesi) ============ */
 function openNewClient(){
   STATE._wizard={step:0,conditions:[],allergies:'',notes:'',goal:'Dimagrimento',activity:'moderato'};
-  loadConditions().then(()=>showWizard());
+  loadConditions().then(()=>showWizard()).catch(()=>showWizard());
 }
 let _CONDITIONS=[];
 async function loadConditions(){
-  try{const d=await jget('/api/clinical-nutrition/conditions');_CONDITIONS=d.conditions||[];}catch(e){_CONDITIONS=[];}
+  try{
+    const d=await jget('/api/clinical-nutrition/conditions');
+    const c=d.conditions||{};
+    // l'endpoint puo' restituire dict {key:{name,...}} o lista
+    _CONDITIONS=Array.isArray(c)?c:Object.entries(c).map(([key,v])=>({key,label:(v&&v.name)||key}));
+  }catch(e){_CONDITIONS=[];}
 }
 function showWizard(){
   const w=STATE._wizard;
@@ -260,7 +265,7 @@ function renderWizardStep(){
     </select>
     <label>Note anagrafiche</label><textarea id="w-notes0" rows="2" placeholder="Lavoro, stile di vita…">${esc(w.notes0||'')}</textarea>`;
   }else if(w.step===2){
-    const conds=_CONDITIONS.map(c=>`<label class="check"><input type="checkbox" value="${esc(c.key)}" ${w.conditions.includes(c.key)?'checked':''} onchange="toggleCond(this)"> ${esc(c.label||c.key)}</label>`).join('')||'<div class="empty">Nessuna condizione disponibile</div>';
+    const conds=(_CONDITIONS||[]).map(c=>`<label class="check"><input type="checkbox" value="${esc(c.key)}" ${w.conditions.includes(c.key)?'checked':''} onchange="toggleCond(this)"> ${esc(c.label||c.key)}</label>`).join('')||'<div class="empty">Nessuna condizione disponibile</div>';
     b.innerHTML=`<label>Condizioni cliniche</label>${conds}
     <label>Allergie / intolleranze</label><input id="w-all" value="${esc(w.allergies||'')}" placeholder="glutine, lattosio…">
     <label>Note anamnesi</label><textarea id="w-notes" rows="3" placeholder="Cronologia, farmaci…">${esc(w.notes||'')}</textarea>`;
@@ -290,8 +295,8 @@ function toggleCond(el){const k=el.value;const w=STATE._wizard;if(el.checked){if
 function wizardPrev(){grabWizard();if(STATE._wizard.step>0){STATE._wizard.step--;showWizard();}}
 function wizardNext(){grabWizard();if(STATE._wizard.step<3){STATE._wizard.step++;showWizard();}}
 async function wizardSave(){
-  grabWizard();const w=STATE._wizard;
-  if(!w.name.trim()){toast('Inserisci il nome');return;}
+  const w=STATE._wizard;
+  if(!w.name||!w.name.trim()){toast('Inserisci il nome');return;}
   try{
     const r=await jpost('/api/clients',{name:w.name,dob:w.dob,sex:w.sex,height_cm:w.height_cm,activity:w.activity,email:w.email,phone:w.phone,goal:w.goal,allergies:w.allergies,notes:w.notes0||''});
     if(r&&r.id){
