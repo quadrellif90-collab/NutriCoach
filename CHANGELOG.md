@@ -1,4 +1,13 @@
 
+## [1.6.7] — 2026-07-27
+
+### Confronto clienti (UI su endpoint esistente)
+- **Pulsante "⚖️ Confronta"** nella pagina Pazienti
+- **Modale selezione**: checkbox multi-paziente (2+)
+- **Tabella confronto**: 9 metriche (Età, Peso, BMI, BF%, Massa magra, FFMI, WHR, TDEE, Proteine) da `/api/clients/compare` + `compute_anthropometry`
+- **CSS**: `.cmp-table` (bordi, header colorato)
+- **Bug fixato**: `loadPazienti` crashava su `$('pz-filter-cat').value` quando chiamato via `switchNav` prima del render → usa `getElementById` con guard
+
 ## [1.6.6] — 2026-07-27
 
 ### Tab Dieta (generatore piano + diario settimanale)

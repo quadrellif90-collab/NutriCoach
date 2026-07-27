@@ -55,6 +55,10 @@ body{background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
 .diet-item .x{border:none;background:none;color:var(--danger);cursor:pointer;font-size:10px;padding:0 2px}
 .diet-empty{height:6px}
 @media(max-width:900px){.diet-grid{grid-template-columns:repeat(3,1fr)}}
+.cmp-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}
+.cmp-table th,.cmp-table td{border:1px solid var(--border);padding:6px 8px;text-align:left}
+.cmp-table thead th{background:var(--bg-card);color:var(--primary)}
+.cmp-table tbody td:first-child{background:var(--bg-card)}
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:center;justify-content:center}
 .modal{background:var(--surface);border-radius:12px;width:540px;max-width:90vw;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
 .modal-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);font-weight:600;font-size:14px}
@@ -97,7 +101,7 @@ tr:hover td{background:#f8fafc}
 <div class="nav-item" data-nav="archivio" onclick="switchNav('archivio')"><span class="ico">📁</span> Archivio</div>
 <div class="nav-item" data-nav="dieta" onclick="switchNav('dieta')"><span class="ico">🍽️</span> Dieta</div>
 <div class="spacer"></div>
-<div class="version">v1.6.6</div>
+<div class="version">v1.6.7</div>
 </div>
 <div class="main">
 <div class="topbar">
@@ -195,10 +199,11 @@ async function loadPazienti(){
   </select>
   <button class="btn outline" onclick="showCategoryModal()">📂 Gestisci categorie</button>
   <button class="btn outline" onclick="showGroupModal()">👥 Gestisci gruppi</button>
+  <button class="btn primary" onclick="showCompare()">⚖️ Confronta</button>
 </div>
 <div class="card">
   <div class="row" style="margin-bottom:8px"><b>👥 Pazienti (${clients.length})</b></div>
-  ${clients.filter(c=>!$('pz-filter-cat').value||c.category_id==+$('pz-filter-cat').value).map(c=>`
+  ${clients.filter(c=>{const f=document.getElementById('pz-filter-cat');return !f||!f.value||c.category_id==+f.value;}).map(c=>`
   <div class="patient-card" onclick="openPatient(${c.id})">
     <div class="init" style="background:${c._cat?c._cat.color:clr()}">${init(c.name)}</div>
     <div class="info"><div class="name">${esc(c.name)} ${c._cat?`<span class="cat" style="background:${c._cat.color}22;color:${c._cat.color}">${esc(c._cat.name)}</span>`:''}</div>
@@ -210,10 +215,33 @@ async function loadPazienti(){
 
 async function deleteClient(cid){
   if(!confirm('Eliminare questo paziente e tutti i suoi dati?'))return;
-  await jpost('/api/clients/{cid}'.replace('{cid}',cid),{_method:'DELETE'});
-  // use DELETE method properly
   await fetch(API+'/api/clients/'+cid,{method:'DELETE'});
   toast('Paziente eliminato');loadPazienti();
+}
+
+function showCompare(){
+  modal(`<div class="card"><b>⚖️ Confronta pazienti</b>
+<p class="meta">Seleziona 2+ pazienti per confrontare profilo e antropometria.</p>
+<div style="max-height:300px;overflow-y:auto;margin:10px 0">${STATE.clients.map(c=>`<label class="row" style="cursor:pointer;padding:6px 0;border-bottom:1px solid var(--border)"><input type="checkbox" class="cmp-chk" value="${c.id}"> <b>${esc(c.name)}</b> <span class="meta">${c.sex||''} · ${c.goal||''}</span></label>`).join('')}</div>
+<div style="display:flex;gap:8px"><button class="btn primary" onclick="runCompare()">📊 Confronta</button>
+<button class="btn outline" onclick="closeModal()">Annulla</button></div></div>`);
+}
+
+async function runCompare(){
+  const ids=[...document.querySelectorAll('.cmp-chk:checked')].map(c=>+c.value);
+  if(ids.length<2){toast('Seleziona almeno 2 pazienti');return;}
+  const data=await jget('/api/clients/compare?ids='+ids.join(','));
+  if(!data||!data.length){toast('Nessun dato');return;}
+  const rows=[
+    ['Età',d=>d.age||'—'],['Peso (kg)',d=>d.weight_kg||'—'],['BMI',d=>d.bmi||'—'],
+    ['BF%',d=>d.fat_pct||'—'],['Massa magra (kg)',d=>d.lean_mass_kg||'—'],
+    ['FFMI',d=>d.ffmi||'—'],['WHR',d=>d.whr||'—'],['TDEE (kcal)',d=>d.tdee||'—'],
+    ['Proteine (g)',d=>d.protein_g||'—']
+  ];
+  const tbl=`<table class="cmp-table"><thead><tr><th>Metrica</th>${data.map(d=>`<th>${esc(d.name)}</th>`).join('')}</tr></thead>
+<tbody>${rows.map(([label,fn])=>`<tr><td><b>${label}</b></td>${data.map(d=>`<td>${fn(d)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  modal(`<div class="card"><b>⚖️ Confronto (${data.length} pazienti)</b>${tbl}
+<div style="margin-top:10px"><button class="btn outline" onclick="closeModal()">Chiudi</button></div></div>`);
 }
 
 function showCategoryModal(){
