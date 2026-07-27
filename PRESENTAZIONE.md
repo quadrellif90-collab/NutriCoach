@@ -34,7 +34,7 @@ fa tutto il lavoro di studio senza mai mandare un byte fuori dal computer. E si
 
 | Cosa | Come |
 |------|------|
-| Gestione clienti | Anagrafica, ricerca, confronto tra due clienti; sesso M/F + obiettivo come selettori |
+| Gestione clienti | Dashboard stile Nutrium: statistiche studio + lista pazienti; scheda paziente a 8 sezioni (Anamnesi, Misure, Dieta, Referti, Appuntamenti, Sintomi, Integratori, Progressi) |
 | **Clinical Nutrition** | **23 condizioni** cliniche (IBS/FODMAP, SIBO, IBD, GERD, celiachia, NCGS, allergie IgE, EoE, lattosio, endometriosi, MASLD, PCOS, istamina…) con strategie evidence-based 2024-2026, conflitti tra condizioni, integratori e protocolli phased |
 | **Pattern Dietetici** | 7 pattern evidence-based (Mediterranea, DASH, MIND, Portfolio, basso IG, RPAH/FAILSAFE, Supporto Barriera) con suggerimento automatico per condizione |
 | **Cartella Clinica** | Tab unico per cliente: condizioni → conflitti → esclusioni → integratori → fase dieta → sintomi → trend peso, tutto in un colpo d'occhio |
@@ -44,8 +44,8 @@ fa tutto il lavoro di studio senza mai mandare un byte fuori dal computer. E si
 | Scienza Sport | Tab con strategie pro→amatoriali (proteina, gut training, blocchi, creatina, wearable) + report PDF |
 | BIA | Referti InBody/Tanita da paste o PDF (anche scansionati/OCR), parsing robusto |
 | Antropometria | BMR, % grasso, WHR, FFMI |
-| Onboarding | **Wizard anamnesi 3-step** (patologie → allergie → conflitti) |
-| Follow-up | Notifiche configurabili, agenda, messaggi, acqua, progressi |
+| Onboarding | **Wizard anamnesi 4-step** (anagrafica → obiettivi → clinica → conferma) che crea il cliente e popola l'anamnesi |
+| Follow-up | Notifiche configurabili, agenda, messaggi, progressi; **invio reale Email/WhatsApp** dalla finestra nativa |
 | Sicurezza | Login locale PBKDF2, dati solo su `~/.nutricoach/` |
 | Auto-aggiornamento | Banner all'avvio + install silenzioso su Windows da GitHub Releases |
 
@@ -81,13 +81,13 @@ fa tutto il lavoro di studio senza mai mandare un byte fuori dal computer. E si
 ## Demo rapida
 1. Avvia `NutriCoach` (release scaricata o `python run.py`)
 2. Crea il tuo account nutrizionista
-3. Aggiungi un cliente (sesso + obiettivo) → clicca **🧭 Onboarding** → seleziona patologie (es. IBS, SIBO) e allergie in 3 step
-4. **Importa** il PDF dieta → vedi spesa e riepilogo
-5. Incolla un referto BIA (o carica un PDF scansionato: OCR automatico) → massa grassa / angolo di fase
-6. Vai su **🥗 Pattern Dietetici** → scegli Mediterranea/FODMAP/Supporto Barriera per la condizione
-7. Vai su **Pianifica** → settimana automatica **già filtrata** per le esclusioni → **📄 Esporta PDF clinico**
-8. Apri la **🗂️ Cartella Clinica** per la vista unificata; nel **Diario** vedi **AI pattern** e **reintroduzione FODMAP guidata**
-9. Usa **Agenda** per appuntamenti, **Messaggi** per il thread, **Notifiche** per i follow-up
+3. Clicca **+ Nuovo paziente** → compila il **Wizard anamnesi 4-step** (anagrafica → obiettivi → condizioni cliniche/allergie → conferma) → il cliente è creato con l'anamnesi popolata
+4. Dalla **Dashboard** clicca un paziente → si apre la **scheda a 8 sezioni**
+5. Tab **Misure**: registra peso/BIA o importa un referto PDF (OCR su scansioni)
+6. Tab **Dieta → Pianifica per periodo**: scegli *data inizio* + *data fine* → il numero di settimane è calcolato automaticamente → **Genera piano** (già filtrato per le esclusioni cliniche del cliente)
+7. Tab **Referti**: carica un PDF BIA / incolla il testo OCR
+8. Tab **Appuntamenti**: aggiungi un controllo; da **Agenda** (sidebar) vedi tutti quelli aperti
+9. Dalla scheda paziente clicca **✉️ Email** o **💬 WhatsApp** per contattare il cliente (parte dal tuo PC via bridge nativo)
 
 ---
 
@@ -103,7 +103,7 @@ Tutte le piattaforme salvano i dati in `~/.nutricoach/` (rispettivamente
 ---
 
 ## Roadmap
-- [ ] Invio notifiche reale (WhatsApp/Email) via client locali
+- [x] Invio notifiche reale (WhatsApp/Email) via client locali / bridge pywebview
 - [ ] Integrazione wearable (import HRV/sonno da export Oura/WHOOP)
 - [ ] App mobile lato cliente + sync opzionale (richiede infrastruttura esterna)
 - [ ] Codici a barre / scansione etichette

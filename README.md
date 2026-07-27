@@ -23,7 +23,9 @@ Latest: **[v1.5.4 — Clinical Nutrition (23 condizioni), Pattern Dietetici, Car
 NutriCoach è un gestionale **localhost-only** che:
 
 - Gestisce **clienti** con anagrafica, ricerca e **confronto** tra due clienti (sesso M/F + obiettivo come selettori);
-- Importa **diete da PDF** (con gruppi ad alternative + grammature, riconoscimento testo reale; **OCR su PDF scansionati** grazie a Tesseract bundlato), calcola macro/giorno, genera **spesa** e **riepilogo**, esporta in **HTML/PDF**;
+- **Dashboard** pulita stile Nutrium: statistiche studio (pazienti, appuntamenti oggi, promemoria, da monitorare) + lista pazienti + promemoria;
+- **Scheda paziente a sezioni** (8 tab verticali): Anamnesi · Misure · Dieta · Referti · Appuntamenti · Sintomi · Integratori · Progressi — con header paziente + contatto Email/WhatsApp;
+- **Wizard anamnesi** modale a 4 step (anagrafica → obiettivi → clinica → conferma) che crea il cliente e popola l'anamnesi in un colpo;
 - Ha un **diario alimentare** con ricerca alimenti e **aggregazione automatica di macro + micronutrienti** (Calcio, Ferro, Vitamina C, Potassio, Magnesio);
 - **Pianifica settimane** bilanciate partendo dai tuoi target (kcal / proteine / carboidrati / grassi) — con **preset dieto configurabili** (Mediterranea, Zona, CKD, Carb Cycling, Alto Proteico, Vegano, Keto, Personalizzato);
 - **Tab Scienza Sport** con strategie pro → amatoriali documentate (distribuzione proteica, gut training, periodizzazione a blocchi, creatina, wearable recovery, FTWR, recovery microcycle);
@@ -33,7 +35,7 @@ NutriCoach è un gestionale **localhost-only** che:
 - Invia **notifiche** configurabili per cliente (riscontro, report, promemoria) con il nutrizionista che riceve una coda "da inviare";
 - Ha **login locale** (username + password, hash PBKDF2) e **tema chiaro/scuro**;
 - **Si aggiorna da solo** da GitHub Releases (banner + auto-install su Windows).
-- **Chiude il loop clinico**: il piano si **filtra automaticamente** per le condizioni del cliente (esclusioni FODMAP/istamina/integratori), la **Cartella Clinica** unifica tutto in un tab, e il **diario** alimenta pattern AI + reintroduzione FODMAP guidata.
+- **Chiude il loop clinico**: il piano si **filtra automaticamente** per le condizioni del cliente (esclusioni FODMAP/istamina/integratori), e il **clinical-summary** unifica condizioni, conflitti, esclusioni, integratori e trend in un'unica vista; il **diario** alimenta pattern AI + reintroduzione FODMAP guidata.
 
 Tutti i calcoli derivano da **un solo motore** (`meal_planner.py` / `nutrition_engine.py`): diario, piano e riepilogo sono *viste* coerenti, mai numeri discordanti. Le condizioni cliniche (23) sono la **single source of truth** del filtraggio: da esse derivano esclusioni, integratori e pattern dietetici.
 
@@ -54,6 +56,7 @@ NutriCoach nasce per essere l'opposto: **uno strumento proprio, portatile, priva
 
 | Area | Cosa fa | Dove (modulo) |
 |------|---------|---------------|
+| **Dashboard** | Statistiche studio (pazienti, appuntamenti oggi, promemoria, da monitorare) + lista pazienti + promemoria | `app.py` (UI) |
 | **Clienti** | Anagrafica, ricerca, confronto tra due clienti, sesso M/F + obiettivo | `db.py`, `app.py` |
 | **Clinical Nutrition** | **23 condizioni** (IBS/FODMAP, SIBO, IBD, GERD, celiachia, NCGS, allergie IgE, EoE, lattosio, dispepsia, obesità, T2D, ipertensione, osteoporosi, endometriosi, MASLD, PCOS, istamina…) con strategie evidence-based 2024-2026; **conflitti** tra condizioni, **integratori** e **protocolli phased** (es. FODMAP 3 fasi) | `clinical_nutrition.py`, `app.py` |
 | **Pattern Dietetici** | 7 pattern evidence-based (Mediterranea, DASH, MIND, Portfolio, basso IG, RPAH/FAILSAFE, Supporto Barriera) con suggerimento per condizione | `clinical_nutrition.py` (DIET_PATTERNS) |
@@ -64,8 +67,8 @@ NutriCoach nasce per essere l'opposto: **uno strumento proprio, portatile, priva
 | **BIA** | Parsing referti InBody/Tanita (paste o PDF, anche scansionati/OCR), riconoscimento robusto su testo "sporco" | `bia_parser.py`, `ocr.py` |
 | **Antropometria** | BMR (Mifflin-St Jeor), % grasso (Durnin-Womersley), WHR, FFMI, classificazione | `anthropometry.py` |
 | **Scienza Sport** | Strategie pro→amatoriali con calcolatori (proteina, gut training, blocchi, creatina, wearable) + report PDF | `sport_science.py`, `pdf_sport_science.py` |
-| **Onboarding** | **Wizard anamnesi 3-step** (patologie → allergie → conflitti) che popola il cliente | UI + `/api/clients/{cid}/anamnesis` |
-| **Notifiche** | Configurabili per cliente (riscontro/report/promemoria) con frequenza e canale; coda "da inviare" | `notifications.py` |
+| **Onboarding** | **Wizard anamnesi 4-step** (anagrafica → obiettivi → clinica → conferma) che crea il cliente e popola l'anamnesi | UI + `/api/clients/{cid}/anamnesis` |
+| **Notifiche** | Configurabili per cliente (riscontro/report/promemoria) con frequenza e canale; coda "da inviare"; invio via Email/WhatsApp (bridge pywebview) | `notifications.py`, `app.py` |
 | **Messaggi** | Thread locale per cliente | `db.py` |
 | **Agenda** | Calendario mensile appuntamenti (per cliente o generale) | `db.py`, UI |
 | **Acqua & Progressi** | Log idratazione e note di avanzamento | `db.py` |
@@ -84,7 +87,7 @@ python run.py                 # apre http://127.0.0.1:8090 nel browser
 
 # Build desktop (EXE Windows) + installer NSIS
 pyinstaller NutriCoach.spec --clean --noconfirm
-makensis /DVERSION=1.3.0 installer.nsi     # -> NutriCoach-Setup-1.5.4.exe
+makensis /DVERSION=1.5.4 installer.nsi     # -> NutriCoach-Setup-1.5.4.exe
 
 # Build desktop (macOS .dmg) — richiede macOS
 pyinstaller NutriCoach.spec --clean --noconfirm
@@ -153,7 +156,7 @@ Report PDF esportabile per cliente (endpoint `/api/clients/{cid}/sport-science-r
 
 ## Follow-up (Notifiche/Agenda/Messaggi)
 
-- **Notifiche**: per ogni cliente scegli *quali* messaggi inviare (riscontro settimanale, promemoria report, ecc.), su che canale e con che frequenza. Il nutrizionista vede una **coda "da inviare"** generata automaticamente dalle scadenze. (L'invio reale via WhatsApp/Email è futuro: oggi sono hook locali, nessun dato esce.)
+- **Notifiche**: per ogni cliente scegli *quali* messaggi inviare (riscontro settimanale, promemoria report, ecc.), su che canale e con che frequenza. Il nutrizionista vede una **coda "da inviare"** generata automaticamente dalle scadenze. Da NutriCoach puoi **inviare davvero** via Email (client di sistema / `mailto:`) o WhatsApp (`wa.me`) tramite il bridge della finestra nativa (pywebview) — nessun server intermedio, il messaggio parte dal tuo PC.
 - **Agenda**: calendario mensile degli appuntamenti, per cliente o generale; click su un giorno per aggiungerne uno.
 - **Messaggi**: thread locale per cliente (simula la conversazione; nessun cloud).
 
