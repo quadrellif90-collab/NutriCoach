@@ -1,4 +1,14 @@
 
+## [1.5.4] — 2026-07-27
+
+### Riscrittura UI — stile Nutrium + funzioni Dietowin
+- **Dashboard pulita**: sidebar a 3 voci (Dashboard, Pazienti, Agenda) + card statistiche + lista pazienti + promemoria
+- **Scheda paziente a sezioni** (8 tab): Anamnesi · Misure · Dieta · Referti · Appuntamenti · Sintomi · Integratori · Progressi
+- **Wizard anamnesi** modale a 4 step (anagrafica → obiettivi → clinica → conferma)
+- **Pianifica per data**: selettore data inizio + data fine → N settimane auto → `plan/generate`
+- **Fix bug**: `loadAnamnesi` crashava su `recommendations` dict (non array); `renderDashboard` leggeva campi inesistenti; appuntamenti per-client via `?client_id=`
+- **Bridge pywebview preservato**: Email/WhatsApp (`ncOpenExternal`) + PDF (`ncDownload`)
+
 ## [1.5.3] — 2026-07-27
 
 ### Fix backend + OCR nota
