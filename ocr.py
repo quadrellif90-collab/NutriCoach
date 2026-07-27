@@ -89,24 +89,41 @@ def _find_tesseract():
 
 
 def _configure_tesseract():
-    """Configura pytesseract se troviamo Tesseract; ritorna True se utilizzabile."""
+    """Configura pytesseract provando tutti i Tesseract disponibili.
+
+    Prova in ordine: bundle PyInstaller, installazione di sistema, PATH.
+    Il primo che risponde a get_tesseract_version() viene usato (così l'OCR
+    funziona sia con il bundle completo che col Tesseract di sistema installato).
+    Ritorna True se almeno uno è utilizzabile.
+    """
     if not _HAVE_TESS or not _HAVE_PIL:
         return False
-    cmd, tessdata = _find_tesseract()
-    try:
-        if cmd:
-            pytesseract.pytesseract.tesseract_cmd = cmd
-        # TESSDATA_PREFIX deve puntare ALLA cartella che contiene i
-        # file .traineddata (es. C:\Program Files\Tesseract-OCR\tessdata).
-        # Lo impostiamo SEMPRE se abbiamo trovato tessdata, così l'OCR non
-        # dipende da variabili d'ambiente o dal PATH del processo chiamante.
-        if tessdata and os.path.isdir(tessdata):
-            os.environ["TESSDATA_PREFIX"] = tessdata
-        # verifica che risponda
-        pytesseract.get_tesseract_version()
-        return True
-    except Exception:
-        return False
+    # candidati: (cmd, tessdata) — proviamo ciascuno finché uno funziona
+    candidates = []
+    for d in _candidate_tesseract_dirs():
+        if not os.path.isdir(d):
+            continue
+        for name in ("tesseract.exe", "tesseract"):
+            cmd = os.path.join(d, name)
+            if os.path.isfile(cmd):
+                td = os.path.join(d, "tessdata")
+                candidates.append((cmd, td if os.path.isdir(td) else None))
+    # aggiungi il caso "nel PATH di sistema" (cmd=None -> pytesseract lo risolve)
+    candidates.append((None, None))
+    for cmd, tessdata in candidates:
+        try:
+            if cmd:
+                pytesseract.pytesseract.tesseract_cmd = cmd
+            if tessdata and os.path.isdir(tessdata):
+                os.environ["TESSDATA_PREFIX"] = tessdata
+            else:
+                # lascia che pytesseract usi il suo default (PATH)
+                os.environ.pop("TESSDATA_PREFIX", None)
+            pytesseract.get_tesseract_version()
+            return True
+        except Exception:
+            continue
+    return False
 
 
 _TESS_OK = None  # cache lazy

@@ -16,14 +16,33 @@ import threading
 import time
 import webbrowser
 
-# PyInstaller frozen: stdout/stderr possono essere None (console=False)
-if getattr(sys, "frozen", False):
-    for _n in ("stdout", "stderr"):
-        if getattr(sys, _n, None) is None:
-            try:
-                setattr(sys, _n, open(os.devnull, "w", encoding="utf-8"))
-            except Exception:
-                pass
+# PyInstaller frozen: stdout/stderr possono essere None (console=False) oppure
+# puntare a un console cp1252 su Windows, che NON sa codificare frecce/emoji
+# (es. '→') -> UnicodeEncodeError e crash all'avvio. Forziamo utf-8.
+def _safe_stream(name):
+    s = getattr(sys, name, None)
+    if s is None:
+        try:
+            s = open(os.devnull, "w", encoding="utf-8")
+        except Exception:
+            s = None
+    elif hasattr(s, "reconfigure"):
+        try:
+            s.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+    elif getattr(s, "encoding", "ascii") not in ("utf-8", "UTF-8"):
+        # wrappa in un encoder utf-8 con fallback
+        import io
+        try:
+            s = io.TextIOWrapper(s.buffer, encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+    return s
+
+if getattr(sys, "frozen", False) or True:
+    sys.stdout = _safe_stream("stdout") or sys.stdout
+    sys.stderr = _safe_stream("stderr") or sys.stderr
 
 PORT = int(os.environ.get("NUTRICOACH_PORT", "8090"))
 URL = f"http://127.0.0.1:{PORT}"
@@ -156,7 +175,7 @@ def main():
         else:
             print("Warning: server timeout (un'altra istanza occupa la porta?).")
         sys.exit(1)
-    print(f"Server ready → {URL}")
+    print(f"Server ready -> {URL}")
 
     try:
         import webview
