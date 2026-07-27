@@ -114,28 +114,30 @@ label{font-size:12px;color:var(--text3);display:block;margin-top:8px}
   <div class="sidebar-tabs">
     <h1>🥗 NutriCoach</h1>
     <button class="btn ghost" style="position:fixed;top:10px;right:10px;z-index:300;margin:0" onclick="toggleTheme()">🌓 Tema</button>
-    <div class="tab" data-tab="clients" id="tab-clients">👥 Clienti / Esci</div>
-    <div class="tab" data-tab="import">📥 Importa</div>
-    <div class="tab" data-tab="anthro">📐 Antropometria</div>
-    <div class="tab" data-tab="plan">📋 Piano</div>
-    <div class="tab" data-tab="shopping">🛒 Spesa</div>
-    <div class="tab" data-tab="summary">📊 Riepilogo</div>
+    <div class="tab active" data-tab="today">🏠 Oggi</div>
+    <div class="tab" data-tab="clients" id="tab-clients">👥 Clienti</div>
     <div class="tab" data-tab="reminders">🔔 Promemoria</div>
     <div class="tab" data-tab="agenda">📅 Agenda</div>
     <div class="tab" data-tab="notif">📨 Notifiche</div>
-    <div class="tab" data-tab="recipes">🍲 Ricette</div>
-    <div class="tab" data-tab="diario">🍽️ Diario</div>
-    <div class="tab" data-tab="pianifica">🤖 Pianifica</div>
     <div class="tab" data-tab="messaggi">💬 Messaggi</div>
-    <div class="tab" data-tab="acqua">💧 Acqua</div>
-    <div class="tab" data-tab="progressi">📈 Progressi</div>
-    <div class="tab" data-tab="scienza">🔬 Scienza Sport</div>
-    <div class="tab" data-tab="guthealth">🧬 Salute Intestinale</div>
-    <div class="tab" data-tab="symptoms">🩺 Diario Sintomi</div>
-    <div class="tab" data-tab="supplements">💊 Integratori</div>
-    <div class="tab" data-tab="dietpatterns">🥗 Pattern Dietetici</div>
-    <div class="tab" data-tab="cartella">🗂️ Cartella Clinica</div>
-    <div class="tab" data-tab="today">🏠 Oggi</div>
+    <!-- Client submenu: appare solo dentro un cliente -->
+    <div id="client-submenu" style="display:none;flex-direction:column;gap:3px;margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
+      <div style="font-size:11px;color:var(--text3);padding:4px 12px;text-transform:uppercase;letter-spacing:0.5px">📂 Scheda cliente</div>
+      <div class="tab" data-tab="cartella">🗂️ Cartella Clinica</div>
+      <div class="tab" data-tab="anthro">📐 Antropometria</div>
+      <div class="tab" data-tab="plan">📋 Piano</div>
+      <div class="tab" data-tab="pianifica">🤖 Pianifica</div>
+      <div class="tab" data-tab="diario">🍽️ Diario</div>
+      <div class="tab" data-tab="shopping">🛒 Spesa</div>
+      <div class="tab" data-tab="summary">📊 Riepilogo</div>
+      <div class="tab" data-tab="progressi">📈 Progressi</div>
+      <div class="tab" data-tab="scienza">🔬 Scienza Sport</div>
+      <div class="tab" data-tab="guthealth">🧬 Salute Intestinale</div>
+      <div class="tab" data-tab="symptoms">🩺 Diario Sintomi</div>
+      <div class="tab" data-tab="supplements">💊 Integratori</div>
+      <div class="tab" data-tab="dietpatterns">🥗 Pattern Dietetici</div>
+      <div class="tab" data-tab="import">📥 Importa Dati</div>
+    </div>
   </div>
 
   <div class="main-content">
@@ -897,32 +899,43 @@ async function ncDownload(filename, blob){
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click(); return true;
 }
 
-// ---- tabs (con guardia: fuori dal cliente si puo' solo tornare alla lista) ----
+// ---- tabs (sidebar: today/clients/reminders/agenda/notif/messaggi sempre accessibili;
+//      client submenu: solo con cliente selezionato) ----
+const SIDEBAR_TABS = ['today','clients','reminders','agenda','notif','messaggi'];
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   const tab = t.dataset.tab;
   if (tab === 'clients') { exitClient(); return; }
-  if (STATE.clientId == null && !['reminders','agenda'].includes(tab)) { toast('Entra in un cliente prima'); return; }
+  if (!SIDEBAR_TABS.includes(tab) && STATE.clientId == null) {
+    toast('Seleziona prima un cliente'); return;
+  }
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
   t.classList.add('active');
   document.querySelectorAll('.tabpane').forEach(s=>s.classList.add('hidden'));
-  document.getElementById(tab).classList.remove('hidden');
+  // mappatura data-tab → id reale della section (alcune hanno prefisso sec-)
+  const TAB_TO_ID = {today:'sec-today', cartella:'sec-cartella', dietpatterns:'sec-dietpatterns'};
+  const paneId = TAB_TO_ID[tab] || tab;
+  const pane = document.getElementById(paneId);
+  if(pane) pane.classList.remove('hidden');
   if (tab === 'reminders') loadReminders();
   if (tab === 'agenda') loadAgenda();
-  if (tab === 'anthro') loadAnthro();
   if (tab === 'notif') loadNotifPrefs();
+  if (tab === 'today') loadToday();
+  // client-specific loaders
+  if (tab === 'anthro') loadAnthro();
   if (tab === 'summary') computeSummary();
   if (tab === 'diario') loadDiario();
   if (tab === 'scienza') loadScienza();
   if (tab === 'pianifica') loadPlan();
   if (tab === 'messaggi') loadMessages();
-  if (tab === 'acqua') loadWater();
   if (tab === 'progressi') loadProgNotes();
   if (tab === 'guthealth') loadGutHealth();
   if (tab === 'symptoms') loadSymptoms();
   if (tab === 'supplements') loadSupplements();
   if (tab === 'dietpatterns') loadDietPatterns();
   if (tab === 'cartella') loadCartella();
-  if (tab === 'today') loadToday();
+  // nascondi/mostra client submenu
+  const cs = document.getElementById('client-submenu');
+  if(cs) cs.style.display = (STATE.clientId != null && !SIDEBAR_TABS.includes(tab)) ? 'flex' : 'none';
 });
 
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);}
@@ -944,6 +957,9 @@ function enterClient(id){
   STATE.clientId = id;
   document.getElementById('list-overlay').style.display = 'none';
   document.getElementById('client-header').style.display = 'flex';
+  // mostra client submenu
+  const cs = document.getElementById('client-submenu');
+  if(cs) cs.style.display = 'flex';
   // popola tutti i select cliente
   for(const sel of ['imp-client','plan-client','shop-client','sum-client','anthro-client']){
     const el=document.getElementById(sel); if(el) el.value=id;
@@ -953,15 +969,23 @@ function enterClient(id){
   document.getElementById('ch-name').textContent = c.name || ('Cliente #'+id);
   document.getElementById('ch-meta').textContent = [c.sex, (c.age?('età '+c.age):''), c.goal].filter(Boolean).join(' · ');
   loadClientDiets(); loadClientDiets2(); loadClientDiets3();
-  // vai sulla prima tab utile
+  // vai sulla cartella clinica (prima tab utile)
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
-  document.querySelector('.tab[data-tab="anthro"]').classList.add('active');
+  const cartTab = document.querySelector('.tab[data-tab="cartella"]');
+  if(cartTab) cartTab.classList.add('active');
   document.querySelectorAll('.tabpane').forEach(s=>s.classList.add('hidden'));
-  document.getElementById('anthro').classList.remove('hidden');
-  loadAnthro(); loadReminders();
+  const cartPane = document.getElementById('cartella');
+  if(cartPane) cartPane.classList.remove('hidden');
+  loadCartella(); loadReminders();
   toast('Cliente: '+(c.name||id));
 }
-function exitClient(){ showList(); loadClients(); }
+function exitClient(){
+  STATE.clientId = null;
+  // nascondi client submenu
+  const cs = document.getElementById('client-submenu');
+  if(cs) cs.style.display = 'none';
+  showList(); loadClients();
+}
 
 // ---- clients (griglia lista con multiselect + entra) ----
 async function loadClients(){

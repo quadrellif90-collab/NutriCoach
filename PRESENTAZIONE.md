@@ -2,7 +2,7 @@
 
 ![NutriCoach](assets/icon.png)
 
-> **Gestionale di nutrizione per nutrizionisti. 100% locale, nessun cloud, nessun abbonamento.** — Versione **1.5.1**
+> **Gestionale di nutrizione per nutrizionisti. 100% locale, nessun cloud, nessun abbonamento.** — Versione **1.5.2**
 
 ---
 

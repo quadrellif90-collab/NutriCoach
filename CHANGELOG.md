@@ -1,4 +1,20 @@
 
+## [1.5.2] — 2026-07-27
+
+### Overhaul UI — sidebar semplificata (6 voci) + fix tab
+- **Fix critico tab**: rimossa la guardia che bloccava il click sulle tab
+  senza cliente selezionato ("Entra in un cliente prima" su tutto).
+  Ora le 6 voci della sidebar funzionano sempre.
+- **Fix critico ID**: le sezioni Oggi/Cartella/Pattern avevano id `sec-*`
+  diversi dal `data-tab` → il click non mostrava nulla. Aggiunta mappatura.
+- **Sidebar ridisegnata**: solo 6 voci fisse — 🏠 Oggi, 👥 Clienti,
+  🔔 Promemoria, 📅 Agenda, 📨 Notifiche, 💬 Messaggi.
+- **Submenu cliente**: le 14 schede cliniche (Cartella, Antropometria,
+  Piano, Pianifica, Diario, Spesa, Riepilogo, Progressi, Scienza Sport,
+  Salute Intestinale, Sintomi, Integratori, Pattern, Importa) appaiono
+  solo quando entri in un cliente e spariscono quando esci.
+- **Rimosse** 🍲 Ricette e 💧 Acqua dalla navigazione.
+
 ## [1.5.1] — 2026-07-26
 
 ### Fix launcher (finestra nativa)
