@@ -599,6 +599,63 @@ def compute_meal_macros(items):
                 total["fiber_g"] += f["fiber_g"] * ratio
     return {k: round(v, 1) for k, v in total.items()}
 
+def export_all_json():
+    """Esporta tutto il DB in un dict JSON-serializzabile."""
+    con = get_db()
+    tables = ["patients", "categories", "bia_readings", "diet_plans", "diet_items",
+              "appointments", "notifications", "documents", "progress_notes",
+              "anamnesis", "measurements", "clinical_conditions", "food_catalog"]
+    out = {}
+    for t in tables:
+        try:
+            rows = con.execute(f"SELECT * FROM {t}").fetchall()
+            out[t] = [dict(r) for r in rows]
+        except Exception:
+            out[t] = []
+    return out
+
+
+def export_patient_json(pid):
+    """Export completo di un paziente (tutte le tabelle correlate)."""
+    con = get_db()
+    p = con.execute("SELECT * FROM patients WHERE id=?", (pid,)).fetchone()
+    if not p:
+        return None
+    data = {"patient": dict(p)}
+    for t, fk in [("bia_readings", "patient_id"), ("diet_plans", "patient_id"),
+                  ("diet_items", "patient_id"), ("appointments", "patient_id"),
+                  ("progress_notes", "patient_id"), ("anamnesis", "patient_id"),
+                  ("measurements", "patient_id"), ("documents", "patient_id")]:
+        try:
+            rows = con.execute(f"SELECT * FROM {t} WHERE {fk}=?", (pid,)).fetchall()
+            data[t] = [dict(r) for r in rows]
+        except Exception:
+            data[t] = []
+    return data
+
+
+def import_patient_json(data):
+    """Importa paziente da dict export. Ritorna nuovo id."""
+    con = get_db()
+    p = data.get("patient", {})
+    pid = add_patient(p.get("name", "Importato"), p.get("sex"), p.get("goal"),
+                     p.get("sport"), p.get("phone"), p.get("email"), p.get("notes"))
+    # Tabelle correlate
+    for t, fk in [("bia_readings", "patient_id"), ("diet_plans", "patient_id"),
+                  ("diet_items", "patient_id"), ("appointments", "patient_id"),
+                  ("progress_notes", "patient_id"), ("anamnesis", "patient_id"),
+                  ("measurements", "patient_id"), ("documents", "patient_id")]:
+        for row in data.get(t, []):
+            cols = [c for c in row.keys() if c != "id" and c != fk]
+            vals = [row[c] for c in cols]
+            # Normalizza date/created
+            cols.append(fk); vals.append(pid)
+            placeholders = ",".join("?" * len(cols))
+            con.execute(f"INSERT INTO {t} ({','.join(cols)}) VALUES ({placeholders})", vals)
+    con.commit()
+    return pid
+
+
 # ─── INIT ─────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@
   <div class=nav-item data-nav=notifiche onclick="nav('notifiche')"><span class=ico>📨</span><span>Notifiche</span></div>
   <div class=nav-item data-nav=archivio onclick="nav('archivio')"><span class=ico>📁</span><span>Archivio</span></div>
   <div class=spacer></div>
-  <div class=version>v2.7.0 · Dietowin</div>
+  <div class=version>v2.8.0 · Dietowin</div>
 </div>
 <div class=main>
   <div class=topbar>
@@ -62,7 +62,19 @@ async function loadDashboard(){
     <div class=card style=flex:1;text-align:center><b>0</b><div class=meta>App. oggi</div></div>
   </div>
   <div class=card><b>👥 Ultimi pazienti</b>
-  ${cls.slice(0,5).map(c=>`<div class=patient-card onclick="openPatient(${c.id})"><div class=init style=background:${clr()}>${init(c.name)}</div><div class=info><b>${esc(c.name)}</b><div class=meta>${c.goal||'—'} · ${c.sport||''}</div></div></div>`).join('')||'<div class=empty>Nessun paziente</div>'}</div>`;
+  ${cls.slice(0,5).map(c=>`<div class=patient-card onclick="openPatient(${c.id})"><div class=init style=background:${clr()}>${init(c.name)}</div><div class=info><b>${esc(c.name)}</b><div class=meta>${c.goal||'—'} · ${c.sport||''}</div></div></div>`).join('')||'<div class=empty>Nessun paziente</div>'}</div>
+  <div class=row style=margin-top:12px>
+    <button class="btn btn-sm btn-outline" onclick="doBackup()">💾 Backup ora</button>
+    <button class="btn btn-sm btn-outline" onclick="exportPatients()">📤 Export CSV</button>
+  </div>`;
+}
+async function doBackup(){
+  toast('Backup in corso...');
+  const r=await jpost('/api/backup',{});
+  if(r&&r.ok)toast('Backup creato ✓ '+r.timestamp);else toast('Errore backup');
+}
+async function exportPatients(){
+  window.open('/api/export/patients','_blank');
 }
 // PAZIENTI LIST
 async function loadPazienti(){

@@ -3,7 +3,7 @@ NutriCoach v2 — App principale FastAPI (modulare, Dietowin-style).
 """
 import os, sys, json, asyncio, datetime as dt
 from fastapi import FastAPI, UploadFile, File, Request, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 # Tesseract OCR per BIA: imposta TESSDATA_PREFIX se non gia' in env
@@ -21,7 +21,7 @@ import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
 from app import ocr_engine  # OCR integrato: Windows OCR + fallback Tesseract
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.7.0")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.8.0")
 
 # Servi file statici (CSS)
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
@@ -323,6 +323,71 @@ def api_gen_portal_token(pid: int):
     return {"token": token, "url": f"/portal/{token}"}
 
 
+# ─── BACKUP / EXPORT / IMPORT ───────────────────────────────────────────
+
+@app.post("/api/backup")
+def api_backup():
+    """Crea backup del DB (copia file + dump JSON)."""
+    import shutil
+    src = db.DB_PATH
+    ts = _today()
+    backup_dir = os.path.join(os.path.dirname(src), "backups")
+    os.makedirs(backup_dir, exist_ok=True)
+    # Copia file DB
+    db_copy = os.path.join(backup_dir, f"nutricoach_{ts}.db")
+    shutil.copy2(src, db_copy)
+    # Dump JSON completo
+    json_path = os.path.join(backup_dir, f"nutricoach_{ts}.json")
+    data = db.export_all_json()
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return {"ok": True, "db": db_copy, "json": json_path, "timestamp": ts}
+
+
+@app.get("/api/backup/auto")
+def api_backup_auto():
+    """Backup automatico giornaliero (idempotente: 1 al giorno)."""
+    backup_dir = os.path.join(os.path.dirname(db.DB_PATH), "backups")
+    today_file = os.path.join(backup_dir, f"nutricoach_{_today()}.db")
+    if os.path.isfile(today_file):
+        return {"ok": True, "skipped": True, "db": today_file}
+    return api_backup()
+
+
+@app.get("/api/export/patients")
+def api_export_patients():
+    """Export CSV di tutti i pazienti."""
+    import csv, io
+    patients = db.list_patients()
+    out = io.StringIO()
+    if patients:
+        w = csv.DictWriter(out, fieldnames=list(patients[0].keys()))
+        w.writeheader()
+        for p in patients:
+            w.writerow(p)
+    return Response(content=out.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=patients.csv"})
+
+
+@app.get("/api/export/patient/{pid}")
+def api_export_patient(pid: int):
+    """Export JSON completo di un singolo paziente (BIA, dieta, appuntamenti, documenti)."""
+    data = db.export_patient_json(pid)
+    if not data:
+        raise HTTPException(404, "Paziente non trovato")
+    return Response(content=json.dumps(data, ensure_ascii=False, indent=2),
+                    media_type="application/json",
+                    headers={"Content-Disposition": f"attachment; filename=patient_{pid}.json"})
+
+
+@app.post("/api/import/patient")
+async def api_import_patient(request: Request):
+    """Import paziente da JSON export."""
+    data = await request.json()
+    new_id = db.import_patient_json(data)
+    return {"ok": True, "id": new_id}
+
+
 # ─── PATIENTS CRUD ────────────────────────────────────────────────────────
 
 @app.get("/api/patients")
@@ -563,6 +628,11 @@ def api_version():
 @app.on_event("startup")
 def startup():
     db.init_db()
+    try:
+        from app.main import api_backup_auto
+        api_backup_auto()
+    except Exception as e:
+        print(f"[NutriCoach] backup auto saltato: {e}")
     print(f"[NutriCoach v2] DB={db.DB_PATH} pronto")
 
 # ─── MAIN ─────────────────────────────────────────────────────────────────
