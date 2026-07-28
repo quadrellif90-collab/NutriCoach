@@ -19,6 +19,7 @@ if not os.environ.get("TESSDATA_PREFIX"):
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
+from app import bia_parser_v2
 
 app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.0.0")
 
@@ -198,21 +199,33 @@ async def api_bia_upload(pid: int, file: UploadFile = File(...)):
     with open(path, "wb") as f:
         import shutil
         shutil.copyfileobj(file.file, f)
-    res = await asyncio.to_thread(bia_parser.parse_bia_pdf, path)
+    # Usa il parser PCC (range fisiologici + decimal restoration + OCR robusto)
+    res = await asyncio.to_thread(bia_parser_v2.parse_bia_file, path)
     if res.get("scanned"):
-        return {"scanned": True, "pages": res.get("pages",[]), "file": path}
-    fields = res.get("fields", {})
-    # mappa campi parser -> colonne DB
-    mapping = {"peso":"weight_kg","altezza":"height_cm","bmi":"bmi","fm":"bf_pct","ffm":"ffm_kg",
-               "tbw":"tbw_l","ecw":"ecw_l","icw":"icw_l","pha":"pha","bmr":"bmr_kcal",
-               "smm":"smm_kg","asmm":"asmm_kg","bcm":"bcm_kg","protein":"protein_kg","mineral":"mineral_kg",
-               "fmi":"fmi","ffmi":"ffmi","hydration":"hydration_pct"}
+        return {"scanned": True, "pages": res.get("pages",[]), "file": path,
+                "note": res.get("note","PDF scansionato non leggibile")}
+    reading = res.get("reading", {})
+    # Mappa campi PCC -> colonne DB
+    mapping = {
+        "weight_kg":"weight_kg","height_cm":"height_cm","bmi":"bmi",
+        "fat_mass_pct":"bf_pct","fat_mass_kg":"bf_kg","fat_free_mass_kg":"ffm_kg",
+        "tbw_l":"tbw_l","ecw_l":"ecw_l","icw_l":"icw_l",
+        "phase_angle":"pha",
+        "bcm_kg":"bcm_kg","smm_kg":"smm_kg","asmm_kg":"asmm_kg",
+        "protein_kg":"protein_kg","protein_pct":"protein_pct",
+        "visceral_fat":"visceral_fat_level","hydration_pct":"hydration_pct",
+        "bone_kg":"mineral_kg","muscle_mass_kg":"mm_kg",
+    }
     db_fields = {}
-    for k, v in fields.items():
-        if k in mapping:
+    for k, v in reading.items():
+        if v is not None and k in mapping:
             db_fields[mapping[k]] = v
+    # Se non c'e' bf_pct ma c'e' fat_mass_pct, usalo
+    if "bf_pct" not in db_fields and reading.get("fat_mass_pct") is not None:
+        db_fields["bf_pct"] = reading["fat_mass_pct"]
     bid = db.add_bia(pid, db_fields, source=file.filename)
-    return {"ok": True, "bia_id": bid, "fields": db_fields}
+    return {"ok": True, "bia_id": bid, "fields": db_fields,
+            "note": res.get("note"), "restored": res.get("restored_fields")}
 
 @app.delete("/api/bia/{bid}")
 def api_delete_bia(bid: int):
