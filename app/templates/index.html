@@ -14,7 +14,8 @@
   <div class=nav-item data-nav=notifiche onclick="nav('notifiche')"><span class=ico>📨</span><span>Notifiche</span></div>
   <div class=nav-item data-nav=archivio onclick="nav('archivio')"><span class=ico>📁</span><span>Archivio</span></div>
   <div class=spacer></div>
-  <div class=version>v2.8.0 · Dietowin</div>
+  <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn>🌙</button>
+  <div class=version>v2.9.0 · Dietowin</div>
 </div>
 <div class=main>
   <div class=topbar>
@@ -52,6 +53,15 @@ async function nav(n){
   else if(n==='notifiche')loadNotifiche();
   else if(n==='archivio')loadArchivio();
 }
+// THEME TOGGLE
+function toggleTheme(){
+  const cur=document.documentElement.getAttribute('data-theme');
+  const next=cur==='dark'?'light':'dark';
+  document.documentElement.setAttribute('data-theme',next);
+  localStorage.setItem('nc-theme',next);
+  $('theme-btn').textContent=next==='dark'?'☀️':'🌙';
+}
+(function(){const t=localStorage.getItem('nc-theme');if(t){document.documentElement.setAttribute('data-theme',t);const b=$('theme-btn');if(b)b.textContent=t==='dark'?'☀️':'🌙';}})();
 // DASHBOARD
 async function loadDashboard(){
   const cls=await jget('/api/patients');
@@ -293,8 +303,14 @@ function showGenPlan(){
     <label>Freq.</label><select id=gp-fr><option value=3>3 pasti</option><option value=5 selected>5 pasti</option></select>
     <label style=margin-top:6px>Sindromi</label><div id=gp-cd style=display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow:auto>
     ${Object.keys(conds).map(k=>`<label class=chk style=font-size:10px><input type=checkbox value=${k} ${sel.includes(k)?'checked':''}>${conds[k].name||k}</label>`).join('')}</div>
-    <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick=genPlan()>⚡ Genera</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
+    <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick=genPlan()>⚡ Genera</button><button class="btn btn-outline" onclick=savePlanTemplate()>💾 Salva template</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
   });
+}
+async function savePlanTemplate(){
+  const name=prompt('Nome template dieta:');if(!name)return;
+  const targets={kcal:parseFloat($('gp-k').value)||2000,p:parseFloat($('gp-p').value)||30,c:parseFloat($('gp-c').value)||45,f:parseFloat($('gp-f').value)||25};
+  const r=await jpost('/api/diet-templates',{name,targets});
+  if(r&&r.ok)toast('Template salvato ✓');else toast('Errore');
 }
 async function calcEnergy(){
   try{

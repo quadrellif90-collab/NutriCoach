@@ -470,6 +470,13 @@ def seed_food_catalog():
                           "sugar_g REAL DEFAULT 0", "salt_g REAL DEFAULT 0"]),
     ]:
         con.execute(f"CREATE TABLE IF NOT EXISTS {tbl} ({','.join(cols)})")
+    # Crea diet_templates
+    con.execute("""CREATE TABLE IF NOT EXISTS diet_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        targets TEXT DEFAULT '{}',
+        owner_id INTEGER DEFAULT NULL
+    )""")
     # Migra colonne patients
     for col in ["portal_token TEXT DEFAULT NULL", "birth_date TEXT DEFAULT NULL"]:
         try:
@@ -654,6 +661,38 @@ def import_patient_json(data):
             con.execute(f"INSERT INTO {t} ({','.join(cols)}) VALUES ({placeholders})", vals)
     con.commit()
     return pid
+
+
+# ─── DIET TEMPLATES (personalizzabili) ───────────────────────────────────
+
+def create_diet_template(name, targets, owner_id=None):
+    """Salva un template di dieta riusabile."""
+    con = get_db()
+    cur = con.execute("INSERT INTO diet_templates (name, targets, owner_id) VALUES (?,?,?)",
+                     (name, json.dumps(targets), owner_id))
+    con.commit()
+    return cur.lastrowid
+
+
+def list_diet_templates(owner_id=None):
+    con = get_db()
+    if owner_id:
+        rows = con.execute("SELECT * FROM diet_templates WHERE owner_id=? OR owner_id IS NULL ORDER BY name", (owner_id,)).fetchall()
+    else:
+        rows = con.execute("SELECT * FROM diet_templates ORDER BY name").fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        try: d["targets"] = json.loads(d["targets"]) if d["targets"] else {}
+        except Exception: d["targets"] = {}
+        out.append(d)
+    return out
+
+
+def delete_diet_template(tid):
+    con = get_db()
+    con.execute("DELETE FROM diet_templates WHERE id=?", (tid,))
+    con.commit()
 
 
 # ─── INIT ─────────────────────────────────────────────────────────────────

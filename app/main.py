@@ -21,7 +21,7 @@ import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
 from app import ocr_engine  # OCR integrato: Windows OCR + fallback Tesseract
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.8.0")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.9.0")
 
 # Servi file statici (CSS)
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
@@ -321,6 +321,26 @@ def api_gen_portal_token(pid: int):
     con.execute("UPDATE patients SET portal_token=? WHERE id=?", (token, pid))
     con.commit()
     return {"token": token, "url": f"/portal/{token}"}
+
+
+# ─── DIET TEMPLATES API ──────────────────────────────────────────────────
+
+@app.get("/api/diet-templates")
+def api_list_diet_templates():
+    return {"templates": db.list_diet_templates()}
+
+
+@app.post("/api/diet-templates")
+async def api_create_diet_template(request: Request):
+    b = await request.json()
+    tid = db.create_diet_template(b.get("name", "Template"), b.get("targets", {}))
+    return {"ok": True, "id": tid}
+
+
+@app.delete("/api/diet-templates/{tid}")
+def api_delete_diet_template(tid: int):
+    db.delete_diet_template(tid)
+    return {"ok": True}
 
 
 # ─── BACKUP / EXPORT / IMPORT ───────────────────────────────────────────
