@@ -1,5 +1,13 @@
 
-## [1.7.0] — 2026-07-27
+## [1.7.1] — 2026-07-27
+
+### Dieta — protocolli a FASI reali (non solo medie %)
+- `meal_planner._phase_targets`: CKD = 5 giorni keto (carb ~5%) + 2 giorni reload (carb alti, sab/dom); Carb Cycling = 4 giorni alto carb + 3 basso; Keto = tutti i giorni cheo.
+- Nei giorni cheto i carboidrati e la frutta sono omessi; nei giorni reload/basso i grammi di carb sono ricalibrati verso il target di fase.
+- Verificato via API: CKD [54-100g x5, 381-387g x2], Carb Cycling [308-346g x4, 190-199g x3], Keto [54-100g], Mediterranea uniforme.
+- Alternative per alimento confermate (30/giorno).
+
+
 
 ### BIA OCR — fix root cause (estrazione affidabile)
 - `ocr.py`: risoluzione Tesseract **deterministica** (percorsi Windows espliciti + bundle EXE), `TESSDATA_PREFIX` impostato da codice senza dipendere da env/cwd. Prima l'app lanciata (uvicorn/EXE) non trovava Tesseract → "ancora non estrae dati".

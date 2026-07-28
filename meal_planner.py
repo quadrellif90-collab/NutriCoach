@@ -444,10 +444,14 @@ def aggregate(entries):
 # COMPOSIZIONE PASTO
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _meal_combo(protein, carb, veg, fat, fruit, t_kcal, t_p, alts=None):
+def _meal_combo(protein, carb, veg, fat, fruit, t_kcal, t_p, alts=None, t_carb=None):
     """Costruisce un pasto bilanciato e lo SCALA verso il target kcal.
 
     alts: dict {categoria: [lista alimenti]} da cui pescare le 'alternative'
+          per ciascun cibo (stile Dietowin: 'o alternativa').
+    t_carb: target grammi carb del pasto (opzionale). Se fornito, il carb
+          viene ricalibrato verso questo valore (usato dai protocolli a fasi
+          come carb cycling / CKD per differenziare i giorni).
     per ciascun cibo (stile referto Dietowin: 'o [alternativa]'). Per ogni
     cibo scelto si allegheranno fino a 2 swap della stessa categoria.
     """
@@ -457,12 +461,15 @@ def _meal_combo(protein, carb, veg, fat, fruit, t_kcal, t_p, alts=None):
     v_g = 150
     f_ml = 10 if fat == "olio extravergine d'oliva" else 15
     fr_g = 120 if fruit else 0
-    items = [
-        {"food": protein, "g": p_g, "cat": "protein"},
-        {"food": carb, "g": c_g, "cat": "carb"},
-        {"food": veg, "g": v_g, "cat": "veg"},
-        {"food": fat, "g": f_ml, "cat": "fat"},
-    ]
+    items = []
+    if protein:
+        items.append({"food": protein, "g": p_g, "cat": "protein"})
+    if carb:
+        items.append({"food": carb, "g": c_g, "cat": "carb"})
+    if veg:
+        items.append({"food": veg, "g": v_g, "cat": "veg"})
+    if fat:
+        items.append({"food": fat, "g": f_ml, "cat": "fat"})
     if fruit:
         items.append({"food": fruit, "g": fr_g, "cat": "fruit"})
 
@@ -481,7 +488,76 @@ def _meal_combo(protein, carb, veg, fat, fruit, t_kcal, t_p, alts=None):
             i["g"] = round(i["g"] * factor)
         entries = [compute_entry(i["food"], i["g"]) for i in items]
         tot = aggregate(entries)
+    # ricalibra il carb verso il target di fase (carb cycling / CKD)
+    if t_carb is not None:
+        carb_item = next((i for i in items if i["cat"] == "carb"), None)
+        if carb_item:
+            carb_entry = compute_entry(carb_item["food"], carb_item["g"])
+            if carb_entry["c"] > 0:
+                cf = max(0.2, min(3.0, t_carb / carb_entry["c"]))
+                carb_item["g"] = round(carb_item["g"] * cf)
+                tot = aggregate([compute_entry(i["food"], i["g"]) for i in items])
     return tot, items
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PROTOCOLLI A FASI (CKD, Carb Cycling, Keto, ecc.)
+# ─────────────────────────────────────────────────────────────────────────────
+def _phase_targets(preset, base, day_index, total_days):
+    """Ritorna i target {kcal,p,c,f} (grammi/giorno) per il giorno `day_index`
+    secondo il protocollo `preset`, partendo dai target base `base`.
+
+    I protocolli "a fasi" applicano pattern settimanali reali (non solo medie %):
+      - ckd (Ciclica Chetogenica): 5 giorni keto (carb ~5%) + 2 giorni reload
+        (carb alti). Pattern: lun-mar-mer-gio-ven = keto, sab-dom = reload.
+      - carbcycling: alterna giorni alto/basso carb (es. 4 alto / 3 basso).
+      - keto: tutti i giorni cheto.
+      - others (mediterranea, zona, ...): target uniformi.
+    """
+    from diet_presets import PRESETS, preset_targets
+    preset = (preset or "").lower()
+    # target base dai macro % del preset (se presente), altrimenti usa base
+    pct = PRESETS.get(preset)
+    if pct and pct.get("p_pct") is not None:
+        t = preset_targets(preset, base["kcal"], None)
+        base_k = base["kcal"]
+        base_p = t["p"]; base_c = t["c"]; base_f = t["f"]
+    else:
+        base_k, base_p, base_c, base_f = base["kcal"], base["p"], base["c"], base["f"]
+
+    di = day_index % max(1, total_days)
+
+    if preset == "ckd":
+        # 5 giorni keto, 2 reload (sab/dom)
+        keto = di < 5
+        if keto:
+            c_pct = 0.05
+        else:
+            c_pct = 0.55
+        # proteina alta stabile, grassi inversi ai carb
+        p_g = base_p * (1.10 if keto else 1.0)
+        c_g = base_k * c_pct / 4.0
+        f_g = (base_k - p_g * 4 - c_g * 4) / 9.0
+        return {"kcal": round(base_k), "p": round(p_g, 1), "c": round(c_g, 1), "f": round(max(f_g, 1), 1)}
+
+    if preset == "carbcycling":
+        # 4 giorni alto carb, 3 basso (alternanza: 0,1,2,3 alto; 4,5,6 basso)
+        high = di < 4
+        c_pct = 0.50 if high else 0.20
+        p_g = base_p * (1.05 if high else 1.10)
+        c_g = base_k * c_pct / 4.0
+        f_g = (base_k - p_g * 4 - c_g * 4) / 9.0
+        return {"kcal": round(base_k), "p": round(p_g, 1), "c": round(c_g, 1), "f": round(max(f_g, 1), 1)}
+
+    if preset == "keto":
+        c_pct = 0.05
+        p_g = base_p
+        c_g = base_k * c_pct / 4.0
+        f_g = (base_k - p_g * 4 - c_g * 4) / 9.0
+        return {"kcal": round(base_k), "p": round(p_g, 1), "c": round(c_g, 1), "f": round(max(f_g, 1), 1)}
+
+    # default: uniforme
+    return {"kcal": round(base_k), "p": round(base_p, 1), "c": round(base_c, 1), "f": round(base_f, 1)}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -628,7 +704,9 @@ def generate_plan(targets, options=None):
             condition_conflicts = []
 
     # ── genera ogni giorno ──
-    for d in days:
+    for idx, d in enumerate(days):
+        # target specifici della fase (CKD/carb cycling/keto applicano pattern reali)
+        day_t = _phase_targets(options.get("preset", ""), targets, idx, len(days))
         day_meals = []
         day_items_all = []
         day_fodmap = 0.0
@@ -636,14 +714,20 @@ def generate_plan(targets, options=None):
         for meal, share in MEALS:
             # seleziona alimenti con sostituzioni cliniche
             protein = rnd.choice(proteins)
-            carb = rnd.choice(carbs)
+            # nei giorni cheto (keto / CKD fase keto) i carb sono praticamente nulli:
+            # ometti del tutto carb e frutta. Nei giorni "basso carb" (carb cycling)
+            # i carb restano ma con grammature ridotte (gestite dai target di fase).
+            very_low_carb = day_t["c"] < 30
+            carb = rnd.choice(carbs) if not very_low_carb else None
             veg = rnd.choice(vegs)
             fat = rnd.choice(fats)
-            fruit = rnd.choice(fruits) if meal in ("colazione", "spuntino", "spuntino2") else None
+            # la frutta porta carb: solo nei giorni non cheto
+            fruit = rnd.choice(fruits) if (meal in ("colazione", "spuntino", "spuntino2") and not very_low_carb) else None
 
             # applica sostituzioni per condizione
             protein = _apply_substitution(protein, conditions)
-            carb = _apply_substitution(carb, conditions)
+            if carb:
+                carb = _apply_substitution(carb, conditions)
             veg = _apply_substitution(veg, conditions)
             fat = _apply_substitution(fat, conditions)
             if fruit:
@@ -656,8 +740,8 @@ def generate_plan(targets, options=None):
             }
 
             tot, items = _meal_combo(protein, carb, veg, fat, fruit,
-                                     targets["kcal"] * share, targets["p"] * share,
-                                     alts=alts)
+                                     day_t["kcal"] * share, day_t["p"] * share,
+                                     alts=alts, t_carb=day_t["c"] * share)
 
             # ── calcolo FODMAP per pasto ──
             meal_fodmap = _compute_meal_fodmap(items)
