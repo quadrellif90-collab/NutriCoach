@@ -1,0 +1,424 @@
+<!DOCTYPE html><html lang=it><head>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>NutriCoach v2</title>
+<link rel=stylesheet href=/static/style.css>
+</head><body>
+<div class=sidebar>
+  <div class=logo>🥗 <span>NutriCoach</span></div>
+  <div class="nav-item active" data-nav=dashboard onclick="nav('dashboard')"><span class=ico>📊</span><span>Dashboard</span></div>
+  <div class=nav-item data-nav=pazienti onclick="nav('pazienti')"><span class=ico>👥</span><span>Pazienti</span></div>
+  <div class=nav-item data-nav=bia onclick="nav('bia')"><span class=ico>🔬</span><span>BIA</span></div>
+  <div class=nav-item data-nav=dieta onclick="nav('dieta')"><span class=ico>🍽️</span><span>Dieta</span></div>
+  <div class=nav-item data-nav=agenda onclick="nav('agenda')"><span class=ico>📅</span><span>Agenda</span></div>
+  <div class=nav-item data-nav=notifiche onclick="nav('notifiche')"><span class=ico>📨</span><span>Notifiche</span></div>
+  <div class=nav-item data-nav=archivio onclick="nav('archivio')"><span class=ico>📁</span><span>Archivio</span></div>
+  <div class=spacer></div>
+  <div class=version>v2.0.0 · Dietowin</div>
+</div>
+<div class=main>
+  <div class=topbar>
+    <h1 id=page-title>Dashboard</h1>
+    <input id=search-input placeholder="Cerca paziente..." oninput=onSearch(this.value)>
+    <button class=btn onclick="nav('pazienti')">+ Nuovo</button>
+  </div>
+  <div id=view></div>
+</div>
+<div id=modal-root></div>
+<div id=toast></div>
+<script>
+const API=''; let ST={nav:'dashboard',clients:[],cid:null,cats:[],name:null,weight:null};
+function $(id){return document.getElementById(id)}
+function qs(s){return document.querySelector(s)}
+function qsa(s){return document.querySelectorAll(s)}
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600)}
+function jget(u){return fetch(API+u).then(r=>r.json())}
+function jpost(u,b){return fetch(API+u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json())}
+function jdel(u){return fetch(API+u,{method:'DELETE'}).then(r=>r.json())}
+function esc(s){return s==null?'':String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
+function today(){return new Date().toISOString().slice(0,10)}
+function init(n){return(n||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}
+function clr(){const c=['#6366f1','#0d9488','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6'];return c[Math.floor(Math.random()*c.length)]}
+// NAVIGATION
+async function nav(n){
+  ST.nav=n;
+  qsa('.nav-item').forEach(e=>e.classList.toggle('active',e.dataset.nav===n));
+  $('page-title').textContent={'dashboard':'Dashboard','pazienti':'Pazienti','bia':'BIA & Misure','dieta':'Dieta','agenda':'Agenda','notifiche':'Notifiche','archivio':'Archivio'}[n]||n;
+  if(n==='dashboard')await loadDashboard();
+  else if(n==='pazienti')await loadPazienti();
+  else if(n==='bia')await loadBIA();
+  else if(n==='dieta')loadDieta();
+  else if(n==='agenda')loadAgenda();
+  else if(n==='notifiche')loadNotifiche();
+  else if(n==='archivio')loadArchivio();
+}
+// DASHBOARD
+async function loadDashboard(){
+  const cls=await jget('/api/patients');
+  ST.clients=cls; const n=cls.length;
+  $('view').innerHTML=`<div class=row style=margin-bottom:12px>
+    <div class=card style=flex:1;text-align:center><b>${n}</b><div class=meta>Pazienti</div></div>
+    <div class=card style=flex:1;text-align:center><b>${cls.filter(c=>c.goal).length}</b><div class=meta>Con obiettivo</div></div>
+    <div class=card style=flex:1;text-align:center><b>0</b><div class=meta>App. oggi</div></div>
+  </div>
+  <div class=card><b>👥 Ultimi pazienti</b>
+  ${cls.slice(0,5).map(c=>`<div class=patient-card onclick="openPatient(${c.id})"><div class=init style=background:${clr()}>${init(c.name)}</div><div class=info><b>${esc(c.name)}</b><div class=meta>${c.goal||'—'} · ${c.sport||''}</div></div></div>`).join('')||'<div class=empty>Nessun paziente</div>'}</div>`;
+}
+// PAZIENTI LIST
+async function loadPazienti(){
+  const cls=await jget('/api/patients');
+  ST.clients=cls;
+  $('view').innerHTML=`<div class=row style=margin-bottom:8px>
+    <button class="btn btn-primary" onclick=showNewPatient()>➕ Nuovo paziente</button>
+    <button class="btn btn-outline" onclick=showCompare()>⚖️ Confronta</button>
+    <span class=meta>${cls.length} pazienti</span>
+  </div>
+  ${cls.map(c=>`<div class=patient-card onclick="openPatient(${c.id})"><div class=init style=background:${clr()}>${init(c.name)}</div>
+    <div class=info><b>${esc(c.name)}</b><div class=meta>${c.goal||'—'} · ${c.sport||''}</div></div>
+  </div>`).join('')||'<div class=card><div class=empty>Clicca "+ Nuovo paziente" per iniziare</div></div>'}`;
+}
+function onSearch(q){
+  const m=ST.clients.find(c=>c.name&&c.name.toLowerCase().includes(q.toLowerCase()));
+  if(m)openPatient(m.id);
+  else if(q.length>1)toast('Nessun paziente trovato');
+}
+// NEW PATIENT
+function showNewPatient(){
+  modal(`<div class=card><b>➕ Nuovo paziente</b>
+  <div class=field-row><div><label>Nome *</label><input id=np-name></div><div><label>Sesso</label><select id=np-sex><option value=M>M</option><option value=F>F</option></select></div></div>
+  <div class=field-row><div><label>Telefono</label><input id=np-phone></div><div><label>Email</label><input id=np-email type=email></div></div>
+  <div class=field-row><div><label>Obiettivo</label><input id=np-goal></div><div><label>Sport</label><input id=np-sport></div></div>
+  <div style=margin-top:10px;display:flex;gap:8px><button class="btn btn-primary" onclick=saveNewPatient()>💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
+}
+async function saveNewPatient(){
+  const b={name:$('np-name').value,sex:$('np-sex').value,phone:$('np-phone').value,email:$('np-email').value,goal:$('np-goal').value,sport:$('np-sport').value};
+  if(!b.name){toast('Inserisci il nome');return}
+  const r=await jpost('/api/patients',b);
+  if(r&&r.ok){toast('Paziente creato ✓');closeModal();nav('pazienti')}else toast('Errore');
+}
+// OPEN PATIENT
+async function openPatient(cid){
+  ST.cid=cid;
+  const c=await jget('/api/patients/'+cid);
+  ST.name=c.name; ST.weight=c.weight_kg||null;
+  $('page-title').textContent=esc(c.name);
+  $('view').innerHTML=`<div class=card><div class=row><div style=width:40px;height:40px;border-radius:50%;background:${clr()};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700>${init(c.name)}</div>
+    <div style=flex:1><b>${esc(c.name)}</b><div class=meta>${c.sex||'?'} · ${c.goal||'—'} · ${c.sport||'—'}</div></div>
+  ${c.phone?`<button class="btn btn-sm btn-outline" onclick="window.open('https://wa.me/${c.phone.replace(/[^0-9]/g,'')}','_blank')">💬</button>`:''}
+  <button class="btn btn-sm btn-danger" onclick=deletePatient(${c.id})>✕</button></div></div>
+  <div class=tab-bar id=ptabs>
+    <button class="tab-btn active" onclick=switchTab(this,'anamnesi')>Anamnesi</button>
+    <button class=tab-btn onclick=switchTab(this,'bia')>BIA</button>
+    <button class=tab-btn onclick=switchTab(this,'misure')>Misure</button>
+    <button class=tab-btn onclick=switchTab(this,'dieta')>Dieta</button>
+    <button class=tab-btn onclick=switchTab(this,'referti')>Referti</button>
+    <button class=tab-btn onclick=switchTab(this,'appuntamenti')>Appuntamenti</button>
+    <button class=tab-btn onclick=switchTab(this,'sintomi')>Sintomi</button>
+    <button class=tab-btn onclick=switchTab(this,'progressi')>Progressi</button>
+  </div>
+  <div id=patient-pane></div>`;
+  switchTab(qs('#ptabs .tab-btn'),'anamnesi');
+}
+function returnToDashboard(){
+  if(ST.cid&&confirm('Tornare alla dashboard? I dati non salvati andranno persi.')){ST.cid=null;nav('dashboard')}
+}
+async function deletePatient(cid){
+  if(!confirm('Eliminare questo paziente e tutti i suoi dati?'))return;
+  await jdel('/api/patients/'+cid);
+  toast('Paziente eliminato');
+  if(ST.cid===cid)nav('pazienti'); else nav('pazienti');
+}
+// PATIENT TABS
+function switchTab(el,tab){
+  qsa('#ptabs .tab-btn').forEach(b=>b.classList.remove('active'));
+  if(el)el.classList.add('active');
+  const p=$('patient-pane');
+  if(tab==='anamnesi')loadAnamnesi();
+  else if(tab==='bia')loadPatientBIA();
+  else if(tab==='misure')loadMisure();
+  else if(tab==='dieta')loadPatientDieta();
+  else if(tab==='referti')loadReferti();
+  else if(tab==='appuntamenti')loadAppuntamenti();
+  else if(tab==='sintomi')loadSintomi();
+  else if(tab==='progressi')loadProgressi();
+}
+async function loadAnamnesi(){
+  let a={}; try{a=await jget('/api/patients/'+ST.cid+'/anamnesis')}catch(e){}
+  const conds=(a.conditions||[]).join(', ')||'—';
+  $('patient-pane').innerHTML=`<div class=row style=margin-bottom:8px><b>🩺 Anamnesi</b><button class="btn btn-sm" onclick=showAnamnesiForm()>✏️ Modifica</button></div>
+  <div class=card><b>Condizioni cliniche</b><br>${esc(conds)}</div>
+  <div class=card><b>Note</b><br>${esc(a.notes||'—')}</div>
+  ${a.recommendations?`<div class=card><b>🎯 Raccomandazioni</b>${(Array.isArray(a.recommendations)?a.recommendations:[]).slice(0,3).map(r=>`<div style=margin:4px 0;padding:6px;background:#f0fdf4;border-radius:4px;font-size:11px>${esc(typeof r==='string'?r:r.condition||'')}</div>`).join('')}</div>`:''}`;
+}
+async function showAnamnesiForm(){
+  let a={}; try{a=await jget('/api/patients/'+ST.cid+'/anamnesis')}catch(e){}
+  const sel=a.conditions||[];
+  const cl=await jget('/api/clinical-conditions');
+  const all=cl.conditions||{};
+  const html=Object.keys(all).map(k=>`<label class=chk style=font-size:11px><input type=checkbox class=ac value=${k} ${sel.includes(k)?'checked':''}>${all[k].name||k}</label>`).join('');
+  modal(`<div class=card><b>✏️ Anamnesi</b><label>Condizioni cliniche</label><div style=display:flex;flex-wrap:wrap;gap:4px;max-height:180px;overflow:auto;margin-bottom:6px>${html}</div><label>Note</label><textarea id=an-notes rows=3>${esc(a.notes||'')}</textarea>
+  <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick=saveAnamnesi()>💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
+}
+async function saveAnamnesi(){
+  const conds=Array.from(qsa('.ac:checked')).map(c=>c.value);
+  const notes=$('an-notes').value;
+  const r=await jpost('/api/patients/'+ST.cid+'/anamnesis',{conditions:conds,notes});
+  if(r&&r.ok){toast('Anamnesi salvata ✓');closeModal();loadAnamnesi()}else toast('Errore');
+}
+// PATIENT BIA
+async function loadPatientBIA(){
+  const bia=await jget('/api/patients/'+ST.cid+'/bia');
+  const trend=await jget('/api/patients/'+ST.cid+'/bia-trend?field=weight_kg&days=365');
+  $('patient-pane').innerHTML=`<div class=row style=margin-bottom:8px><b>📊 Misurazioni BIA</b><button class="btn btn-sm" onclick=showBIAForm()>➕ Nuova</button></div>
+  ${trend.length>1?`<div class=card>${trendSVG(trend.map(t=>({v:t.weight_kg,d:t.date})))}
+  <div style=font-size:11px;color:var(--text2)>${trend[0].weight_kg} → ${trend[trend.length-1].weight_kg} kg</div></div>`:''}
+  <div class=card><b>Storico</b>${bia.length?`<table><tr><th>Data</th><th>Peso</th><th>BF%</th><th>MM%</th><th>PhA</th><th>TBW</th><th>BMR</th><th></th></tr>
+  ${bia.map(r=>`<tr><td>${r.date}</td><td>${r.weight_kg||'—'}</td><td>${r.bf_pct||'—'}</td><td>${r.mm_pct||'—'}</td><td>${r.pha||'—'}</td><td>${r.tbw_l||'—'}</td><td>${r.bmr_kcal||'—'}</td>
+  <td><button class="btn btn-sm btn-danger" onclick="if(confirm('Eliminare?')){jdel('/api/bia/${r.id}').then(()=>loadPatientBIA())}">✕</button></td></tr>`).join('')}</table>`:'<div class=empty>Nessuna BIA</div>'}</div>`;
+}
+function showBIAForm(){
+  modal(`<div class=card><b>➕ Nuova BIA</b><div class=field-row><div><label>Data</label><input id=bf-date type=date value=${today()}>
+  </div><div><label>Peso (kg)</label><input id=bf-w type=number step=0.1></div><div><label>BF%</label><input id=bf-bf type=number step=0.1></div></div>
+  <div class=field-row><div><label>MM%</label><input id=bf-mm type=number step=0.1></div><div><label>PhA</label><input id=bf-pha type=number step=0.1></div>
+  <div><label>TBW (L)</label><input id=bf-tbw type=number step=0.1></div><div><label>BMR</label><input id=bf-bmr type=number></div></div>
+  <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick=saveBIA()>💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
+}
+async function saveBIA(){
+  const fields={weight_kg:parseFloat($('bf-w').value),bf_pct:parseFloat($('bf-bf').value),mm_pct:parseFloat($('bf-mm').value),pha:parseFloat($('bf-pha').value),tbw_l:parseFloat($('bf-tbw').value),bmr_kcal:parseFloat($('bf-bmr').value),date:$('bf-date').value};
+  const r=await jpost('/api/patients/'+ST.cid+'/bia',fields);
+  if(r&&r.ok){toast('BIA salvata ✓');closeModal();loadPatientBIA()}else toast('Errore');
+}
+// PATIENT DIET
+async function loadPatientDieta(){
+  const items=await jget('/api/patients/'+ST.cid+'/diet-items');
+  const days=['lun','mar','mer','gio','ven','sab','dom'];
+  const dayNames={'lun':'LUN','mar':'MAR','mer':'MER','gio':'GIO','ven':'VEN','sab':'SAB','dom':'DOM'};
+  const byDay={}; days.forEach(d=>{byDay[d]=[]});
+  items.forEach(i=>{if(byDay[i.day])byDay[i.day].push(i)});
+  $('patient-pane').innerHTML=`<div class=row style=margin-bottom:8px><b>🍽️ Diario alimentare</b><button class="btn btn-sm" onclick=showGenPlan()>⚡ Genera piano</button>
+  <button class="btn btn-sm btn-outline" onclick=showAddFood()>➕ Alimento</button></div>
+  <div class=diet-grid>${days.map(d=>`<div class=diet-day><div class=day-label>${dayNames[d]}</div>${['colazione','spuntino','pranzo','spuntino2','cena'].map(m=>{
+    const fi=byDay[d].filter(i=>i.meal===m);
+    return fi.length?`<div class=diet-meal><div class=ml>${m}</div>${fi.map(f=>`<div class=diet-food><span>${f.food} ${f.grams}g</span><button class="btn btn-sm btn-danger" onclick='jdel("/api/diet-items/${f.id}").then(()=>loadPatientDieta())' style=padding:1px 4px;font-size:9px>✕</button></div>`).join('')}</div>`:'';
+  }).join('')}</div>`).join('')}</div>`;
+}
+function showGenPlan(){
+  Promise.all([
+    jget('/api/patients/'+ST.cid+'/anamnesis'),
+    jget('/api/diet-presets'),
+    jget('/api/clinical-conditions')
+  ]).then(([a,pr,cl])=>{
+    const sel=a.conditions||[];
+    const presets=pr.presets||[];
+    const conds=cl.conditions||{};
+    modal(`<div class=card><b>✨ Genera piano</b>
+    <label>Protocollo</label><select id=gp-preset onchange=onPresetChange()><option value="">— Manuale —</option>${presets.map(p=>`<option value=${p.key}>${p.label}</option>`).join('')}</select>
+    <div class=field-row><div><label>kcal</label><input id=gp-k type=number value=2000></div><div><label>P%</label><input id=gp-p type=number value=30></div>
+    <div><label>C%</label><input id=gp-c type=number value=45></div><div><label>F%</label><input id=gp-f type=number value=25></div></div>
+    <label>Freq.</label><select id=gp-fr><option value=3>3 pasti</option><option value=5 selected>5 pasti</option></select>
+    <label style=margin-top:6px>Sindromi</label><div id=gp-cd style=display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow:auto>
+    ${Object.keys(conds).map(k=>`<label class=chk style=font-size:10px><input type=checkbox value=${k} ${sel.includes(k)?'checked':''}>${conds[k].name||k}</label>`).join('')}</div>
+    <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick=genPlan()>⚡ Genera</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
+  });
+}
+function onPresetChange(){
+  const key=$('gp-preset').value; if(!key)return;
+  const kcal=parseFloat($('gp-k').value)||2000;
+  jpost('/api/diet-presets/targets',{key,kcal,weight_kg:ST.weight||null}).then(t=>{
+    if(t&&t.p_pct!=null){$('gp-p').value=t.p_pct;$('gp-c').value=t.c_pct;$('gp-f').value=t.f_pct;toast('Preset: '+key)}
+  });
+}
+async function genPlan(){
+  const pre=$('gp-preset')?$('gp-preset').value:'';
+  const targets={kcal:parseFloat($('gp-k').value),protein_pct:parseFloat($('gp-p').value),carb_pct:parseFloat($('gp-c').value),fat_pct:parseFloat($('gp-f').value)};
+  const conds=Array.from(qsa('#gp-cd input:checked')).map(c=>c.value);
+  const opts={meals:parseInt($('gp-fr').value),days:['lun','mar','mer','gio','ven','sab','dom'],conditions:conds,preset:pre};
+  closeModal();toast('Generazione...');
+  const pl=await jpost('/api/patients/'+ST.cid+'/plan/generate',{targets,options:opts,preset:pre});
+  if(pl&&pl.days){
+    // apply plan items
+    await jpost('/api/patients/'+ST.cid+'/diet/clear');
+    for(const d of pl.days){
+      const dk=(d.day||'').slice(0,3).toLowerCase();
+      if(!d.meals)continue;
+      for(const mp of d.meals){
+        const mk=mp.meal||'';
+        for(const f of (mp.items||[])){
+          if(f&&f.food)await jpost('/api/patients/'+ST.cid+'/diet-items',{day:dk,meal:mk,food:f.food,grams:f.g||0});
+        }
+      }
+    }
+    toast('Piano generato ✓');loadPatientDieta()
+  } else toast('Errore');
+}
+// MISURE
+async function loadMisure(){
+  $('patient-pane').innerHTML=`<div class=card><b>📏 Misure</b><div class=empty>In arrivo</div></div>`;
+}
+// REFERTI
+async function loadReferti(){
+  const docs=await jget('/api/documents?pid='+ST.cid);
+  $('patient-pane').innerHTML=`<div class=card><b>📄 Documenti</b>${docs.map(d=>`<div class=patient-card><div class=info><b>${esc(d.title||d.doc_type)}</b><div class=meta>${d.date}</div></div></div>`).join('')||'<div class=empty>Nessun documento</div>'}</div>`;
+}
+// APPUNTAMENTI
+async function loadAppuntamenti(){
+  const appts=await jget('/api/appointments?pid='+ST.cid);
+  $('patient-pane').innerHTML=`<div class=row style=margin-bottom:8px><b>📅 Appuntamenti</b><button class="btn btn-sm btn-primary" onclick=showApptForm()>➕ Nuovo</button></div>
+  ${appts.map(a=>`<div class=patient-card style=border-left:3px solid ${a.status==='closed'?'var(--primary)':a.status==='cancelled'?'var(--danger)':'var(--warn)'}><div class=info><b>${esc(a.title)}</b><div class=meta>${a.appt_date}${a.follow_up?' · 🔄 Follow-up':''}</div></div></div>`).join('')||'<div class=empty>Nessun appuntamento</div>'}`;
+}
+function showApptForm(){
+  modal(`<div class=card><b>➕ Appuntamento</b><div class=field-row><div><label>Data</label><input id=ap-date type=date value=${today()}></div><div><label>Titolo</label><input id=ap-title></div></div>
+  <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick=saveAppt()>💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
+}
+async function saveAppt(){
+  const r=await jpost('/api/appointments',{patient_id:ST.cid,title:$('ap-title').value,appt_date:$('ap-date').value});
+  if(r&&r.ok){toast('Appuntamento creato ✓');closeModal();loadAppuntamenti()}
+}
+// SINTOMI
+async function loadSintomi(){
+  const s=await jget('/api/patients/'+ST.cid+'/symptoms');
+  const syms=s.symptoms||[];
+  $('patient-pane').innerHTML=`<div class=row style=margin-bottom:8px><b>🩺 Sintomi</b><button class="btn btn-sm" onclick=showSintomoForm()>➕ Registra</button></div>
+  ${syms.length?`<div class=card><b>Storico</b>${syms.slice(0,20).map(r=>`<div style=padding:4px 0;border-bottom:1px solid var(--border);font-size:11px>${r.date} — Bloating:${r.bloating} Dolore:${r.pain} ${r.foods?'· '+esc(r.foods):''}</div>`).join('')}</div>`:'<div class=empty>Nessun sintomo registrato</div>'}`;
+}
+function showSintomoForm(){
+  modal(`<div class=card><b>➕ Sintomo</b><div class=field-row><div><label>Data</label><input id=sy-date type=date value=${today()}></div>
+  <div><label>Bloating (0-3)</label><input id=sy-b type=number min=0 max=3></div><div><label>Dolore (0-3)</label><input id=sy-p type=number min=0 max=3></div></div>
+  <label>Cibi / note</label><textarea id=sy-n rows=2></textarea>
+  <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick=saveSintomo()>💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
+}
+async function saveSintomo(){
+  const r=await jpost('/api/patients/'+ST.cid+'/symptoms',{date:$('sy-date').value,bloating:parseInt($('sy-b').value)||0,pain:parseInt($('sy-p').value)||0,foods:$('sy-n').value});
+  if(r&&r.ok){toast('Salvato ✓');closeModal();loadSintomi()}
+}
+// PROGRESSI
+async function loadProgressi(){
+  const n=await jget('/api/patients/'+ST.cid+'/progress-notes');
+  $('patient-pane').innerHTML=`<div class=row style=margin-bottom:8px><b>📈 Progressi</b><button class="btn btn-sm" onclick=showProgressForm()>➕ Nota</button></div>
+  ${n.map(r=>`<div class=card><div class=meta>${r.date}</div>${esc(r.note)}</div>`).join('')||'<div class=empty>Nessuna nota'}</div>`}
+function showProgressForm(){
+  modal(`<div class=card><b>➕ Nota progresso</b><textarea id=pn-t rows=3 placeholder=Note...></textarea>
+  <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick=saveProgress()>💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
+}
+async function saveProgress(){
+  const r=await jpost('/api/patients/'+ST.cid+'/progress-notes',{note:$('pn-t').value});
+  if(r&&r.ok){toast('Salvato ✓');closeModal();loadProgressi()}
+}
+// BIA HUB (global)
+async function loadBIA(){
+  const cls=ST.clients.length?ST.clients:await jget('/api/patients');
+  $('view').innerHTML=`<div class=row style=margin-bottom:8px><b>🔬 BIA & Misure</b>
+  <select id=bp-cl onchange=loadBIAReading() style=width:auto;max-width:200px><option value=>Seleziona...</option>${cls.map(c=>`<option value=${c.id}>${esc(c.name)}</option>`).join('')}</select>
+  <button class="btn btn-sm btn-primary" onclick=showBIAHubForm()>➕ Nuova</button>
+  <button class="btn btn-sm" onclick=uploadBIAHub()>📄 Carica PDF</button></div>
+  <div id=bp-v><div class=empty>👆 Seleziona un paziente</div></div>`;
+}
+async function loadBIAReading(){
+  const cid=+$('bp-cl').value;if(!cid){$('bp-v').innerHTML='<div class=empty>Seleziona un paziente</div>';return}
+  const [bia,trend]=await Promise.all([jget('/api/patients/'+cid+'/bia'),jget('/api/patients/'+cid+'/bia-trend?field=weight_kg&days=365')]);
+  $('bp-v').innerHTML=`${trend.length>1?`<div class=card>${trendSVG(trend.map(t=>({v:t.weight_kg,d:t.date})))}</div>`:''}<div class=card><b>Storico</b>${bia.length?`<table><tr><th>Data</th><th>Peso</th><th>BF%</th><th>MM%</th><th>PhA</th><th>BMR</th><th></th></tr>
+  ${bia.map(r=>`<tr><td>${r.date}</td><td>${r.weight_kg||'—'}</td><td>${r.bf_pct||'—'}</td><td>${r.mm_pct||'—'}</td><td>${r.pha||'—'}</td><td>${r.bmr_kcal||'—'}</td>
+  <td><button class="btn btn-sm btn-danger" onclick="if(confirm('Eliminare?')){jdel('/api/bia/${r.id}').then(()=>loadBIAReading())}">✕</button></td></tr>`).join('')}</table>`:'<div class=empty>Nessuna BIA</div>'}</div>`;
+}
+function showBIAHubForm(){
+  modal(`<div class=card><b>➕ BIA</b><div class=field-row><div><label>Data</label><input id=bfh-d type=date value=${today()}></div>
+  <div><label>Peso</label><input id=bfh-w type=number step=0.1></div><div><label>BF%</label><input id=bfh-bf type=number step=0.1></div></div>
+  <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick=saveBIAHub()>💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
+}
+async function saveBIAHub(){
+  const cid=+$('bp-cl').value;if(!cid){toast('Seleziona paziente');return}
+  const r=await jpost('/api/patients/'+cid+'/bia',{date:$('bfh-d').value,weight_kg:parseFloat($('bfh-w').value),bf_pct:parseFloat($('bfh-bf').value)});
+  if(r&&r.ok){toast('BIA salvata ✓');closeModal();loadBIAReading()}
+}
+function uploadBIAHub(){
+  const cid=+$('bp-cl').value;if(!cid){toast('Seleziona paziente');return}
+  const inp=document.createElement('input');inp.type='file';inp.accept='.pdf';
+  inp.onchange=async()=>{
+    const f=inp.files[0];if(!f)return;
+    toast('Estrazione in corso...');
+    const fd=new FormData();fd.append('file',f);
+    try{
+      const r=await fetch(API+'/api/patients/'+cid+'/bia/upload',{method:'POST',body:fd});
+      const j=await r.json();
+      if(j.ok||j.bia_id){toast('BIA importata ✓');loadBIAReading()}else toast('Errore');
+    }catch(e){toast('Errore upload')}
+  };inp.click();
+}
+// DIETA (global)
+function loadDieta(){
+  $('view').innerHTML=`<div class=card><b>🍽️ Dieta</b><div class=empty>Seleziona un paziente per gestire la dieta</div></div>`;
+}
+// AGENDA
+async function loadAgenda(){
+  const appts=await jget('/api/appointments?from_date='+today());
+  $('view').innerHTML=`<div class=row style=margin-bottom:8px><b>📅 Agenda</b><button class="btn btn-sm btn-primary" onclick=showGlobalAppt()>➕ Nuovo</button></div>
+  ${appts.length?`<div class=card><table><tr><th>Data</th><th>Paziente</th><th>Titolo</th><th>Stato</th></tr>${appts.map(a=>`<tr><td>${a.appt_date}</td><td>${esc(a.patient_name||'')}</td><td>${esc(a.title)}</td><td>${a.status}</td></tr>`).join('')}</table></div>`:'<div class=empty>Nessun appuntamento</div>'}`;
+}
+function showGlobalAppt(){
+  modal(`<div class=card><b>➕ Appuntamento</b><div class=field-row><div><label>Paziente</label><select id=ga-p><option value=>Seleziona...</option>${ST.clients.map(c=>`<option value=${c.id}>${esc(c.name)}</option>`).join('')}</select></div>
+  <div><label>Data</label><input id=ga-d type=date value=${today()}></div></div><label>Titolo</label><input id=ga-t>
+  <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick=saveGlobalAppt()>💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
+}
+async function saveGlobalAppt(){
+  const r=await jpost('/api/appointments',{patient_id:+$('ga-p').value,title:$('ga-t').value,appt_date:$('ga-d').value});
+  if(r&&r.ok){toast('Creato ✓');closeModal();loadAgenda()}
+}
+// NOTIFICHE
+async function loadNotifiche(){
+  const n=await jget('/api/notifications');
+  $('view').innerHTML=`<div class=row style=margin-bottom:8px><b>📨 Notifiche</b><button class="btn btn-sm btn-primary" onclick=showNotificaForm()>➕ Nuova</button></div>
+  ${n.length?`<div class=card><table><tr><th>Paziente</th><th>Tipo</th><th>Oggetto</th><th>Inviata</th></tr>${n.map(x=>`<tr><td>${esc(x.patient_name||'')}</td><td>${x.type}</td><td>${esc(x.subject)}</td><td>${x.sent?'✓':'-'}</td></tr>`).join('')}</table></div>`:'<div class=empty>Nessuna notifica</div>'}`;
+}
+function showNotificaForm(){
+  modal(`<div class=card><b>➕ Notifica</b><div class=field-row><div style=flex:2><label>Paziente</label><select id=n-p><option value=>Seleziona...</option>${ST.clients.map(c=>`<option value=${c.id}>${esc(c.name)}</option>`).join('')}</select></div>
+  <div><label>Tipo</label><select id=n-t><option value=email>Email</option><option value=whatsapp>WhatsApp</option></select></div></div>
+  <div class=field-row><div style=flex:2><label>Oggetto</label><input id=n-s></div></div><label>Messaggio</label><textarea id=n-m rows=3></textarea>
+  <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick=saveNotifica()>💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
+}
+async function saveNotifica(){
+  const r=await jpost('/api/notifications',{patient_id:+$('n-p').value,type:$('n-t').value,subject:$('n-s').value,message:$('n-m').value});
+  if(r&&r.ok){toast('Creata ✓');closeModal();loadNotifiche()}
+}
+// ARCHIVIO
+async function loadArchivio(){
+  const docs=await jget('/api/documents');
+  $('view').innerHTML=`<div class=card><b>📁 Archivio documenti</b>${docs.map(d=>`<div class=patient-card><div class=info><b>${esc(d.title||d.doc_type)}</b><div class=meta>${esc(d.patient_name||'')} · ${d.date}</div></div></div>`).join('')||'<div class=empty>Nessun documento</div>'}</div>`;
+}
+// COMPARE
+function showCompare(){
+  const cls=ST.clients;
+  modal(`<div class=card><b>⚖️ Confronta pazienti</b><div style=max-height:250px;overflow:auto>${cls.map(c=>`<label class=chk><input type=checkbox class=cp value=${c.id}>${esc(c.name)}</label>`).join('')}</div>
+  <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick=runCompare()>📊 Confronta</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
+}
+async function runCompare(){
+  const ids=Array.from(qsa('.cp:checked')).map(c=>c.value);
+  if(ids.length<2){toast('Seleziona 2+ pazienti');return}
+  const r=await jget('/api/patients/compare?ids='+ids.join(','));
+  const fields=['name','weight_kg','bmi','bf_pct','mm_pct','pha','tbw_l','bmr_kcal','ffmi','whr'];
+  const labels=['Nome','Peso','BMI','BF%','MM%','PhA','TBW','BMR','FFMI','WHR'];
+  closeModal();
+  modal(`<div class=card><b>⚖️ Confronto</b><table class=cmp-table><tr><th>Metrica</th>${r.map(x=>`<th>${esc(x.name)}</th>`).join('')}</tr>
+  ${fields.map((f,i)=>`<tr><td class=metric>${labels[i]}</td>${r.map(x=>`<td>${x[f]??'—'}</td>`).join('')}</tr>`).join('')}</table>
+  <div style=margin-top:8px><button class=btn onclick=closeModal()>Chiudi</button></div></div>`);
+}
+// SVG TREND HELPER
+function trendSVG(values){
+  if(!values||values.length<2)return '';
+  const w=Math.max(values.length*40,200),h=80,pad=10;
+  const vs=values.map(v=>v.v); const min=Math.min(...vs)-2; const max=Math.max(...vs)+2; const rng=max-min||1;
+  const pts=vs.map((v,i)=>`${pad+(i/(vs.length-1))*(w-2*pad)},${h-((v-min)/rng)*(h-20)-10}`);
+  return `<svg viewBox="0 0 ${w} ${h}" width=100% height=${h} style=margin:6px 0>
+  <polyline points="${pts.join(' ')}" fill=none stroke=var(--primary) stroke-width=2 stroke-linejoin=round/>
+  ${pts.map((p,i)=>`<circle cx="${p.split(',')[0]}" cy="${p.split(',')[1]}" r=3 fill=var(--primary)/>`).join('')}
+  <text x=${pad} y=${h-2} font-size=8 fill=var(--text2)>${Math.round(min)}</text>
+  <text x=${w-20} y=${h-2} font-size=8 fill=var(--text2)>${Math.round(max)}</text>
+  </svg>`;
+}
+// MODAL
+function modal(body){
+  $('modal-root').innerHTML=`<div class=modal-overlay onclick="if(event.target===this)closeModal()"><div class=modal><div class=modal-head><span>NutriCoach</span><button class=btn onclick=closeModal() style=border:none;padding:2px 6px>✕</button></div><div class=modal-body>${body}</div></div></div>`;
+}
+function closeModal(){$('modal-root').innerHTML=''}
+// BOOT
+nav('dashboard');
+</script></body></html>

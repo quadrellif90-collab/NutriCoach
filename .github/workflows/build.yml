@@ -11,6 +11,14 @@ jobs:
     name: Build Windows (exe + installer NSIS)
     runs-on: windows-latest
     steps:
+      - name: Check tag version (v1 or v2)
+        id: tagver
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -match "^v2\.\d") { echo "is_v2=true" >> $env:GITHUB_OUTPUT } else { echo "is_v2=false" >> $env:GITHUB_OUTPUT }
+          echo "tag=$tag"
+
       - uses: actions/checkout@v4
 
       - name: Set up Python
@@ -38,8 +46,16 @@ jobs:
           echo "Copiato Tesseract da $src -> $dst"
           ls $dst
 
-      - name: Build executable (one-file)
-        run: pyinstaller NutriCoach.spec --noconfirm --clean
+      - name: Build executable (choose spec by version)
+        shell: pwsh
+        run: |
+          if ("${{ steps.tagver.outputs.is_v2 }}" -eq "true") {
+            echo "Building v2 (Dietowin) from NutriCoach_v2.spec"
+            pyinstaller NutriCoach_v2.spec --noconfirm --clean
+          } else {
+            echo "Building v1 from NutriCoach.spec"
+            pyinstaller NutriCoach.spec --noconfirm --clean
+          }
 
       - name: Install NSIS
         run: choco install nsis --no-progress -y
