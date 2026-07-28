@@ -21,7 +21,7 @@ import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
 from app import ocr_engine  # OCR integrato: Windows OCR + fallback Tesseract
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.4.0")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.5.0")
 
 # Servi file statici (CSS)
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
@@ -211,6 +211,43 @@ def api_energy_needs(pid: int, activity: str = "moderato", goal: str = "mantenim
         height = 170
     return energy_calc.energy_needs(weight, height, age, p.get("sex", "M"),
                                     activity=activity, goal=goal, bf_pct=bf)
+
+
+# ─── SHOPPING LIST ───────────────────────────────────────────────────────
+
+@app.get("/api/patients/{pid}/shopping-list")
+def api_shopping_list(pid: int):
+    """Genera lista della spesa aggregata dal piano alimentare settimanale."""
+    items = db.list_diet_items(pid)
+    agg = {}
+    for it in items:
+        food = it.get("food", "—")
+        grams = float(it.get("grams", 100) or 100)
+        agg[food] = agg.get(food, 0) + grams
+    # Ordina per categoria
+    foods = db.get_db().execute(
+        "SELECT name, category FROM food_catalog WHERE name IN (%s)" % ",".join("?" * len(agg)) or "''",
+        tuple(agg.keys())).fetchall()
+    cat_map = {r[0]: r[1] for r in foods}
+    by_cat = {}
+    for food, g in agg.items():
+        cat = cat_map.get(food, "varie")
+        by_cat.setdefault(cat, []).append({"food": food, "grams": round(g, 0)})
+    by_cat = {k: sorted(v, key=lambda x: x["food"]) for k, v in by_cat.items()}
+    return {"total_items": len(agg), "by_category": by_cat}
+
+
+@app.get("/api/patients/{pid}/shopping-list/pdf")
+def api_shopping_list_pdf(pid: int):
+    """Export lista spesa in PDF."""
+    from app.diet_pdf import generate_shopping_pdf
+    data = api_shopping_list(pid)
+    p = db.get_patient(pid)
+    pdf = bytes(generate_shopping_pdf(p or {"name": f"P{pid}"}, data["by_category"]))
+    fname = f"spesa_{p['name'].replace(' ','_') if p else pid}_{_today()}.pdf"
+    out = os.path.join(UPLOAD_DIR, fname)
+    with open(out, "wb") as f: f.write(pdf)
+    return FileResponse(out, media_type="application/pdf", filename=fname)
 
 
 # ─── PATIENTS CRUD ────────────────────────────────────────────────────────

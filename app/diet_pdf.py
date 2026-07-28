@@ -153,3 +153,27 @@ def generate_diet_pdf(patient,targets,days_data,macros,recommendations=None,excl
     pdf.recommendations(recommendations or [])
     pdf.excluded_foods(excluded_foods or [])
     return pdf.output()
+
+
+def generate_shopping_pdf(patient, by_category):
+    """Genera lista spesa in PDF raggruppata per categoria."""
+    pdf = DietPDF()
+    pdf.set_auto_page_break(auto=True, margin=20)
+    pdf.add_page()
+    pdf._f("B", 14); pdf._tc(13, 148, 136)
+    pdf.cell(0, 8, f"Lista della Spesa - {patient.get('name', '-')}", new_x="LMARGIN", new_y="NEXT")
+    pdf._f("", 8); pdf._tc(100, 116, 139)
+    pdf.cell(0, 4, f"Generato il {dt.date.today().strftime('%d/%m/%Y')} | NutriCoach v2", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(4)
+
+    for cat, items in by_category.items():
+        if pdf.get_y() > H - 40:
+            pdf.add_page()
+        pdf._f("B", 11); pdf._tc(13, 148, 136)
+        pdf.cell(0, 6, cat.capitalize(), new_x="LMARGIN", new_y="NEXT")
+        pdf._f("", 9); pdf._tc(30, 41, 59)
+        for it in items:
+            pdf.cell(4, 5, "□")
+            pdf.cell(0, 5, f"{it['food']} — {int(it['grams'])} g", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(2)
+    return pdf.output()
