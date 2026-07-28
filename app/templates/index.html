@@ -390,7 +390,6 @@ async function showSwaps(fid){
   ${swaps.map((s,i)=>`<div style=padding:4px 0;border-bottom:1px solid var(--border);cursor:pointer;font-size:11px onclick="selectFood(${s.id},'${esc(s.name)}',${s.kcal},${s.protein_g},${s.carbs_g},${s.fat_g});closeModal()"><b>${i+1}.</b> ${esc(s.name)} <span style=color:var(--text2)>${s.kcal}kcal P${s.protein_g} C${s.carbs_g} F${s.fat_g}</span></div>`).join('')||'<div class=empty>Nessuna alternativa</div>'}
   <div style=margin-top:8px><button class=btn onclick=closeModal()>Chiudi</button></div></div>`);
 }
-}
 let _selectedFood=null;
 function selectFood(id,name,kcal,p,c,f){
   _selectedFood={id,name,kcal,p,c,f};
@@ -551,7 +550,8 @@ async function searchDrugs(q){
   if(!q||q.length<2){$('drug-results').innerHTML='';return}
   const r=await jget('/api/drugs?q='+encodeURIComponent(q));
   const drugs=r.drugs||[];
-  $('drug-results').innerHTML=drugs.length?drugs.map(d=>`<div class=card style=margin:4px 0;padding:6px><b>${esc(d.drug)}</b> <span class=tag style=background:${d.severity==='alta'?'#fee2e2':d.severity==='media'?'#fef3c7':'#dbeafe'}>${d.severity}</span><div style=font-size:10px;color:#888>${esc(d.effect)}<br>💊 ${esc(d.recommendation)}</div></div>`).join(''):'<span style=font-size:10px;color:var(--text2)>Nessun risultato</span>';\n}
+  $('drug-results').innerHTML=drugs.length?drugs.map(d=>`<div class=card style=margin:4px 0;padding:6px><b>${esc(d.drug)}</b> <span class=tag style=background:${d.severity==='alta'?'#fee2e2':d.severity==='media'?'#fef3c7':'#dbeafe'}>${d.severity}</span><div style=font-size:10px;color:#888>${esc(d.effect)}<br>💊 ${esc(d.recommendation)}</div></div>`).join(''):'<span style=font-size:10px;color:var(--text2)>Nessun risultato</span>';
+}
 // DIARIO PASTI
 async function loadDiario(){
   const p=[];
@@ -792,7 +792,7 @@ async function runCompare(){
       modal(`<div class=card><b>📊 Radar chart — ${rd.patient_name||''}</b>${svg}<button class=btn onclick=closeModal()>Chiudi</button></div>`);
     });
   }
-}
+
 // SVG TREND HELPER
 function trendSVG(values){
   if(!values||values.length<2)return '';
@@ -971,18 +971,19 @@ function startOnboarding(){
   function render(){
     const s=steps[step];
     const isLast=step===steps.length-1;
-    $('onboarding-overlay').innerHTML=`<div class=onboarding-card>
-      <div style=font-size:48px;margin-bottom:8px>${s.icon}</div>
-      <h2>${s.title}</h2>
-      <p>${s.text}</p>
-      <div class=onboarding-steps>${steps.map((_,i)=>`<div class="onboarding-step${i===step?' active':''}"></div>`).join('')}</div>
-      <div class=onboarding-btns>
-        <button class="btn btn-skip" onclick=endOnboarding()>Salta</button>
-        ${isLast
-          ?'<button class="btn btn-finish" onclick=endOnboarding()>Fine</button>'
-          :'<button class="btn btn-next" onclick=nextStep()>Avanti →</button>'}
-      </div>
-    </div>`;
+    // Use array join to avoid nested template literals
+    var dots='';
+    for(var j=0;j<steps.length;j++){dots+='<div class="onboarding-step'+(j===step?' active':'')+'"></div>'}
+    $('onboarding-overlay').innerHTML='<div class=onboarding-card>'+
+      '<div style=font-size:48px;margin-bottom:8px>'+esc(s.icon)+'</div>'+
+      '<h2>'+esc(s.title)+'</h2>'+
+      '<p>'+esc(s.text)+'</p>'+
+      '<div class=onboarding-steps>'+dots+'</div>'+
+      '<div class=onboarding-btns>'+
+        '<button class="btn btn-skip" onclick=endOnboarding()>Salta</button>'+
+        (isLast?'<button class="btn btn-finish" onclick=endOnboarding()>Fine</button>'
+               :'<button class="btn btn-next" onclick=nextStep()>Avanti →</button>')+
+      '</div></div>';
   }
   window.nextStep=function(){step++;render()};
   window.endOnboarding=function(){localStorage.setItem('onboarding_done','1');$('onboarding-overlay').style.display='none';$('onboarding-overlay').innerHTML=''};
