@@ -82,9 +82,13 @@ _LABEL_PATTERNS = {
         r"\btbw\b\s*[:\.]?\s*(\d+(?:[.,]\d+)?)\s*l",
     ],
     "ecw_l": [
-        r"acqua\s*extra\s*cellulare\s*\(ecw\)\s*[:\.]?\s*(\d+(?:[.,]\d+)?)\s*l",
-        r"\becw\b\s*[:\.]?\s*(\d+(?:[.,]\d+)?)\s*l",
-    ],
+                r"acqua\s*extra\s*cellulare\s*\(ecw\)\s*[:\\.]?\s*(\d+(?:[.,]\d+)?)\s*l",
+                r"\becw\b\s*[:\\.]?\s*(\d+(?:[.,]\d+)?)\s*l",
+                # Fallback OCR: AKERN Biavector scrive ECW senza unita "L" dopo il
+                # numero (es. "(ECW) 1771 412%") perche' il layout e' tabellare.
+                r"acqua\s*extra\s*cellulare\s*\(ecw\)[^0-9]*(\d+(?:[.,]\d+)?)",
+                r"\becw\b[^0-9]*(\d+(?:[.,]\d+)?)",
+        ],
     "icw_l": [
         r"acqua\s*intra\s*cellulare\s*\(icw\)\s*[:\.]?\s*(\d+(?:[.,]\d+)?)\s*l",
         r"\bicw\b\s*[:\.]?\s*(\d+(?:[.,]\d+)?)\s*l",
@@ -99,10 +103,12 @@ _LABEL_PATTERNS = {
         r"\bbcm\b\s*[:\.]?\s*(\d+(?:[.,]\d+)?)\s*kg",
     ],
     "smm_kg": [
-        r"massa\s*muscolo[- ]?scheletrica\s*\(smm\)\s*[:\.]?\s*(\d+(?:[.,]\d+)?)\s*kg",
-        r"skeletal\s*muscle\s*mass\s*\(smm\)\s*[:\.]?\s*(\d+(?:[.,]\d+)?)\s*kg",
-        r"\bsmm\b\s*[:\.]?\s*(\d+(?:[.,]\d+)?)\s*kg",
-    ],
+            r"massa\s*muscolo[- ]?scheletrica\s*\(smm\)\s*[:\\.]?\s*(\d+(?:[.,]\d+)?)\s*kg",
+            r"skeletal\s*muscle\s*mass\s*\(smm\)\s*[:\\.]?\s*(\d+(?:[.,]\d+)?)\s*kg",
+            r"\bsmm\b\s*[:\\.]?\s*(\d+(?:[.,]\d+)?)\s*kg",
+            # SMM fallback OCR: "SMM) Janssen 32.2 kg" (testo extra tra parentesi e numero)
+            r"\(smm\).*?(\d+(?:[.,]\d+)?)\s*kg",
+        ],
     "asmm_kg": [
         r"massa\s*muscolare\s*appendicolare\s*\(asmm\)\s*[:\.]?\s*(\d+(?:[.,]\d+)?)\s*kg",
         r"appendicular\s*skeletal\s*muscle\s*mass\s*\(asmm\)\s*[:\.]?\s*(\d+(?:[.,]\d+)?)\s*kg",
@@ -239,32 +245,45 @@ def _num(s: str) -> float:
 
 
 def parse_bia_text(text: str) -> dict:
-    """Estrae i campi BIA dal testo del PDF (PDF testuale).
+    """Estrae i campi BIA dal testo del PDF (PDF testuale o OCR).
 
-    I valori estratti vengono filtrati per range fisiologico: i PDF AKERN
-    Biavector (testuali o scansionati via OCR) producono spesso numeri
-    errati (valore di riferimento invece della misurazione, o virgola
-    decimale italiana persa). I valori fuori range vengono scartati per
-    non salvare misurazioni impossibili.
+    APPROCCIO LINE-BASED per report AKERN BODYGRAM (tabelle):
+    Ogni riga OCR che contiene un'etichetta nota viene analizzata:
+    il PRIMO numero sulla riga (dopo l'etichetta) e' il valore del paziente.
+    I numeri successivi sulla stessa riga sono colonne di riferimento e
+    vengono ignorati — questo evita di confondere FM index (8.7 kg/m) 
+    con BF% o di prendere valori dalle colonne reference.
     """
-    low = text.lower()
+    lines = text.split("\n")
     r = BIAReading(source="pdf")
     found = {}
     restored = {}
-    for field_name, patterns in _LABEL_PATTERNS.items():
-        for pat in patterns:
-            m = re.search(pat, low)
-            if m:
-                try:
-                    val = _num(m.group(1))
-                    val, fixed = _restore_decimal(field_name, val)
-                    if fixed:
-                        restored[field_name] = True
-                    setattr(r, field_name, val)
-                    found[field_name] = val
-                except ValueError:
-                    pass
-                break
+
+    for line in lines:
+        low = line.lower().strip()
+        if not low:
+            continue
+        for field_name, patterns in _LABEL_PATTERNS.items():
+            if field_name in found:
+                continue
+            for pat in patterns:
+                            m = re.search(pat, low)
+                            if m:
+                                # USA il valore catturato dalla regex (m.group(1)), NON
+                                # cercare un altro numero dopo il match — quello sarebbe
+                                # il secondo valore della riga (es. indice kg/m, non il
+                                # valore reale del paziente).
+                                try:
+                                    val = _num(m.group(1))
+                                    val, fixed = _restore_decimal(field_name, val)
+                                    if fixed:
+                                        restored[field_name] = True
+                                    setattr(r, field_name, val)
+                                    found[field_name] = val
+                                except (ValueError, IndexError):
+                                    pass
+                                break
+
     # Deriva le percentuali mancanti da kg / peso (se peso presente)
     if r.weight_kg and r.weight_kg > 0:
         if r.fat_mass_kg is not None and r.fat_mass_pct is None:
@@ -276,6 +295,10 @@ def parse_bia_text(text: str) -> dict:
         if r.muscle_mass_kg is None and r.smm_kg is not None:
             r.muscle_mass_kg = r.smm_kg
             found["muscle_mass_kg"] = r.muscle_mass_kg
+    # Deriva BMI da peso/altezza
+    if r.bmi is None and r.weight_kg and r.height_cm and r.height_cm > 0:
+        r.bmi = round(r.weight_kg / ((r.height_cm / 100)**2), 1)
+        found["bmi"] = r.bmi
     r.raw_text = text
     # Filtra per range fisiologico: scarta i valori impossibili (non
     # ripristinabili dividendo per 10/100/1000)
