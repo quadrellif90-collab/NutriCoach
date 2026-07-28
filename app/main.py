@@ -21,7 +21,7 @@ import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
 from app import ocr_engine  # OCR integrato: Windows OCR + fallback Tesseract
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.20.3")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.20.5")
 
 # Servi file statici (CSS)
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
@@ -1153,7 +1153,7 @@ def api_delete_progress(nid: int):
 
 @app.get("/api/version")
 def api_version():
-    _, V = os.path.dirname(__file__), "2.20.3"
+    _, V = os.path.dirname(__file__), "2.20.5"
     return {"version": V, "platform": sys.platform}
 
 # ─── INIT ─────────────────────────────────────────────────────────────────

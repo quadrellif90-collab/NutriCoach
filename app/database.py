@@ -1151,7 +1151,7 @@ def get_studio_stats():
         "total_patients": total_patients,
         "categories": cats,
         "gender": gender,
-        "avg_age": round(age_stats, 1) if age_stats else 0,
+        "avg_age": round(age_stats, 1) if age_stats else None,
         "recent_patients": recent,
         "bia_averages": bia_avg,
     }

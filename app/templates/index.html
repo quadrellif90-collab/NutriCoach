@@ -1,7 +1,7 @@
 <!DOCTYPE html><html lang=it><head>
 <meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
-<title>NutriCoach v2.20.3</title>
+<title>NutriCoach v2.20.5</title>
 <link rel=stylesheet href=/static/style.css>
 <style>
 /* ONBOARDING TOUR */
@@ -36,7 +36,7 @@
     <div class=nav-item style=cursor:pointer;font-size:11px;position:relative onclick=toggleNotifDropdown() title="Notifiche: messaggi e promemoria" id=bell-btn>🔔<span id=bell-badge style="display:none;background:#ef4444;color:#fff;font-size:9px;padding:0 4px;border-radius:8px;position:absolute;top:-2px;right:-4px">0</span></div>
     <div class=nav-item style=cursor:pointer;font-size:11px onclick=doLogout() title="Esci dalla sessione">🚪</div>
   <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn title="Cambia tema chiaro/scuro">🌙</button>
-  <div class=version>v2.20.3 · Dietowin</div>
+  <div class=version>v2.20.5 · Dietowin</div>
 </div>
 <div id=notif-dropdown style="display:none;position:fixed;top:50px;right:50px;width:320px;max-height:360px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:10px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.15);font-size:12px">
   <div style=display:flex;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border)><b>🔔 Notifiche</b><button class="btn btn-sm" onclick="closeNotifDropdown();markAllNotifRead()">✔️ Tutte lette</button></div>
@@ -128,11 +128,12 @@ async function saveRecipe(){
       if(parts.length===2) ingredients.push({food_id:parseInt(parts[0]),name:'',grams:parseFloat(parts[1])||100});
     });
   }
-  await jpost('/api/recipes',{
+  const r=await jpost('/api/recipes',{
     name, category:$('rc').value, servings:parseInt($('rs').value)||4,
     ingredients, instructions:$('rt').value
   });
-  toast('Ricetta salvata ✓');closeModal();loadRicettario();
+  if(r&&r.ok){toast('Ricetta salvata ✓');closeModal();loadRicettario();}
+  else toast('Errore salvataggio ricetta');
 }
 async function delRecipe(rid){
   if(!confirm('Eliminare questa ricetta?'))return;
@@ -1048,7 +1049,7 @@ async function showStats(){
   const genHtml=s.gender.map(g=>`<span style=margin:0 8px>${g.sex==='M'?'♂️':'♀️'} ${g.cnt}</span>`).join('');
   const bia=s.bia_averages||{};
   modal(`<div class=card><b>📊 Statistiche Studio</b>
-    <div class=row><div>👥 Pazienti: <b>${s.total_patients}</b></div><div>${genHtml}</div><div>📅 Età media: <b>${s.avg_age}</b></div></div>
+    <div class=row><div>👥 Pazienti: <b>${s.total_patients}</b></div><div>${genHtml}</div><div>📅 Età media: <b>${s.avg_age!=null?s.avg_age:'—'}</b></div></div>
     <hr style=margin:6px 0>${catHtml}
     ${bia.avg_weight?`<hr style=margin:6px 0><div style=font-size:10px>⚖️ BIA medio: ${Number(bia.avg_weight).toFixed(1)}kg, BMI ${Number(bia.avg_bmi).toFixed(1)}, BF ${Number(bia.avg_bf).toFixed(1)}%, TBW ${Number(bia.avg_tbw).toFixed(1)}L</div>`:''}
     <div style=margin-top:8px><button class=btn onclick=closeModal()>Chiudi</button></div></div>`);
