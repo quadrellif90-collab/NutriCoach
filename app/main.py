@@ -21,7 +21,7 @@ import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
 from app import ocr_engine  # OCR integrato: Windows OCR + fallback Tesseract
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.2.0")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.3.0")
 
 # Servi file statici (CSS)
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
@@ -154,6 +154,40 @@ def api_diet_macros(pid: int, day: str):
     """Calcola macro totali per un giorno specifico."""
     items = db.list_diet_items(pid, day=day)
     return db.compute_meal_macros(items)
+
+
+@app.get("/api/patients/{pid}/diet/pdf")
+def api_diet_pdf(pid: int):
+    """Esporta il diario alimentare del paziente in PDF professionale."""
+    from app.diet_pdf import generate_diet_pdf
+    patient = db.get_patient(pid)
+    if not patient:
+        raise HTTPException(404, "Paziente non trovato")
+    items = db.list_diet_items(pid)
+    days_data = {}
+    for it in items:
+        d = it.get("day"); m = it.get("meal")
+        days_data.setdefault(d, {}).setdefault(m, []).append(it)
+    macros = {}
+    for d in ["lun","mar","mer","gio","ven","sab","dom"]:
+        macros[d] = db.compute_meal_macros(days_data.get(d, {}).get("colazione", []) +
+                                           days_data.get(d, {}).get("spuntino", []) +
+                                           days_data.get(d, {}).get("pranzo", []) +
+                                           days_data.get(d, {}).get("spuntino2", []) +
+                                           days_data.get(d, {}).get("cena", []))
+    # Targets dall'ultimo piano
+    plans = db.list_diet_plans(pid)
+    targets = {"kcal": 2000, "protein_pct": 30, "carb_pct": 45, "fat_pct": 25}
+    if plans:
+        p0 = plans[0]
+        targets = {"kcal": p0.get("kcal_target") or 2000, "protein_pct": 30, "carb_pct": 45,
+                   "fat_pct": 25, "preset": p0.get("preset") or ""}
+    pdf_bytes = bytes(generate_diet_pdf(patient, targets, days_data, macros))
+    fname = f"piano_{patient['name'].replace(' ','_')}_{_today()}.pdf"
+    out_path = os.path.join(UPLOAD_DIR, fname)
+    with open(out_path, "wb") as f:
+        f.write(pdf_bytes)
+    return FileResponse(out_path, media_type="application/pdf", filename=fname)
 
 
 # ─── PATIENTS CRUD ────────────────────────────────────────────────────────

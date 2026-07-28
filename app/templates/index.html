@@ -14,7 +14,7 @@
   <div class=nav-item data-nav=notifiche onclick="nav('notifiche')"><span class=ico>📨</span><span>Notifiche</span></div>
   <div class=nav-item data-nav=archivio onclick="nav('archivio')"><span class=ico>📁</span><span>Archivio</span></div>
   <div class=spacer></div>
-  <div class=version>v2.2.0 · Dietowin</div>
+  <div class=version>v2.3.0 · Dietowin</div>
 </div>
 <div class=main>
   <div class=topbar>
@@ -202,7 +202,8 @@ async function loadPatientDieta(){
   }));
   $('patient-pane').innerHTML=`<div class=row style=margin-bottom:8px><b>🍽️ Diario alimentare</b>
   <button class="btn btn-sm" onclick=showGenPlan()>⚡ Genera piano</button>
-  <button class="btn btn-sm btn-outline" onclick=showAddFood()>➕ Alimento</button></div>
+  <button class="btn btn-sm btn-outline" onclick=showAddFood()>➕ Alimento</button>
+  <button class="btn btn-sm btn-outline" onclick="window.open('/api/patients/'+ST.cid+'/diet/pdf','_blank')">📄 Export PDF</button></div>
   <div class=diet-grid>${days.map(d=>{
     const m=macros[d]||{};
     return `<div class=diet-day><div class=day-label>${dayNames[d]}</div>

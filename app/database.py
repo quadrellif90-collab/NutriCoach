@@ -567,7 +567,7 @@ def get_food(fid):
     return row_to_dict(get_db().execute("SELECT * FROM food_catalog WHERE id=?", (fid,)).fetchone())
 
 def compute_meal_macros(items):
-    """Calcola totali kcal/P/C/F per una lista di item dieta con food_id."""
+    """Calcola totali kcal/P/C/F per una lista di item dieta (food_id o macro salvati)."""
     total = {"kcal": 0.0, "protein_g": 0.0, "carbs_g": 0.0, "fat_g": 0.0, "fiber_g": 0.0}
     for item in items:
         fid = item.get("food_id")
@@ -576,6 +576,23 @@ def compute_meal_macros(items):
             f = get_food(fid)
             if f:
                 ratio = grams / 100.0
+                total["kcal"] += f["kcal"] * ratio
+                total["protein_g"] += f["protein_g"] * ratio
+                total["carbs_g"] += f["carbs_g"] * ratio
+                total["fat_g"] += f["fat_g"] * ratio
+                total["fiber_g"] += f["fiber_g"] * ratio
+                continue
+        # fallback: macro salvati direttamente nell'item
+        if item.get("kcal"):
+            total["kcal"] += float(item.get("kcal") or 0)
+            total["protein_g"] += float(item.get("protein_g") or 0)
+            total["carbs_g"] += float(item.get("carbs_g") or 0)
+            total["fat_g"] += float(item.get("fat_g") or 0)
+        else:
+            # fallback 2: lookup per nome in food_catalog
+            f = get_db().execute("SELECT * FROM food_catalog WHERE name=? COLLATE NOCASE", (item.get("food",""),)).fetchone()
+            if f:
+                f = dict(f); ratio = grams / 100.0
                 total["kcal"] += f["kcal"] * ratio
                 total["protein_g"] += f["protein_g"] * ratio
                 total["carbs_g"] += f["carbs_g"] * ratio
