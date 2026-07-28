@@ -1,7 +1,7 @@
 <!DOCTYPE html><html lang=it><head>
 <meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
-<title>NutriCoach v2.20.2</title>
+<title>NutriCoach v2.20.3</title>
 <link rel=stylesheet href=/static/style.css>
 <style>
 /* ONBOARDING TOUR */
@@ -36,7 +36,7 @@
     <div class=nav-item style=cursor:pointer;font-size:11px;position:relative onclick=toggleNotifDropdown() title="Notifiche: messaggi e promemoria" id=bell-btn>🔔<span id=bell-badge style="display:none;background:#ef4444;color:#fff;font-size:9px;padding:0 4px;border-radius:8px;position:absolute;top:-2px;right:-4px">0</span></div>
     <div class=nav-item style=cursor:pointer;font-size:11px onclick=doLogout() title="Esci dalla sessione">🚪</div>
   <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn title="Cambia tema chiaro/scuro">🌙</button>
-  <div class=version>v2.20.2 · Dietowin</div>
+  <div class=version>v2.20.3 · Dietowin</div>
 </div>
 <div id=notif-dropdown style="display:none;position:fixed;top:50px;right:50px;width:320px;max-height:360px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:10px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.15);font-size:12px">
   <div style=display:flex;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border)><b>🔔 Notifiche</b><button class="btn btn-sm" onclick="closeNotifDropdown();markAllNotifRead()">✔️ Tutte lette</button></div>
@@ -237,13 +237,13 @@ async function openPatient(cid){
     <button class=tab-btn onclick=switchTab(this,'referti')>Referti</button>
     <button class=tab-btn onclick=switchTab(this,'appuntamenti')>Appuntamenti</button>
     <button class=tab-btn onclick=switchTab(this,'sintomi')>Sintomi</button>
-    <button class=tab-btn onclick=switchTab(this,'questionari')>📋</button>
+    <button class=tab-btn onclick=switchTab(this,'questionari') title="Questionari clinici">📋</button>
     <button class=tab-btn onclick=switchTab(this,'progressi')>Progressi</button>
-    <button class=tab-btn onclick=switchTab(this,'diario')>📝</button>
-    <button class=tab-btn onclick=switchTab(this,'chat')>💬</button>
-    <button class=tab-btn onclick=switchTab(this,'bilancia')>⚖️</button>
-    <button class=tab-btn onclick=switchTab(this,'wearable')>⌚</button>
-    <button class=tab-btn onclick=switchTab(this,'fitness')>🏃</button>
+    <button class=tab-btn onclick=switchTab(this,'diario') title="Diario pasti">📝</button>
+    <button class=tab-btn onclick=switchTab(this,'chat') title="Chat paziente">💬</button>
+    <button class=tab-btn onclick=switchTab(this,'bilancia') title="Bilancia">⚖️</button>
+    <button class=tab-btn onclick=switchTab(this,'wearable') title="Wearable / smartwatch">⌚</button>
+    <button class=tab-btn onclick=switchTab(this,'fitness') title="Fitness import">🏃</button>
   </div>
       <div id=patient-pane></div>`;
   switchTab(qs('#ptabs .tab-btn'),'anamnesi');
@@ -658,11 +658,23 @@ async function loadBIA(){
   <button class="btn btn-sm" onclick=uploadBIAHub()>📄 Carica PDF</button></div>
   <div id=bp-v><div class=empty>👆 Seleziona un paziente</div></div>`;
 }
+function biaLastVal(bia,trend,m){
+  if(bia&&bia.length){for(var i=bia.length-1;i>=0;i--){if(bia[i][m]!=null)return bia[i][m]}}
+  var arr=trend&&trend.series&&trend.series[m]?trend.series[m]:[];
+  for(var j=arr.length-1;j>=0;j--){if(arr[j]!=null)return arr[j]}
+  return null;
+}
 async function loadBIAReading(){
   const cid=+$('bp-cl').value;if(!cid){$('bp-v').innerHTML='<div class=empty>Seleziona un paziente</div>';return}
   const [bia,trend]=await Promise.all([jget('/api/patients/'+cid+'/bia'),jget('/api/patients/'+cid+'/bia-trend')]);
   const labels={weight_kg:'Peso',bf_pct:'BF%',ffm_kg:'Massa magra',tbw_l:'Acqua',pha:'PhA',mm_kg:'Muscolo',bmi:'BMI'};
-  const charts=trend.metrics.map(m=>{const arr=trend.series[m]||[];let lv=null;for(let i=arr.length-1;i>=0;i--){if(arr[i]!=null){lv=arr[i];break}}const unit=(m==='weight_kg'||m==='ffm_kg'||m==='tbw_l'||m==='mm_kg')?'kg':(m==='bf_pct'||m==='bmi')?'%':(m==='pha')?'°':'';return `<div class=card style=padding:8px><b style=font-size:11px>${labels[m]||m}</b>${lv!=null?`<div style="font-size:18px;font-weight:700;margin:2px 0">${lv}${unit}</div>`:''}${trendSVG(trend.dates.map((d,i)=>({v:trend.series[m][i],d})))||'<div class=empty style=padding:8px>1 misurazione</div>'}</div>`}).join('');
+  const charts=trend.metrics.map(function(m){
+    var lv=biaLastVal(bia,trend,m);
+    var unit=(m==='weight_kg'||m==='ffm_kg'||m==='tbw_l'||m==='mm_kg')?'kg':(m==='bf_pct'||m==='bmi')?'%':(m==='pha')?'°':'';
+    var valHtml = lv!=null ? '<div style="font-size:18px;font-weight:700;margin:2px 0">'+lv+unit+'</div>' : '';
+    var svg = trendSVG(trend.dates.map(function(d,i){return {v:trend.series[m][i],d}})) || '<div class=empty style=padding:8px>1 misurazione</div>';
+    return '<div class=card style=padding:8px><b style=font-size:11px>'+(labels[m]||m)+'</b>'+valHtml+svg+'</div>';
+  }).join('');
   $('bp-v').innerHTML=`<div class=row style=margin-bottom:6px><button class="btn btn-sm btn-outline" onclick="window.open('/api/patients/${cid}/bia-trend/pdf','_blank')">📊 Report PDF</button></div>
   <div style=display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px>${charts}</div>
   <div class=card><b>Storico</b>${bia.length?`<table><tr><th>Data</th><th>Peso</th><th>BF%</th><th>MM%</th><th>PhA</th><th>BMR</th><th></th></tr>
