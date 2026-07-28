@@ -660,7 +660,7 @@ async function loadBIA(){
   <div id=bp-v><div class=empty>👆 Seleziona un paziente</div></div>`;
 }
 function biaLastVal(bia,trend,m){
-  if(bia&&bia.length){for(var i=bia.length-1;i>=0;i--){if(bia[i][m]!=null)return bia[i][m]}}
+  if(bia&&bia.length){for(var i=0;i<bia.length;i++){if(bia[i][m]!=null)return bia[i][m]}}
   var arr=trend&&trend.series&&trend.series[m]?trend.series[m]:[];
   for(var j=arr.length-1;j>=0;j--){if(arr[j]!=null)return arr[j]}
   return null;
@@ -729,7 +729,7 @@ async function saveGlobalAppt(){
 async function loadNotifiche(){
   const n=await jget('/api/notifications');
   $('view').innerHTML=`<div class=row style=margin-bottom:8px><b>📨 Notifiche</b><button class="btn btn-sm btn-primary" onclick=showNotificaForm()>➕ Nuova</button></div>
-  ${n.length?`<div class=card><table><tr><th>Paziente</th><th>Tipo</th><th>Oggetto</th><th>Stato</th></tr>${n.map(x=>`<tr><td>${esc(x.patient_name||'')}</td><td>${x.type}</td><td>${esc(x.title||x.subject||'—')}</td><td>${x.read?'✓ Letta':'⏳ Non lette'}</td></tr>`).join('')}</table></div>`:'<div class=empty>Nessuna notifica</div>'}`;
+  ${n.length?`<div class=card><table><tr><th>Paziente</th><th>Tipo</th><th>Oggetto</th><th>Stato</th></tr>${n.map(x=>`<tr><td>${esc(x.patient_name||'')}</td><td>${x.type}</td><td>${esc(x.title||x.subject||'—')}</td><td>${x.read?'✓ Letta':'⏳ Non letta'}</td></tr>`).join('')}</table></div>`:'<div class=empty>Nessuna notifica</div>'}`;
 }
 function showNotificaForm(){
   modal(`<div class=card><b>➕ Notifica</b><div class=field-row><div style=flex:2><label>Paziente</label><select id=n-p><option value=>Seleziona...</option>${ST.clients.map(c=>`<option value=${c.id}>${esc(c.name)}</option>`).join('')}</select></div>
