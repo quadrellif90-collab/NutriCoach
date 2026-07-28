@@ -112,6 +112,13 @@ async def api_generate_plan(pid: int, request: Request):
     excl = meal_planner.excluded_foods(conditions, allergies)
     excl.update(options.get("exclude_foods") or [])
     options["exclude_foods"] = sorted(excl)
+    # Converti days da int a lista di nomi giorni se necessario
+    all_days = ["lun", "mar", "mer", "gio", "ven", "sab", "dom"]
+    raw_days = options.get("days", 7)
+    if isinstance(raw_days, int):
+        options["days"] = all_days[:raw_days]
+    elif not isinstance(raw_days, list):
+        options["days"] = all_days
     plan = meal_planner.generate_plan(targets, options)
     plan["clinical"] = {"conditions": conditions, "excluded_foods": sorted(excl), "preset": preset,
                         "recommendations": clinical_nutrition.get_dietary_recommendations(conditions) if conditions else []}
@@ -226,7 +233,7 @@ def api_adherence(pid: int, days_back: int = 7):
         target_p = round(target_kcal * targets.get("pct_p", 0.3) / 4, 1)
         target_c = round(target_kcal * targets.get("pct_c", 0.45) / 4, 1)
         target_f = round(target_kcal * targets.get("pct_f", 0.25) / 9, 1)
-        pct = round(min(100, (current["kcal"] / max(target_kcal, 1)) * 100), 1)
+        pct = round((current["kcal"] / max(target_kcal, 1)) * 100, 1)
         adherence.append({
             "day": d, "label": labels.get(d, d),
             "target_kcal": target_kcal, "actual_kcal": current["kcal"],
@@ -280,8 +287,13 @@ async def api_apply_recipe(rid: int, request: Request):
     recipe = db.get_recipe(rid)
     if not recipe:
         raise HTTPException(404, "Ricetta non trovata")
+    ingredients = recipe.get("ingredients") or []
+    if isinstance(ingredients, str):
+        ingredients = []
     count = 0
-    for ing in (recipe.get("ingredients") or []):
+    for ing in ingredients:
+        if not isinstance(ing, dict):
+            continue
         food_id = ing.get("food_id")
         grams = ing.get("grams", 100)
         if food_id:
@@ -661,6 +673,13 @@ async def api_import_patient(request: Request):
 def api_list_patients(cat_id: int = None):
     return db.list_patients(cat_id)
 
+
+@app.get("/api/patients/compare")
+def api_compare(ids: str):
+    idlist = [int(x.strip()) for x in ids.split(",") if x.strip()]
+    return db.compare_patients(idlist)
+
+
 @app.get("/api/patients/{pid}")
 def api_get_patient(pid: int):
     p = db.get_patient(pid)
@@ -911,7 +930,12 @@ def api_list_questionnaires():
 
 @app.post("/api/patients/{pid}/questionnaires")
 async def api_save_questionnaire(pid: int, request: Request):
-    b = await request.json()
+    try:
+        b = await request.json()
+    except Exception:
+        b = {}
+    if not b.get("questionnaire"):
+        raise HTTPException(400, "Campo obbligatorio: questionnaire")
     qid = db.save_questionnaire_result(
         pid, b["questionnaire"], b.get("score", 0),
         b.get("answers", []), b.get("notes", ""))
@@ -932,7 +956,12 @@ def api_list_categories():
 
 @app.post("/api/categories")
 async def api_create_category(request: Request):
-    b = await request.json()
+    try:
+        b = await request.json()
+    except Exception:
+        b = {}
+    if not b.get("name"):
+        raise HTTPException(400, "Campo obbligatorio: name")
     cid = db.add_category(b["name"], b.get("color","#6366f1"))
     return {"id": cid}
 
@@ -1024,24 +1053,29 @@ def api_list_appointments(pid: int = None, from_date: str = None):
 
 @app.post("/api/appointments")
 async def api_create_appointment(request: Request):
-    b = await request.json()
+    try:
+        b = await request.json()
+    except Exception:
+        b = {}
+    if not b.get("patient_id") or not b.get("title") or not b.get("appt_date"):
+        raise HTTPException(400, "Campi obbligatori: patient_id, title, appt_date")
     aid = db.add_appointment(b["patient_id"], b["title"], b["appt_date"], b.get("appt_time",""),
                              b.get("status","open"), b.get("follow_up",0), b.get("outcome",""), b.get("notes",""))
     return {"ok": True, "id": aid}
 
-# ─── NOTIFICATIONS ────────────────────────────────────────────────────────
+# ─── NOTIFICATIONS (EMAIL) ────────────────────────────────────────────────
 
-@app.get("/api/notifications")
-def api_list_notifications(pid: int = None, pending: bool = False):
+@app.get("/api/email-notifications")
+def api_list_email_notifications(pid: int = None, pending: bool = False):
     return db.list_notifications(pid, pending)
 
-@app.post("/api/notifications")
-async def api_create_notification(request: Request):
+@app.post("/api/email-notifications")
+async def api_create_email_notification(request: Request):
     b = await request.json()
-    nid = db.add_notification(b["patient_id"], b.get("type","email"), b.get("subject",""), b.get("message",""), b.get("bulk_id"))
+    nid = db.add_notification(b.get("patient_id", 0), b.get("type","email"), b.get("subject",""), b.get("message",""), b.get("bulk_id"))
     return {"ok": True, "id": nid}
 
-@app.post("/api/notifications/{nid}/sent")
+@app.post("/api/email-notifications/{nid}/sent")
 def api_mark_sent(nid: int):
     db.mark_sent(nid)
     return {"ok": True}
@@ -1054,7 +1088,12 @@ def api_list_documents(pid: int = None):
 
 @app.post("/api/documents")
 async def api_create_document(request: Request):
-    b = await request.json()
+    try:
+        b = await request.json()
+    except Exception:
+        b = {}
+    if not b.get("patient_id"):
+        raise HTTPException(400, "Campo obbligatorio: patient_id")
     did = db.add_document(b["patient_id"], b.get("title",""), b.get("doc_type",""), b.get("file_path",""))
     return {"ok": True, "id": did}
 
@@ -1089,8 +1128,8 @@ def api_symptom_summary(pid: int, days: int = 30):
                AVG(gas) as avg_gas, AVG(nausea) as avg_nausea,
                AVG(heartburn) as avg_heartburn, AVG(constipation) as avg_constipation,
                AVG(diarrhea) as avg_diarrhea
-        FROM symptoms WHERE patient_id=? AND date>=date('now','-? days')
-    """, (pid, days)).fetchone()
+        FROM symptoms WHERE patient_id=? AND date>=date('now','-{} days')
+    """.format(days), (pid,)).fetchone()
     return dict(rows) if rows else {}
 
 # ─── PROGRESS NOTES ────────────────────────────────────────────────────────
@@ -1110,13 +1149,6 @@ def api_delete_progress(nid: int):
     db.delete_progress_note(nid)
     return {"ok": True}
 
-# ─── COMPARE ──────────────────────────────────────────────────────────────
-
-@app.get("/api/patients/compare")
-def api_compare(ids: str):
-    idlist = [int(x.strip()) for x in ids.split(",") if x.strip()]
-    return db.compare_patients(idlist)
-
 # ─── VERSION ──────────────────────────────────────────────────────────────
 
 @app.get("/api/version")
@@ -1129,8 +1161,22 @@ def api_version():
 @app.on_event("startup")
 def startup():
     db.init_db()
+    # Crea utente admin predefinito se non esiste
+    pw_hash = hashlib.sha256("admin123".encode()).hexdigest()
+    user = db.get_user("admin")
+    if not user:
+        uid = db.create_user("admin", pw_hash, "nutritionist", "NutriCoach Studio")
+        if uid:
+            print("[NutriCoach] Utente admin creato (admin / admin123)")
+        else:
+            print("[NutriCoach] ATTENZIONE: impossibile creare utente admin")
+    elif user.get("password_hash") != pw_hash:
+        # Aggiorna la password se diversa
+        con = db.get_db()
+        con.execute("UPDATE users SET password_hash=? WHERE username=?", (pw_hash, "admin"))
+        con.commit()
+        print("[NutriCoach] Password admin aggiornata (admin / admin123)")
     try:
-        from app.main import api_backup_auto
         api_backup_auto()
     except Exception as e:
         print(f"[NutriCoach] backup auto saltato: {e}")

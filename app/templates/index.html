@@ -1,7 +1,7 @@
 <!DOCTYPE html><html lang=it><head>
 <meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
-<title>NutriCoach v2.20.0</title>
+<title>NutriCoach v2.20.1</title>
 <link rel=stylesheet href=/static/style.css>
 <style>
 /* ONBOARDING TOUR */
@@ -36,7 +36,7 @@
     <div class=nav-item style=cursor:pointer;font-size:11px;position:relative onclick=toggleNotifDropdown() title="Notifiche: messaggi e promemoria" id=bell-btn>🔔<span id=bell-badge style="display:none;background:#ef4444;color:#fff;font-size:9px;padding:0 4px;border-radius:8px;position:absolute;top:-2px;right:-4px">0</span></div>
     <div class=nav-item style=cursor:pointer;font-size:11px onclick=doLogout() title="Esci dalla sessione">🚪</div>
   <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn title="Cambia tema chiaro/scuro">🌙</button>
-  <div class=version>v2.17.0 · Dietowin</div>
+  <div class=version>v2.20.1 · Dietowin</div>
 </div>
 <div id=notif-dropdown style="display:none;position:fixed;top:50px;right:50px;width:320px;max-height:360px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:10px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.15);font-size:12px">
   <div style=display:flex;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border)><b>🔔 Notifiche</b><button class="btn btn-sm" onclick="closeNotifDropdown();markAllNotifRead()">✔️ Tutte lette</button></div>
@@ -101,11 +101,11 @@ async function loadRicettario(q){
     <b>${esc(r.name)}</b>
     <div><span class=tag>${esc(r.category||'—')}</span> <span style=font-size:10px;color:var(--text2)>${r.servings||4} porz.</span></div>
   </div>
-  <div style=font-size:10px;color:var(--text2);margin:2px 0>${(r.ingredients||[]).map(i=>i.name||'?').join(', ')}</div>
-  <div style=font-size:10px;margin:2px 0>${r.macros?`📊 ${r.macros.kcal||'?'}kcal · P${r.macros.protein_g||'?'}g · C${r.macros.carbs_g||'?'}g · F${r.macros.fat_g||'?'}g`:'📊 —'}</div>
+  <div style=font-size:10px;color:var(--text2);margin:2px 0>${(Array.isArray(r.ingredients)?r.ingredients:(typeof r.ingredients==='string'&&r.ingredients.trim()?r.ingredients.split(',').map(s=>{const p=s.split(':');return {name:p[0]||s,grams:parseFloat(p[1])||0}}):[])).map(i=>(i.name||'?')+(i.grams?` (${i.grams}g)`:'')).join(', ')||'—'}</div>
+  <div style=font-size:10px;margin:2px 0>${(r.macros&&(r.macros.kcal||r.macros.protein_g||r.macros.carbs_g||r.macros.fat_g))?`📊 ${r.macros.kcal||'?'}kcal · P${r.macros.protein_g||'?'}g · C${r.macros.carbs_g||'?'}g · F${r.macros.fat_g||'?'}g`:'📊 —'}</div>
   <div style=margin-top:4px;display:flex;gap:4px>
     <button class="btn btn-sm btn-outline" onclick="applyRecipe(${r.id},'${esc(r.name)}')">➕ Al piano</button>
-    <button class="btn btn-sm btn-danger" onclick="delRecipe(${r.id})">✕</button>
+    <button class="btn btn-sm btn-danger" onclick="delRecipe(${r.id})" title="Elimina ricetta">🗑️</button>
   </div></div>`).join(''):'<div class=card empty>Nessuna ricetta. Creane una!</div>'}`;
 }
 function showAddRecipe(){
@@ -175,7 +175,7 @@ async function showAdherence(pid){
   const ad=r.adherence||[];
   if(!ad.length){toast('Nessun piano attivo');return}
   modal(`<div class=card><b>📊 Aderenza dieta</b><table class=cmp-table><tr><th>Giorno</th><th>Target</th><th>Effettivo</th><th>%</th></tr>
-  ${ad.map(d=>`<tr><td>${d.label}</td><td>${d.target_kcal} kcal</td><td>${d.actual_kcal} kcal</td><td><b>${d.completion_pct}%</b></td></tr>`).join('')}</table>
+  ${ad.map(d=>{const col=d.completion_pct>100?'#ef4444':(d.completion_pct<70?'#f59e0b':'#22c55e');return `<tr><td>${d.label}</td><td>${d.target_kcal} kcal</td><td>${d.actual_kcal} kcal</td><td><b style="color:${col}">${d.completion_pct}%</b></td></tr>`}).join('')}</table>
   <div style=margin-top:8px><button class=btn onclick=closeModal()>Chiudi</button></div></div>`);
 }
 async function doBackup(){
@@ -518,7 +518,7 @@ function showSintomoForm(){
   <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick=saveSintomo()>💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
 }
 async function saveSintomo(){
-  const r=await jpost('/api/patients/'+ST.cid+'/symptoms',{date:$('sy-date').value,bloating:parseInt($('sy-b').value)||0,pain:parseInt($('sy-p').value)||0,foods:$('sy-n').value});
+  const r=await jpost('/api/patients/'+ST.cid+'/symptoms',{date:$('sy-date').value,bloating:Math.max(0,Math.min(3,parseInt($('sy-b').value)||0)),pain:Math.max(0,Math.min(3,parseInt($('sy-p').value)||0)),foods:$('sy-n').value});
   if(r&&r.ok){toast('Salvato ✓');closeModal();loadSintomi()}
 }
 // PROGRESSI
@@ -662,7 +662,7 @@ async function loadBIAReading(){
   const cid=+$('bp-cl').value;if(!cid){$('bp-v').innerHTML='<div class=empty>Seleziona un paziente</div>';return}
   const [bia,trend]=await Promise.all([jget('/api/patients/'+cid+'/bia'),jget('/api/patients/'+cid+'/bia-trend')]);
   const labels={weight_kg:'Peso',bf_pct:'BF%',ffm_kg:'Massa magra',tbw_kg:'Acqua',phase_angle:'PhA',muscle_kg:'Muscolo',bmi:'BMI'};
-  const charts=trend.metrics.map(m=>`<div class=card style=padding:8px><b style=font-size:11px>${labels[m]||m}</b>${trendSVG(trend.dates.map((d,i)=>({v:trend.series[m][i],d})))||'<div class=empty style=padding:8px>1 misurazione</div>'}</div>`).join('');
+  const charts=trend.metrics.map(m=>{const arr=trend.series[m]||[];let lv=null;for(let i=arr.length-1;i>=0;i--){if(arr[i]!=null){lv=arr[i];break}}const unit=(m==='weight_kg'||m==='ffm_kg'||m==='tbw_kg'||m==='muscle_kg')?'kg':(m==='bf_pct'||m==='bmi')?'%':(m==='phase_angle')?'°':'';return `<div class=card style=padding:8px><b style=font-size:11px>${labels[m]||m}</b>${lv!=null?`<div style="font-size:18px;font-weight:700;margin:2px 0">${lv}${unit}</div>`:''}${trendSVG(trend.dates.map((d,i)=>({v:trend.series[m][i],d})))||'<div class=empty style=padding:8px>1 misurazione</div>'}</div>`}).join('');
   $('bp-v').innerHTML=`<div class=row style=margin-bottom:6px><button class="btn btn-sm btn-outline" onclick="window.open('/api/patients/${cid}/bia-trend/pdf','_blank')">📊 Report PDF</button></div>
   <div style=display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px>${charts}</div>
   <div class=card><b>Storico</b>${bia.length?`<table><tr><th>Data</th><th>Peso</th><th>BF%</th><th>MM%</th><th>PhA</th><th>BMR</th><th></th></tr>
@@ -716,7 +716,7 @@ async function saveGlobalAppt(){
 async function loadNotifiche(){
   const n=await jget('/api/notifications');
   $('view').innerHTML=`<div class=row style=margin-bottom:8px><b>📨 Notifiche</b><button class="btn btn-sm btn-primary" onclick=showNotificaForm()>➕ Nuova</button></div>
-  ${n.length?`<div class=card><table><tr><th>Paziente</th><th>Tipo</th><th>Oggetto</th><th>Inviata</th></tr>${n.map(x=>`<tr><td>${esc(x.patient_name||'')}</td><td>${x.type}</td><td>${esc(x.subject)}</td><td>${x.sent?'✓':'-'}</td></tr>`).join('')}</table></div>`:'<div class=empty>Nessuna notifica</div>'}`;
+  ${n.length?`<div class=card><table><tr><th>Paziente</th><th>Tipo</th><th>Oggetto</th><th>Inviata</th></tr>${n.map(x=>`<tr><td>${esc(x.patient_name||'')}</td><td>${x.type}</td><td>${esc(x.title||x.subject||'—')}</td><td>${x.sent?'✓':'-'}</td></tr>`).join('')}</table></div>`:'<div class=empty>Nessuna notifica</div>'}`;
 }
 function showNotificaForm(){
   modal(`<div class=card><b>➕ Notifica</b><div class=field-row><div style=flex:2><label>Paziente</label><select id=n-p><option value=>Seleziona...</option>${ST.clients.map(c=>`<option value=${c.id}>${esc(c.name)}</option>`).join('')}</select></div>
@@ -725,7 +725,7 @@ function showNotificaForm(){
   <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick=saveNotifica()>💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
 }
 async function saveNotifica(){
-  const r=await jpost('/api/notifications',{patient_id:+$('n-p').value,type:$('n-t').value,subject:$('n-s').value,message:$('n-m').value});
+  const r=await jpost('/api/notifications',{patient_id:+$('n-p').value,type:$('n-t').value,subject:$('n-s').value,title:$('n-s').value,message:$('n-m').value});
   if(r&&r.ok){toast('Creata ✓');closeModal();loadNotifiche()}
 }
 // ARCHIVIO

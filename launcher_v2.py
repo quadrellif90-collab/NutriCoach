@@ -83,7 +83,7 @@ if __name__ == "__main__":
         except Exception as e:
             log.warning("webview fallito: %s -> browser", e)
             open_browser()
-            server_thread.join()
+            t.join()
     else:
         open_browser()
         t.join()

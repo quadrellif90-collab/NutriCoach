@@ -1016,8 +1016,18 @@ def delete_bia_reading(bid):
         except: pass
 
 
+_BIA_TREND_FIELDS = {
+    "weight_kg", "bmi", "bf_pct", "mm_pct", "tbw_l", "ecw_l", "icw_l",
+    "pha", "bmr_kcal", "visceral_fat", "metabolic_age", "bone_mass",
+    "muscle_mass_kg", "fat_mass_kg", "ffm_kg", "protein_pct",
+    "mineral_pct", "hydration_pct"
+}
+
 def get_bia_trend(cid, field="weight_kg", days=365):
     conn = _ensure(); cur = conn.cursor()
+    # Whitelist per prevenire SQL injection
+    if field not in _BIA_TREND_FIELDS:
+        field = "weight_kg"
     cur.execute(f"SELECT date, {field} FROM bia_readings WHERE client_id=? AND date>=date('now',?) AND {field} IS NOT NULL ORDER BY date",
                 (cid, f'-{days} days'))
     rows = [dict(r) for r in cur.fetchall()]

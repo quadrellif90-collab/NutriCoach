@@ -90,11 +90,14 @@ def parse_bia_text(text: str) -> dict:
             for m in re.finditer(pat, norm):
                 after = norm[m.end(): m.end() + 30]
                 if field in ("tbw", "ecw", "icw"):
-                    # preferisci numero seguito da 'l' (litri): "43.0l", "17.7l"
-                    nm = re.search(r"\(?\s*(\d+(?:\.\d+)?)\s*[lL]\b", after)
+                    # preferisci numero seguito da 'l' (litri) o '%': "43.0l", "17.7l", "54.1 %"
+                    nm = re.search(r"\(?\s*(\d+(?:\.\d+)?)\s*(?:[lL]\b|%)", after)
                 elif field == "pha":
-                    # preferisci numero seguito da '°' o 'deg': "6.8°"
-                    nm = re.search(r"\(?\s*(\d+(?:\.\d+)?)\s*[°\u00b0]|\(\s*(\d+(?:\.\d+)?)\s*deg", after)
+                    # preferisci numero seguito da '°', 'deg' o 'gradi'
+                    nm = re.search(r"\(?\s*(?:\w+\s+)?(\d+(?:\.\d+)?)\s*(?:[°\u00b0]|deg|gradi)", after)
+                    if not nm:
+                        # fallback: numero generico (es. "Phase Angle (deg) 6.8")
+                        nm = re.search(r"\(?\s*(?<![a-z0-9.])(\d+(?:\.\d+)?)", after)
                 else:
                     nm = re.search(r"\(?\s*(?<![a-z0-9.])(\d+(?:\.\d+)?)", after)
                 if nm:

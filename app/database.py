@@ -8,12 +8,17 @@ DATA_DIR = os.path.join(os.path.expanduser("~"), ".nutricoach")
 os.makedirs(DATA_DIR, exist_ok=True)
 DB_PATH = os.environ.get("NUTRICOACH_DB") or os.path.join(DATA_DIR, "nutricoach.db")
 
+_db_conn = None
+
 def get_db():
-    con = sqlite3.connect(DB_PATH)
-    con.row_factory = sqlite3.Row
-    con.execute("PRAGMA journal_mode=WAL")
-    con.execute("PRAGMA foreign_keys=ON")
-    return con
+    global _db_conn
+    if _db_conn is None:
+        _db_conn = sqlite3.connect(DB_PATH, timeout=15, check_same_thread=False)
+        _db_conn.row_factory = sqlite3.Row
+        _db_conn.execute("PRAGMA journal_mode=WAL")
+        _db_conn.execute("PRAGMA foreign_keys=ON")
+        _db_conn.execute("PRAGMA busy_timeout=10000")
+    return _db_conn
 
 def init_db():
     con = get_db()
@@ -250,8 +255,14 @@ def list_patients(category_id=None):
 
 def delete_patient(pid):
     con = get_db()
-    for t in ["diet_items","diet_plans","bia_readings","measurements","appointments","notifications","documents","symptoms","progress_notes","patient_groups"]:
-        con.execute(f"DELETE FROM {t} WHERE patient_id=?", (pid,))
+    for t in ["diet_items","diet_plans","bia_readings","measurements","appointments",
+              "notifications","documents","symptoms","progress_notes","patient_groups",
+              "meal_diary","messages","app_notifications","scale_measurements",
+              "wearable_data","fitness_imports","questionnaire_results"]:
+        try:
+            con.execute(f"DELETE FROM {t} WHERE patient_id=?", (pid,))
+        except Exception:
+            pass
     con.execute("DELETE FROM patients WHERE id=?", (pid,))
     con.commit()
 
@@ -259,9 +270,14 @@ def delete_patient(pid):
 
 def add_category(name, color):
     con = get_db()
-    con.execute("INSERT INTO categories (name,color) VALUES (?,?)", (name, color))
-    con.commit()
-    return con.execute("SELECT last_insert_rowid()").fetchone()[0]
+    try:
+        con.execute("INSERT INTO categories (name,color) VALUES (?,?)", (name, color))
+        con.commit()
+        return con.execute("SELECT last_insert_rowid()").fetchone()[0]
+    except Exception:
+        # Categoria già esistente — ritorna l'id esistente
+        row = con.execute("SELECT id FROM categories WHERE name=?", (name,)).fetchone()
+        return row[0] if row else None
 
 def list_categories():
     return rows_to_list(get_db().execute("SELECT * FROM categories ORDER BY name").fetchall())
@@ -654,7 +670,7 @@ def compute_meal_macros(items):
                 total["fiber_g"] += f["fiber_g"] * ratio
                 continue
         # fallback: macro salvati direttamente nell'item
-        if item.get("kcal"):
+        if item.get("kcal") is not None:
             total["kcal"] += float(item.get("kcal") or 0)
             total["protein_g"] += float(item.get("protein_g") or 0)
             total["carbs_g"] += float(item.get("carbs_g") or 0)

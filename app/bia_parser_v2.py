@@ -373,7 +373,6 @@ def parse_bia_pdf(pdf_bytes: bytes) -> dict:
         except Exception:
             ocr_text = None
         if ocr_text:
-            from app.bia_parser_v2 import parse_bia_text
             reading = parse_bia_text(ocr_text)
             reading["scanned"] = False
             reading["source"] = "pdf_ocr"
