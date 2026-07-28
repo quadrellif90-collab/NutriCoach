@@ -359,3 +359,138 @@ def test_followup_analysis():
     # nessun check-in
     r4 = followup.analyze([], "Dimagrimento", 2000)
     assert "Nessun check-in" in r4["advice"]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# REGRESSIONE UI: lo <script> deve sempre essere sintatticamente valido.
+# v2.20.1 aveva 3 errori (braces duplicate + byte 0x5C 0x6E corrotto) che
+# bloccavano il parsing di TUTTO il JS -> UI morta. Questo test lo impedisce.
+# ──────────────────────────────────────────────────────────────────────────
+
+import os as _os
+import re as _re
+import shutil as _shutil
+import subprocess as _subprocess
+
+_HTML = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+                      "app", "templates", "index.html")
+
+
+def _extract_script():
+    with open(_HTML, "r", encoding="utf-8") as f:
+        html = f.read()
+    m = _re.search(r"<script>(.*?)</script>", html, _re.DOTALL)
+    assert m, "index.html deve contenere uno <script>"
+    return html, m.group(1)
+
+
+def _brace_check(js):
+    """Parser brace-balance che rispetta stringhe e template literals."""
+    stack = ["CODE"]
+    line_no = 1
+    i = 0
+    L = len(js)
+    extra = []
+
+    def skip_string(q):
+        nonlocal i
+        i += 1
+        while i < L and js[i] != q:
+            if js[i] == "\\":
+                i += 1
+            i += 1
+        i += 1
+
+    while i < L:
+        ch = js[i]
+        nxt = js[i + 1] if i + 1 < L else ""
+        if ch == "\n":
+            line_no += 1
+            i += 1
+            continue
+        ctx = stack[-1]
+        if ctx == "CODE":
+            if ch in ("'", '"'):
+                skip_string(ch)
+                continue
+            if ch == "`":
+                stack.append("TMPL")
+                i += 1
+                continue
+            if ch == "{":
+                stack.append("CODE")
+                i += 1
+                continue
+            if ch == "}":
+                if len(stack) <= 1:
+                    extra.append(line_no)
+                    i += 1
+                    continue
+                stack.pop()
+                i += 1
+                continue
+            i += 1
+        else:  # TMPL
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == "`":
+                stack.pop()
+                i += 1
+                continue
+            if ch == "$" and nxt == "{":
+                stack.append("CODE")
+                i += 2
+                continue
+            i += 1
+    return len(extra) == 0 and len(stack) == 1, extra
+
+
+def test_ui_script_has_no_literal_backslash_n_corruption():
+    """Nessun byte 0x5C 0x6E (backslash-n spurio) fuori da \r\n."""
+    raw = open(_HTML, "rb").read()
+    bad = []
+    i = 0
+    while i < len(raw) - 1:
+        if raw[i] == 0x5C and raw[i + 1] == 0x6E:
+            before = raw[i - 1] if i > 0 else 0
+            if before != 0x0D:  # non parte di \r\n
+                bad.append(i)
+        i += 1
+    assert not bad, f"backslash-n corrotto ai byte {bad[:5]}"
+
+
+def test_ui_script_brace_balance():
+    """Nessun '}' extra / bracket sbilanciato nello <script>."""
+    _, js = _extract_script()
+    ok, extra = _brace_check(js)
+    assert ok, f"brace sbilanciate, '}}' extra alle righe {extra}"
+
+
+def test_ui_script_node_check():
+    """node --check: ground truth della sintassi (se node disponibile)."""
+    node = _shutil.which("node") or _shutil.which("node.exe")
+    if not node:
+        import pytest as _pytest
+        _pytest.skip("node non disponibile: uso solo il brace-check Python")
+    _, js = _extract_script()
+    import tempfile as _tempfile
+    tf = _tempfile.NamedTemporaryFile(suffix=".mjs", delete=False, mode="w")
+    tf.write(js)
+    tf.close()
+    try:
+        r = _subprocess.run([node, "--check", tf.name],
+                             capture_output=True, text=True)
+        assert r.returncode == 0, f"node --check fallito:\n{r.stderr}"
+    finally:
+        _os.unlink(tf.name)
+
+
+def test_ui_script_defines_key_functions():
+    """Le funzioni critiche devono essere definite (non solo referenziate)."""
+    _, js = _extract_script()
+    for fn in ["function nav", "function doLogin", "function showRadar",
+               "function trendSVG", "function toggleTheme",
+               "function startOnboarding", "function searchDrugs",
+               "function showSwaps"]:
+        assert fn in js, f"{fn} mancante"
