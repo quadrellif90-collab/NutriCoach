@@ -741,6 +741,7 @@ def get_recipe(rid):
     d = dict(r)
     try: d["ingredients"] = json.loads(d["ingredients"]) if isinstance(d["ingredients"], str) else d["ingredients"]
     except: d["ingredients"] = []
+    d["ingredients"] = _resolve_recipe_ingredients(d["ingredients"], con)
     try: d["macros"] = json.loads(d["macros"]) if isinstance(d["macros"], str) else d["macros"]
     except: d["macros"] = {}
     return d
@@ -763,9 +764,34 @@ def list_recipes(category="", q=""):
         d = dict(r)
         try: d["ingredients"] = json.loads(d["ingredients"]) if isinstance(d["ingredients"], str) else d["ingredients"]
         except: d["ingredients"] = []
+        d["ingredients"] = _resolve_recipe_ingredients(d["ingredients"], con)
         try: d["macros"] = json.loads(d["macros"]) if isinstance(d["macros"], str) else d["macros"]
         except: d["macros"] = {}
         out.append(d)
+    return out
+
+
+def _resolve_recipe_ingredients(ingredients, con):
+    """Arricchisce ogni ingrediente con il nome dell'alimento (food_id -> food_catalog.name)."""
+    if not ingredients:
+        return []
+    out = []
+    for ing in ingredients:
+        if not isinstance(ing, dict):
+            out.append(ing)
+            continue
+        name = ing.get("name") or ""
+        fid = ing.get("food_id")
+        if (not name) and fid:
+            try:
+                row = con.execute("SELECT name FROM food_catalog WHERE id=?", (fid,)).fetchone()
+                if row:
+                    name = row[0]
+            except Exception:
+                pass
+        ing = dict(ing)
+        ing["name"] = name
+        out.append(ing)
     return out
 
 

@@ -1,7 +1,7 @@
 <!DOCTYPE html><html lang=it><head>
 <meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
-<title>NutriCoach v2.20.1</title>
+<title>NutriCoach v2.20.2</title>
 <link rel=stylesheet href=/static/style.css>
 <style>
 /* ONBOARDING TOUR */
@@ -21,7 +21,7 @@
 </style>
 </head><body>
 <div class=sidebar>
-  <div class=logo>🥗 <span>NutriCoach</span></div>
+  <div class=logo><span id=brand-logo></span> <span id=brand-name>NutriCoach</span></div>
   <div class="nav-item active" data-nav=dashboard onclick="nav('dashboard')" title="Dashboard: panoramica studio"><span class=ico>📊</span><span>Dashboard</span></div>
   <div class=nav-item data-nav=pazienti onclick="nav('pazienti')" title="Elenco e gestione pazienti"><span class=ico>👥</span><span>Pazienti</span></div>
   <div class=nav-item data-nav=bia onclick="nav('bia')"><span class=ico>🔬</span><span>BIA</span></div>
@@ -36,7 +36,7 @@
     <div class=nav-item style=cursor:pointer;font-size:11px;position:relative onclick=toggleNotifDropdown() title="Notifiche: messaggi e promemoria" id=bell-btn>🔔<span id=bell-badge style="display:none;background:#ef4444;color:#fff;font-size:9px;padding:0 4px;border-radius:8px;position:absolute;top:-2px;right:-4px">0</span></div>
     <div class=nav-item style=cursor:pointer;font-size:11px onclick=doLogout() title="Esci dalla sessione">🚪</div>
   <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn title="Cambia tema chiaro/scuro">🌙</button>
-  <div class=version>v2.20.1 · Dietowin</div>
+  <div class=version>v2.20.2 · Dietowin</div>
 </div>
 <div id=notif-dropdown style="display:none;position:fixed;top:50px;right:50px;width:320px;max-height:360px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:10px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.15);font-size:12px">
   <div style=display:flex;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border)><b>🔔 Notifiche</b><button class="btn btn-sm" onclick="closeNotifDropdown();markAllNotifRead()">✔️ Tutte lette</button></div>
@@ -661,8 +661,8 @@ async function loadBIA(){
 async function loadBIAReading(){
   const cid=+$('bp-cl').value;if(!cid){$('bp-v').innerHTML='<div class=empty>Seleziona un paziente</div>';return}
   const [bia,trend]=await Promise.all([jget('/api/patients/'+cid+'/bia'),jget('/api/patients/'+cid+'/bia-trend')]);
-  const labels={weight_kg:'Peso',bf_pct:'BF%',ffm_kg:'Massa magra',tbw_kg:'Acqua',phase_angle:'PhA',muscle_kg:'Muscolo',bmi:'BMI'};
-  const charts=trend.metrics.map(m=>{const arr=trend.series[m]||[];let lv=null;for(let i=arr.length-1;i>=0;i--){if(arr[i]!=null){lv=arr[i];break}}const unit=(m==='weight_kg'||m==='ffm_kg'||m==='tbw_kg'||m==='muscle_kg')?'kg':(m==='bf_pct'||m==='bmi')?'%':(m==='phase_angle')?'°':'';return `<div class=card style=padding:8px><b style=font-size:11px>${labels[m]||m}</b>${lv!=null?`<div style="font-size:18px;font-weight:700;margin:2px 0">${lv}${unit}</div>`:''}${trendSVG(trend.dates.map((d,i)=>({v:trend.series[m][i],d})))||'<div class=empty style=padding:8px>1 misurazione</div>'}</div>`}).join('');
+  const labels={weight_kg:'Peso',bf_pct:'BF%',ffm_kg:'Massa magra',tbw_l:'Acqua',pha:'PhA',mm_kg:'Muscolo',bmi:'BMI'};
+  const charts=trend.metrics.map(m=>{const arr=trend.series[m]||[];let lv=null;for(let i=arr.length-1;i>=0;i--){if(arr[i]!=null){lv=arr[i];break}}const unit=(m==='weight_kg'||m==='ffm_kg'||m==='tbw_l'||m==='mm_kg')?'kg':(m==='bf_pct'||m==='bmi')?'%':(m==='pha')?'°':'';return `<div class=card style=padding:8px><b style=font-size:11px>${labels[m]||m}</b>${lv!=null?`<div style="font-size:18px;font-weight:700;margin:2px 0">${lv}${unit}</div>`:''}${trendSVG(trend.dates.map((d,i)=>({v:trend.series[m][i],d})))||'<div class=empty style=padding:8px>1 misurazione</div>'}</div>`}).join('');
   $('bp-v').innerHTML=`<div class=row style=margin-bottom:6px><button class="btn btn-sm btn-outline" onclick="window.open('/api/patients/${cid}/bia-trend/pdf','_blank')">📊 Report PDF</button></div>
   <div style=display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px>${charts}</div>
   <div class=card><b>Storico</b>${bia.length?`<table><tr><th>Data</th><th>Peso</th><th>BF%</th><th>MM%</th><th>PhA</th><th>BMR</th><th></th></tr>
@@ -716,7 +716,7 @@ async function saveGlobalAppt(){
 async function loadNotifiche(){
   const n=await jget('/api/notifications');
   $('view').innerHTML=`<div class=row style=margin-bottom:8px><b>📨 Notifiche</b><button class="btn btn-sm btn-primary" onclick=showNotificaForm()>➕ Nuova</button></div>
-  ${n.length?`<div class=card><table><tr><th>Paziente</th><th>Tipo</th><th>Oggetto</th><th>Inviata</th></tr>${n.map(x=>`<tr><td>${esc(x.patient_name||'')}</td><td>${x.type}</td><td>${esc(x.title||x.subject||'—')}</td><td>${x.sent?'✓':'-'}</td></tr>`).join('')}</table></div>`:'<div class=empty>Nessuna notifica</div>'}`;
+  ${n.length?`<div class=card><table><tr><th>Paziente</th><th>Tipo</th><th>Oggetto</th><th>Stato</th></tr>${n.map(x=>`<tr><td>${esc(x.patient_name||'')}</td><td>${x.type}</td><td>${esc(x.title||x.subject||'—')}</td><td>${x.read?'✓ Letta':'⏳ Non lette'}</td></tr>`).join('')}</table></div>`:'<div class=empty>Nessuna notifica</div>'}`;
 }
 function showNotificaForm(){
   modal(`<div class=card><b>➕ Notifica</b><div class=field-row><div style=flex:2><label>Paziente</label><select id=n-p><option value=>Seleziona...</option>${ST.clients.map(c=>`<option value=${c.id}>${esc(c.name)}</option>`).join('')}</select></div>
@@ -1008,9 +1008,11 @@ async function setupBrand(){
   if(!t)return;
   try{
     const s=await jget('/api/settings?token='+t);
-    if(s.clinic_name)document.title=s.clinic_name+' - NutriCoach';
+    if(s.clinic_name){document.title=s.clinic_name+' - NutriCoach';const bn=qs('#brand-name');if(bn)bn.textContent=s.clinic_name;}
     const meta=qs('meta[name=theme-color]');
     if(s.theme_color){if(meta)meta.content=s.theme_color;document.documentElement.style.setProperty('--primary',s.theme_color)}
+    const bl=qs('#brand-logo');
+    if(bl)bl.innerHTML=s.logo_url?`<img src="${esc(s.logo_url)}" style="height:20px;width:20px;object-fit:contain;border-radius:4px" onerror="this.style.display='none'">`:'🥗';
   }catch(e){}
 }
 async function showSettings(){
