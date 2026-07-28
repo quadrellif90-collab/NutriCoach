@@ -21,7 +21,7 @@ import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
 from app import ocr_engine  # OCR integrato: Windows OCR + fallback Tesseract
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.13.0")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.14.0")
 
 # Servi file statici (CSS)
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
@@ -630,6 +630,44 @@ def api_allergens():
 def api_delete_patient(pid: int):
     db.delete_patient(pid)
     return {"ok": True}
+
+
+# ─── DRUG-NUTRIENT INTERACTIONS ─────────────────────────────────────────
+
+@app.get("/api/drugs")
+def api_search_drugs(q: str = "", limit: int = 20):
+    return {"drugs": db.search_drugs(query=q, limit=limit)}
+
+
+@app.get("/api/drugs/all")
+def api_all_drugs():
+    return db.search_drugs(limit=500)
+
+
+# ─── QUESTIONNAIRES ──────────────────────────────────────────────────────
+
+@app.get("/api/questionnaires")
+def api_list_questionnaires():
+    """Restituisce la lista dei questionari disponibili con le domande."""
+    return {"questionnaires": {k: {"name": v["name"], "description": v["description"],
+                                   "max_score": v["max_score"], "questions": v["questions"]}
+                               for k, v in db.QUESTIONNAIRES.items()}}
+
+
+@app.post("/api/patients/{pid}/questionnaires")
+async def api_save_questionnaire(pid: int, request: Request):
+    b = await request.json()
+    qid = db.save_questionnaire_result(
+        pid, b["questionnaire"], b.get("score", 0),
+        b.get("answers", []), b.get("notes", ""))
+    return {"ok": True, "id": qid}
+
+
+@app.get("/api/patients/{pid}/questionnaires")
+def api_list_patient_questionnaires(pid: int, questionnaire: str = ""):
+    q = questionnaire if questionnaire else None
+    return {"results": db.list_questionnaire_results(pid, questionnaire=q)}
+
 
 # ─── CATEGORIES ────────────────────────────────────────────────────────────
 

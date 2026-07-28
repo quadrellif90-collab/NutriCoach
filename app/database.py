@@ -501,6 +501,24 @@ def seed_food_catalog():
         category TEXT DEFAULT '',
         macros TEXT DEFAULT '{}'
     )""")
+    con.execute("""CREATE TABLE IF NOT EXISTS drug_interactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        drug TEXT NOT NULL,
+        category TEXT DEFAULT '',
+        effect TEXT DEFAULT '',
+        recommendation TEXT DEFAULT '',
+        severity TEXT DEFAULT 'media'
+    )""")
+    con.execute("""CREATE TABLE IF NOT EXISTS questionnaire_results (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        patient_id INTEGER NOT NULL,
+        questionnaire TEXT NOT NULL,
+        score REAL DEFAULT 0,
+        answers TEXT DEFAULT '[]',
+        date TEXT NOT NULL DEFAULT (date('now')),
+        notes TEXT DEFAULT '',
+        FOREIGN KEY (patient_id) REFERENCES patients(id)
+    )""")
     # Migra colonne patients
     for col in ["portal_token TEXT DEFAULT NULL", "birth_date TEXT DEFAULT NULL", "language TEXT DEFAULT 'it'"]:
         try:
@@ -812,6 +830,167 @@ def delete_diet_template(tid):
     con = get_db()
     con.execute("DELETE FROM diet_templates WHERE id=?", (tid,))
     con.commit()
+
+
+# ─── DRUG-NUTRIENT INTERACTIONS ─────────────────────────────────────────
+
+DRUG_INTERACTIONS = [
+    {"drug": "ACE-inibitori (enalapril, ramipril)", "category": "cardiovascolare",
+     "effect": "Aumentano potassio (iperkaliemia), riducono zinco",
+     "recommendation": "Evitare integratori di K+. Monitorare zinco. Consumare frutta secca, semi.",
+     "severity": "alta"},
+    {"drug": "Anticoagulanti (warfarin)", "category": "cardiovascolare",
+     "effect": "Interazione con vitamina K (verdure a foglia verde)",
+     "recommendation": "Mantenere assunzione costante di vit. K (non eliminare). Monitorare INR.",
+     "severity": "alta"},
+    {"drug": "Metformina", "category": "diabete",
+     "effect": "Riduce B12, folati. Possibile malassorbimento.",
+     "recommendation": "Integrare B12 (500-1000 mcg/giorno) e acido folico. Controllo annuale.",
+     "severity": "alta"},
+    {"drug": "Corticosteroidi (prednisone)", "category": "antinfiammatorio",
+     "effect": "Ritenzione Na, perdita K, Ca, Mg. Osteoporosi indotta.",
+     "recommendation": "Dieta iposodica. Integrare Ca (1000mg) + vit. D (2000UI) + Mg.",
+     "severity": "alta"},
+    {"drug": "Diuretici tiazidici", "category": "cardiovascolare",
+     "effect": "Perdita K, Mg, Ca. Iperglicemia lieve.",
+     "recommendation": "Integrare K, Mg. Limitare zuccheri semplici.",
+     "severity": "media"},
+    {"drug": "Diuretici ansa (furosemide)", "category": "cardiovascolare",
+     "effect": "Forti perdite K, Mg, Ca",
+     "recommendation": "Integrare K (alimenti ricchi: banane, spinaci, patate). Integrare Mg.",
+     "severity": "alta"},
+    {"drug": "Diuretici K-sparing (spironolattone)", "category": "cardiovascolare",
+     "effect": "Aumentano K, perdita Ca",
+     "recommendation": "Evitare alimenti ricchi di K in eccesso. Mantenere Ca adeguato.",
+     "severity": "media"},
+    {"drug": "Inibitori pompa protonica (omeprazolo)", "category": "gastroenterologico",
+     "effect": "Riducono B12, Ca, Mg, Fe. Aumento rischio osteoporosi.",
+     "recommendation": "Monitorare B12, ferritina. Integrare Ca, Mg, vit. D. Uso cronico da limitare.",
+     "severity": "alta"},
+    {"drug": "Statine (atorvastatina, rosuvastatina)", "category": "cardiovascolare",
+     "effect": "Interazione con pompelmo. Riduzione CoQ10. Aumento CPK.",
+     "recommendation": "Evitare pompelmo/succo. Integrare CoQ10 (100-200mg). Monitorare CPK.",
+     "severity": "alta"},
+    {"drug": "Farmaci tiroidei (levotiroxina)", "category": "endocrinologico",
+     "effect": "Ca e Fe riducono assorbimento. Interazione con fibre, soia, noce.",
+     "recommendation": "Assumere a digiuno 30-60min prima colazione. Separare 4h da Ca/Fe.",
+     "severity": "alta"},
+    {"drug": "Antidepressivi MAOI", "category": "psichiatrico",
+     "effect": "Interazione pericolosa con tiramina (crisi ipertensiva)",
+     "recommendation": "Evitare: formaggi stagionati, salumi, crauti, soia, birra, vino rosso.",
+     "severity": "alta"},
+    {"drug": "Contraccettivi orali", "category": "ormonale",
+     "effect": "Riducono B6, B12, folati. Aumento ritenzione idrica.",
+     "recommendation": "Integrare B6 (25-50mg), folati (400mcg), B12. Dieta ricca di frutta e verdura.",
+     "severity": "media"},
+    {"drug": "Antiepilettici (fenitoina, valproato)", "category": "neurologico",
+     "effect": "Riducono B9, B12, D, K. Valproato: aumento ammonio, rischio obesità.",
+     "recommendation": "Integrare B9, vit. D. Monitorare ammonio per valproato. Dieta iperproteica?",
+     "severity": "alta"},
+    {"drug": "Metotrexato", "category": "antireumatico",
+     "effect": "Antagonista folati. Riduce B12, B9.",
+     "recommendation": "Integrare acido folico (5mg/settimana post-dose). Monitorare B12.",
+     "severity": "alta"},
+    {"drug": "Bifosfonati (alendronato)", "category": "osso",
+     "effect": "Ca, Fe, Mg riducono assorbimento. Rischio esofagite.",
+     "recommendation": "Assumere a digiuno con acqua. Attendere 30-60min prima di cibo/Ca.",
+     "severity": "media"},
+]
+
+
+def seed_drug_interactions():
+    """Popola drug_interactions se vuoto."""
+    con = get_db()
+    cnt = con.execute("SELECT COUNT(*) FROM drug_interactions").fetchone()[0]
+    if cnt > 0:
+        return cnt
+    for d in DRUG_INTERACTIONS:
+        con.execute("INSERT INTO drug_interactions (drug, category, effect, recommendation, severity) VALUES (?,?,?,?,?)",
+                    (d["drug"], d["category"], d["effect"], d["recommendation"], d["severity"]))
+    con.commit()
+    return len(DRUG_INTERACTIONS)
+
+
+def search_drugs(query="", limit=20):
+    """Cerca farmaci per nome."""
+    con = get_db()
+    if query:
+        return rows_to_list(con.execute(
+            "SELECT * FROM drug_interactions WHERE drug LIKE ? ORDER BY severity DESC, drug LIMIT ?",
+            (f"%{query}%", limit)).fetchall())
+    return rows_to_list(con.execute(
+        "SELECT * FROM drug_interactions ORDER BY severity DESC, drug LIMIT ?", (limit,)).fetchall())
+
+
+# ─── QUESTIONNAIRES ──────────────────────────────────────────────────────
+
+QUESTIONNAIRES = {
+    "medas": {
+        "name": "MEDAS — Adesione Dieta Mediterranea",
+        "description": "Questionario di 14 item sull'aderenza alla dieta mediterranea (punteggio 0-14)",
+        "max_score": 14,
+        "questions": [
+            "Usa olio d'oliva come principale grasso da condimento?",
+            "Quanto olio d'oliva consuma al giorno? (≥4 cucchiai = 1 punto)",
+            "Quante porzioni di verdura consuma al giorno? (≥2 porzioni/die = 1 punto)",
+            "Quanta frutta consuma al giorno? (≥3 porzioni/die = 1 punto)",
+            "Quanta carne rossa/processata consuma al giorno? (<1 porzione/die = 1 punto)",
+            "Quanto burro/margarina/panna consuma al giorno? (<1/die = 1 punto)",
+            "Beve bevande zuccherate? (<1/die = 1 punto)",
+            "Quanto vino rosso beve al giorno? (1-2 bicchieri/die = 1 punto)",
+            "Quanti legumi consuma a settimana? (≥3 porzioni/sett = 1 punto)",
+            "Quanto pesce consuma a settimana? (≥3 porzioni/sett = 1 punto)",
+            "Quanta frutta secca consuma a settimana? (≥3 porzioni/sett = 1 punto)",
+            "Consuma più pollo/tacchino che carne rossa? (Sì = 1 punto)",
+            "Quante volte a settimana mangia pasta/riso/cereali? (≥3/sett = 1 punto)",
+            "Usa salsa di pomodoro o condimenti a base di pomodoro? (≥2/sett = 1 punto)",
+        ]
+    },
+    "scoff": {
+        "name": "SCOFF — Screening Disturbi Alimentari",
+        "description": "5 domande per screening disturbi alimentari (≥2 positivo)",
+        "max_score": 5,
+        "questions": [
+            "Si è mai sentito/a così pieno/a da star male? (Sì = 1 punto)",
+            "Le capita di non riuscire a smettere di mangiare? (Sì = 1 punto)",
+            "Ha perso più di 6 kg in 3 mesi? (Sì = 1 punto)",
+            "Si considera grasso/a quando gli altri dicono che è troppo magro/a? (Sì = 1 punto)",
+            "Il cibo domina la sua vita? (Sì = 1 punto)",
+        ]
+    },
+    "vas": {
+        "name": "VAS — Scala Analogica Visiva",
+        "description": "Scala 0-10 per sintomi soggettivi (fame, dolore, gonfiore, energia, stress)",
+        "max_score": 10,
+        "questions": [
+            "Fame (0=none, 10=molta fame)",
+            "Dolore (0=nessuno, 10=molto dolore)",
+            "Gonfiore addominale (0=nessuno, 10=molto gonfiore)",
+            "Energia (0=nessuna, 10=molta energia)",
+            "Stress (0=nessuno, 10=motto stress)",
+        ]
+    }
+}
+
+
+def save_questionnaire_result(pid, questionnaire, score, answers, notes=""):
+    """Salva risultato questionario."""
+    con = get_db()
+    con.execute("INSERT INTO questionnaire_results (patient_id, questionnaire, score, answers, notes) VALUES (?,?,?,?,?)",
+                (pid, questionnaire, score, json.dumps(answers), notes))
+    con.commit()
+    return con.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+
+def list_questionnaire_results(pid, questionnaire=None):
+    """Lista risultati questionari per paziente."""
+    con = get_db()
+    if questionnaire:
+        return rows_to_list(con.execute(
+            "SELECT * FROM questionnaire_results WHERE patient_id=? AND questionnaire=? ORDER BY date DESC",
+            (pid, questionnaire)).fetchall())
+    return rows_to_list(con.execute(
+        "SELECT * FROM questionnaire_results WHERE patient_id=? ORDER BY date DESC", (pid,)).fetchall())
 
 
 # ─── INIT ─────────────────────────────────────────────────────────────────

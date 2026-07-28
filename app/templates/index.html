@@ -16,7 +16,7 @@
   <div class=nav-item data-nav=ricettario onclick="nav('ricettario')"><span class=ico>📖</span><span>Ricettario</span></div>
   <div class=spacer></div>
   <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn>🌙</button>
-  <div class=version>v2.13.0 · Dietowin</div>
+  <div class=version>v2.14.0 · Dietowin</div>
 </div>
 <div class=main>
   <div class=topbar>
@@ -213,6 +213,7 @@ async function openPatient(cid){
     <button class=tab-btn onclick=switchTab(this,'referti')>Referti</button>
     <button class=tab-btn onclick=switchTab(this,'appuntamenti')>Appuntamenti</button>
     <button class=tab-btn onclick=switchTab(this,'sintomi')>Sintomi</button>
+    <button class=tab-btn onclick=switchTab(this,'questionari')>📋</button>
     <button class=tab-btn onclick=switchTab(this,'progressi')>Progressi</button>
   </div>
   <div id=patient-pane></div>`;
@@ -247,6 +248,7 @@ function switchTab(el,tab){
   else if(tab==='referti')loadReferti();
   else if(tab==='appuntamenti')loadAppuntamenti();
   else if(tab==='sintomi')loadSintomi();
+  else if(tab==='questionari')loadQuestionari();
   else if(tab==='progressi')loadProgressi();
 }
 async function loadAnamnesi(){
@@ -498,6 +500,55 @@ function showProgressForm(){
 async function saveProgress(){
   const r=await jpost('/api/patients/'+ST.cid+'/progress-notes',{note:$('pn-t').value});
   if(r&&r.ok){toast('Salvato ✓');closeModal();loadProgressi()}
+}
+// QUESTIONARI + FARMACI
+async function loadQuestionari(){
+  const q=await jget('/api/questionnaires');
+  const qs=Object.entries(q.questionnaires||{});
+  const results=await jget('/api/patients/'+ST.cid+'/questionnaires');
+  const r=results.results||[];
+  $('patient-pane').innerHTML=`<div class=row style=margin-bottom:8px><b>📋 Questionari clinici</b></div>
+  <div class=card>${qs.map(([k,v])=>`<div style=margin:4px 0;display:flex;justify-content:space-between;align-items:center><span><b>${esc(v.name)}</b><br><span style=font-size:10px;color:var(--text2)>${esc(v.description)}</span></span><button class="btn btn-sm btn-outline" onclick=showQuestionnaire('${k}')>Compila</button></div>`).join('')}
+  <label>Cerca farmaci</label><input id=drug-q oninput=searchDrugs(this.value) placeholder="es. metformina">
+  <div id=drug-results style=font-size:11px></div></div>
+  ${r.length?`<div class=card><b>Storico</b>${r.map(x=>`<div style=display:flex;justify-content:space-between;font-size:11px;padding:2px 0><span>${x.date} — ${x.questionnaire.toUpperCase()}: <b>${x.score}</b></span></div>`).join('')}</div>`:''}`;
+}
+async function searchDrugs(q){
+  if(!q||q.length<2){$('drug-results').innerHTML='';return}
+  const r=await jget('/api/drugs?q='+encodeURIComponent(q));
+  const drugs=r.drugs||[];
+  $('drug-results').innerHTML=drugs.length?drugs.map(d=>`<div class=card style=margin:4px 0;padding:6px><b>${esc(d.drug)}</b> <span class=tag style=background:${d.severity==='alta'?'#fee2e2':d.severity==='media'?'#fef3c7':'#dbeafe'}>${d.severity}</span><div style=font-size:10px;color:#888>${esc(d.effect)}<br>💊 ${esc(d.recommendation)}</div></div>`).join(''):'<span style=font-size:10px;color:var(--text2)>Nessun risultato</span>';
+}
+function showQuestionnaire(type){
+  jget('/api/questionnaires').then(qq=>{
+    const q=qq.questionnaires[type];
+    if(!q){toast('Questionario non trovato');return}
+    const max=q.max_score||q.questions.length;
+    let html=`<div class=card><b>${esc(q.name)}</b><br><span style=font-size:10px;color:var(--text2)>${esc(q.description)}</span>`;
+    q.questions.forEach((qs,i)=>{
+      if(type==='vas'){
+        html+=`<label style=display:block;margin:6px 0>${esc(qs)}<br><input type=range min=0 max=10 value=5 style=width:100% class=q-ans data-idx=${i}><span style=font-size:10px;color:var(--text2) id=vas-v${i}>5</span></label>`;
+      } else {
+        html+=`<label class=chk style=margin:2px 0><input type=checkbox class=q-ans data-idx=${i}>${esc(qs)}</label>`;
+      }
+    });
+    html+=`<div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick=saveQuestionnaire('${type}',${max})>💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`;
+    modal(html);
+    // VAS slider listeners
+    if(type==='vas')qsa('.q-ans').forEach(el=>{el.oninput=()=>{const id='vas-v'+el.dataset.idx;const s=$('vas-v'+el.dataset.idx);if(s)s.textContent=el.value}});
+  });
+}
+async function saveQuestionnaire(type,maxScore){
+  const els=qsa('.q-ans');
+  let score=0;
+  const answers=[];
+  els.forEach(el=>{
+    const v=el.type==='checkbox'?el.checked?1:0:parseInt(el.value)||0;
+    score+=v;
+    answers.push(v);
+  });
+  const r=await jpost('/api/patients/'+ST.cid+'/questionnaires',{questionnaire:type,score,answers});
+  if(r&&r.ok){toast(`${score}/${maxScore} ✓`);closeModal();loadQuestionari()}
 }
 // BIA HUB (global)
 async function loadBIA(){
