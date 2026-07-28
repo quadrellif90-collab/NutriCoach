@@ -1,7 +1,7 @@
 """
 NutriCoach v2 — App principale FastAPI (modulare, Dietowin-style).
 """
-import os, sys, json, datetime as dt
+import os, sys, json, asyncio, datetime as dt
 from fastapi import FastAPI, UploadFile, File, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -19,7 +19,7 @@ if not os.environ.get("TESSDATA_PREFIX"):
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
-from app import bia_parser_v2
+from app import ocr_engine  # OCR integrato: Windows OCR + fallback Tesseract
 
 app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.0.0")
 
@@ -194,38 +194,23 @@ async def api_add_bia(pid: int, request: Request):
 
 @app.post("/api/patients/{pid}/bia/upload")
 async def api_bia_upload(pid: int, file: UploadFile = File(...)):
-    import asyncio
     path = os.path.join(UPLOAD_DIR, f"bia_{pid}_{_timestamp()}_{file.filename}")
     with open(path, "wb") as f:
         import shutil
         shutil.copyfileobj(file.file, f)
-    # Usa il parser PCC (range fisiologici + decimal restoration + OCR robusto)
-    res = await asyncio.to_thread(bia_parser_v2.parse_bia_file, path)
-    if res.get("scanned"):
-        return {"scanned": True, "pages": res.get("pages",[]), "file": path,
-                "note": res.get("note","PDF scansionato non leggibile")}
-    reading = res.get("reading", {})
-    # Mappa campi PCC -> colonne DB
-    mapping = {
-        "weight_kg":"weight_kg","height_cm":"height_cm","bmi":"bmi",
-        "fat_mass_pct":"bf_pct","fat_mass_kg":"bf_kg","fat_free_mass_kg":"ffm_kg",
-        "tbw_l":"tbw_l","ecw_l":"ecw_l","icw_l":"icw_l",
-        "phase_angle":"pha",
-        "bcm_kg":"bcm_kg","smm_kg":"smm_kg","asmm_kg":"asmm_kg",
-        "protein_kg":"protein_kg","protein_pct":"protein_pct",
-        "visceral_fat":"visceral_fat_level","hydration_pct":"hydration_pct",
-        "bone_kg":"mineral_kg","muscle_mass_kg":"mm_kg",
-    }
-    db_fields = {}
-    for k, v in reading.items():
-        if v is not None and k in mapping:
-            db_fields[mapping[k]] = v
-    # Se non c'e' bf_pct ma c'e' fat_mass_pct, usalo
-    if "bf_pct" not in db_fields and reading.get("fat_mass_pct") is not None:
-        db_fields["bf_pct"] = reading["fat_mass_pct"]
-    bid = db.add_bia(pid, db_fields, source=file.filename)
-    return {"ok": True, "bia_id": bid, "fields": db_fields,
-            "note": res.get("note"), "restored": res.get("restored_fields")}
+
+    # OCR Engine: Windows OCR primario, Tesseract fallback
+    with open(path, "rb") as f:
+        pdf_bytes = f.read()
+    fields = await asyncio.to_thread(ocr_engine.parse_bia_pdf, pdf_bytes)
+
+    if not fields:
+        return {"ok": False, "error": "Nessun dato BIA estratto dal PDF"}
+
+    # Mappa campi -> colonne DB (ocr_engine già produce bf_kg, ffm_kg, etc.)
+    bid = db.add_bia(pid, fields, source=file.filename)
+    return {"ok": True, "bia_id": bid, "fields": fields,
+            "note": "OCR engine: Windows.Media.Ocr"}
 
 @app.delete("/api/bia/{bid}")
 def api_delete_bia(bid: int):
