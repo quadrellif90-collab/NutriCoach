@@ -1119,4 +1119,90 @@ def get_studio_stats():
 
 if __name__ == "__main__":
     init_db()
-    print(f"DB: {DB_PATH} — tabelle create/verificate")
+    print(f"DB: {DB_PATH} — tabelle create/verificate")# ─── MEAL DIARY CRUD ─────────────────────────────────────────────────────
+
+def save_diary_entry(pid, date, meal, food_id, food_name, consumed=0, notes="", plan_id=None):
+    con = get_db()
+    con.execute("INSERT INTO meal_diary (patient_id, plan_id, date, meal, food_id, food_name, consumed, notes) VALUES (?,?,?,?,?,?,?,?)",
+                (pid, plan_id, date, meal, food_id, food_name, consumed, notes))
+    con.commit()
+    return con.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+
+def get_diary_entries(pid, date=None):
+    con = get_db()
+    if date:
+        return rows_to_list(con.execute(
+            "SELECT * FROM meal_diary WHERE patient_id=? AND date=? ORDER BY id", (pid, date)).fetchall())
+    return rows_to_list(con.execute(
+        "SELECT * FROM meal_diary WHERE patient_id=? ORDER BY date DESC, id", (pid,)).fetchall())
+
+
+def update_diary_entry(eid, consumed=None, notes=None):
+    con = get_db()
+    fields = []
+    vals = []
+    if consumed is not None:
+        fields.append("consumed=?")
+        vals.append(1 if consumed else 0)
+    if notes is not None:
+        fields.append("notes=?")
+        vals.append(notes)
+    if fields:
+        vals.append(eid)
+        con.execute(f"UPDATE meal_diary SET {','.join(fields)} WHERE id=?", tuple(vals))
+        con.commit()
+
+
+# ─── MESSAGES CRUD ───────────────────────────────────────────────────────
+
+def send_message(pid, text, sender="nutritionist"):
+    con = get_db()
+    con.execute("INSERT INTO messages (patient_id, sender, text) VALUES (?,?,?)", (pid, sender, text))
+    con.commit()
+    return con.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+
+def get_messages(pid, limit=50):
+    return rows_to_list(get_db().execute(
+        "SELECT * FROM messages WHERE patient_id=? ORDER BY created_at DESC LIMIT ?", (pid, limit)).fetchall())
+
+
+def mark_messages_read(pid):
+    con = get_db()
+    con.execute("UPDATE messages SET read=1 WHERE patient_id=? AND sender='patient'", (pid,))
+    con.commit()
+
+
+def count_unread(pid):
+    r = get_db().execute("SELECT COUNT(*) FROM messages WHERE patient_id=? AND read=0 AND sender='patient'", (pid,)).fetchone()
+    return r[0] if r else 0
+
+
+def ensure_v2_tables():
+    """Crea meal_diary e messages se non esistono (per upgrade v2.15->v2.16)."""
+    con = get_db()
+    con.executescript("""
+        CREATE TABLE IF NOT EXISTS meal_diary (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            plan_id INTEGER,
+            date TEXT NOT NULL,
+            meal TEXT NOT NULL DEFAULT '',
+            food_id INTEGER,
+            food_name TEXT DEFAULT '',
+            consumed INTEGER DEFAULT 0,
+            notes TEXT DEFAULT '',
+            FOREIGN KEY (patient_id) REFERENCES patients(id)
+        );
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            sender TEXT NOT NULL DEFAULT 'nutritionist',
+            text TEXT NOT NULL,
+            read INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (patient_id) REFERENCES patients(id)
+        );
+    """)
+    con.commit()

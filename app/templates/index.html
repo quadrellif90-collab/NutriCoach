@@ -19,7 +19,7 @@
   <div class=nav-item style=cursor:pointer;font-size:11px onclick=showSettings() title=Impostazioni>⚙️</div>
   <div class=nav-item style=cursor:pointer;font-size:11px onclick=doLogout() title=Logout>🚪</div>
   <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn>🌙</button>
-  <div class=version>v2.15.0 · Dietowin</div>
+  <div class=version>v2.16.0 · Dietowin</div>
 </div>
 <div class=main>
   <div class=topbar>
@@ -40,6 +40,7 @@ function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');set
 function jget(u){return fetch(API+u).then(r=>r.json())}
 function jpost(u,b){return fetch(API+u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json())}
 function jdel(u){return fetch(API+u,{method:'DELETE'}).then(r=>r.json())}
+function jpatch(u,b){return fetch(API+u,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json())}
 function esc(s){return s==null?'':String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
 function today(){return new Date().toISOString().slice(0,10)}
 function init(n){return(n||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}
@@ -218,6 +219,8 @@ async function openPatient(cid){
     <button class=tab-btn onclick=switchTab(this,'sintomi')>Sintomi</button>
     <button class=tab-btn onclick=switchTab(this,'questionari')>📋</button>
     <button class=tab-btn onclick=switchTab(this,'progressi')>Progressi</button>
+    <button class=tab-btn onclick=switchTab(this,'diario')>📝</button>
+    <button class=tab-btn onclick=switchTab(this,'chat')>💬</button>
   </div>
   <div id=patient-pane></div>`;
   switchTab(qs('#ptabs .tab-btn'),'anamnesi');
@@ -253,6 +256,8 @@ function switchTab(el,tab){
   else if(tab==='sintomi')loadSintomi();
   else if(tab==='questionari')loadQuestionari();
   else if(tab==='progressi')loadProgressi();
+  else if(tab==='diario')loadDiario();
+  else if(tab==='chat')loadChat();
 }
 async function loadAnamnesi(){
   let a={}; try{a=await jget('/api/patients/'+ST.cid+'/anamnesis')}catch(e){}
@@ -520,7 +525,72 @@ async function searchDrugs(q){
   if(!q||q.length<2){$('drug-results').innerHTML='';return}
   const r=await jget('/api/drugs?q='+encodeURIComponent(q));
   const drugs=r.drugs||[];
-  $('drug-results').innerHTML=drugs.length?drugs.map(d=>`<div class=card style=margin:4px 0;padding:6px><b>${esc(d.drug)}</b> <span class=tag style=background:${d.severity==='alta'?'#fee2e2':d.severity==='media'?'#fef3c7':'#dbeafe'}>${d.severity}</span><div style=font-size:10px;color:#888>${esc(d.effect)}<br>💊 ${esc(d.recommendation)}</div></div>`).join(''):'<span style=font-size:10px;color:var(--text2)>Nessun risultato</span>';
+  $('drug-results').innerHTML=drugs.length?drugs.map(d=>`<div class=card style=margin:4px 0;padding:6px><b>${esc(d.drug)}</b> <span class=tag style=background:${d.severity==='alta'?'#fee2e2':d.severity==='media'?'#fef3c7':'#dbeafe'}>${d.severity}</span><div style=font-size:10px;color:#888>${esc(d.effect)}<br>💊 ${esc(d.recommendation)}</div></div>`).join(''):'<span style=font-size:10px;color:var(--text2)>Nessun risultato</span>';\n}
+// DIARIO PASTI
+async function loadDiario(){
+  const p=[];
+  try{const pl=await jget('/api/patients/'+ST.cid+'/diet-plan');if(pl.id)for(const d of pl.days||[]){for(const m of d.meals||[]){p.push({date:d.date||'oggi',meal:m.time||m.meal||'Pasto',food:m.food||m.name||'',food_id:m.food_id})}}}catch(e){}
+  const today=new Date().toISOString().slice(0,10);
+  const entries=await jget('/api/patients/'+ST.cid+'/diary',{params:{date:today}});
+  const consumed={};let sr={};for(const e of entries){if(e.meal==='__self_report__'){try{sr[e.food_name]=JSON.parse(e.notes||'{}');sr[e.food_name]._eid=e.id}catch(e2){}}else consumed[e.meal+'|'+e.food_name]=e;}
+  const curSr=sr._today||{};
+  $('patient-pane').innerHTML=`<div class=row style=margin-bottom:8px><b>📝 Diario pasti — ${today}</b></div>
+  ${p.length?`<div class=card>${p.map(m=>{const k=m.meal+'|'+m.food,c=consumed[k],done=c?c.consumed:null;return `
+    <div style=display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)>
+      <span><b>${esc(m.meal)}</b> — ${esc(m.food)}</span>
+      <span>
+        ${done===null?`<button class="btn btn-sm" onclick=markMeal('${today}','${esc(m.meal)}','${esc(m.food)}',${m.food_id||'null'},1)>✅ Fatto</button><button class="btn btn-sm" onclick=markMeal('${today}','${esc(m.meal)}','${esc(m.food)}',${m.food_id||'null'},0)>❌ Saltato</button>`:done?`<span style=color:#22c55e>✅ Consumato</span>`:`<span style=color:#ef4444>❌ Saltato</span>`}
+      </span>
+    </div>`}).join('')}</div>`:'<div class=card style=color:var(--text2);font-size:11px>Nessun piano dieta attivo. <button class="btn btn-sm btn-outline" onclick=loadPatientDieta()>🍽️ Crea dieta</button></div>'}
+  <div class=card><b>✏️ Pasto extra</b>
+  <div class=row style=gap:4px><input id=de-meal placeholder=Pasto style=flex:1><input id=de-food placeholder=Cibo style=flex:2></div>
+  <div style=margin-top:4px;display:flex;gap:8px><button class="btn btn-sm btn-primary" onclick=addDiaryEntry()>➕ Aggiungi</button></div></div>
+  <div class=card><b>😊 Auto-report giornaliero</b>
+  <div class=row style=gap:8px;flex-wrap:wrap>
+    <div><label>Umore</label><div id=sel-mood class=row style=gap:4px;margin-top:2px>
+      ${['😢','😐','🙂','😊','😄'].map(e=>`<button class="btn btn-sm ${curSr.mood===e?'btn-primary':''}" onclick=setMood('${e}')>${e}</button>`).join('')}</div></div>
+    <div><label>Fame (${curSr.hunger!==undefined?curSr.hunger:'-'})</label><input type=range min=0 max=10 value=${curSr.hunger!==undefined?curSr.hunger:5} id=sl-hunger></div>
+    <div><label>Sazietà (${curSr.satisfaction!==undefined?curSr.satisfaction:'-'})</label><input type=range min=0 max=10 value=${curSr.satisfaction!==undefined?curSr.satisfaction:5} id=sl-sat></div>
+  </div>
+  <div style=margin-top:4px;display:flex;gap:8px><button class="btn btn-sm btn-primary" onclick=saveSelfReport('${today}')>💾 Salva</button></div></div>`;}
+function setMood(e){document.getElementById('sel-mood').querySelectorAll('button').forEach(b=>b.classList.remove('btn-primary'));event.target.classList.add('btn-primary');}
+async function saveSelfReport(date){
+  const mood=[...document.getElementById('sel-mood').querySelectorAll('.btn-primary')].map(b=>b.textContent)[0];
+  const hunger=parseInt(document.getElementById('sl-hunger').value)||0;
+  const sat=parseInt(document.getElementById('sl-sat').value)||0;
+  if(!mood){toast('Seleziona umore');return}
+  const data=JSON.stringify({mood,hunger,satisfaction:sat});
+  const existing=await jget('/api/patients/'+ST.cid+'/diary',{params:{date}});
+  const prev=existing.find(e=>e.meal==='__self_report__'&&e.food_name==='_today');
+  if(prev)await jpatch('/api/diary/'+prev.id,{notes:data});
+  else await jpost('/api/patients/'+ST.cid+'/diary',{date,meal:'__self_report__',food_name:'_today',notes:data});
+  toast('💾 Salvato!');loadDiario();
+}
+async function markMeal(date,meal,food,food_id,consumed){
+  await jpost('/api/patients/'+ST.cid+'/diary',{date,meal,food_name:food,food_id,consumed});
+  toast(consumed?'✅ Segnato consumato':'❌ Segnato saltato');loadDiario();
+}
+async function addDiaryEntry(){
+  const meal=$('de-meal').value, food=$('de-food').value;
+  if(!meal||!food){toast('Compila pasto e cibo');return}
+  await jpost('/api/patients/'+ST.cid+'/diary',{date:new Date().toISOString().slice(0,10),meal,food_name:food,consumed:1,notes:''});
+  toast('✅ Aggiunto');loadDiario();
+}
+// CHAT
+async function loadChat(){
+  const msgs=await jget('/api/patients/'+ST.cid+'/messages');
+  const pid=ST.cid;
+  $('patient-pane').innerHTML=`<div class=row style=margin-bottom:8px><b>💬 Chat</b></div>
+  <div class=card id=chat-box style=height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:4px>
+    ${msgs.length?msgs.reverse().map(m=>`<div style="padding:6px 10px;border-radius:10px;max-width:80%;${m.sender==='patient'?'background:var(--primary);color:var(--bg);align-self:flex-end':'background:var(--surface2);align-self:flex-start'};font-size:12px">${esc(m.text)}<div style=font-size:9px;opacity:.6;margin-top:2px>${m.created_at?.slice(11,16)||m.date?.slice(11,16)||''} ${m.sender==='patient'?'👤':'🥼'}</div></div>`).join(''):'<div class=empty>Nessun messaggio</div>'}
+  </div>
+  <div class=row style=margin-top:4px;gap:4px><input id=chat-input placeholder=Scrivi messaggio... style=flex:1 onkeydown="if(event.key==='Enter')sendChatMsg()"><button class="btn btn-sm btn-primary" onclick=sendChatMsg()>➤ Invia</button></div>`;$('chat-input')?.focus();
+  jpost('/api/patients/'+pid+'/messages/read');
+}
+async function sendChatMsg(){
+  const t=$('chat-input')?.value?.trim();if(!t)return;
+  const r=await jpost('/api/patients/'+ST.cid+'/messages',{text:t,sender:'nutritionist'});
+  if(r&&r.ok){$('chat-input').value='';loadChat()}
 }
 function showQuestionnaire(type){
   jget('/api/questionnaires').then(qq=>{

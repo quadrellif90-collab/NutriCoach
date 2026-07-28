@@ -21,7 +21,7 @@ import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
 from app import ocr_engine  # OCR integrato: Windows OCR + fallback Tesseract
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.15.0")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.16.0")
 
 # Servi file statici (CSS)
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
@@ -682,6 +682,61 @@ async def api_save_settings(request: Request):
 @app.get("/api/stats")
 def api_stats():
     return db.get_studio_stats()
+
+
+@app.on_event("startup")
+async def _ensure_tables():
+    db.ensure_v2_tables()
+
+
+# ─── DIARY CHECK PASTI ───────────────────────────────────────────────────
+
+@app.get("/api/patients/{pid}/diary")
+def api_diary(pid: int, date: str = ""):
+    if date:
+        return db.get_diary_entries(pid, date)
+    return db.get_diary_entries(pid)
+
+
+@app.post("/api/patients/{pid}/diary")
+async def api_save_diary(pid: int, request: Request):
+    b = await request.json()
+    eid = db.save_diary_entry(pid, b.get("date", ""), b.get("meal", ""), b.get("food_id"),
+                               b.get("food_name", ""), b.get("consumed", 0), b.get("notes", ""),
+                               b.get("plan_id"))
+    return {"id": eid, "ok": True}
+
+
+@app.patch("/api/diary/{eid}")
+async def api_update_diary(eid: int, request: Request):
+    b = await request.json()
+    db.update_diary_entry(eid, b.get("consumed"), b.get("notes"))
+    return {"ok": True}
+
+
+# ─── CHAT ────────────────────────────────────────────────────────────────
+
+@app.get("/api/patients/{pid}/messages")
+def api_messages(pid: int):
+    return db.get_messages(pid)
+
+
+@app.post("/api/patients/{pid}/messages")
+async def api_send_message(pid: int, request: Request):
+    b = await request.json()
+    mid = db.send_message(pid, b.get("text", ""), b.get("sender", "nutritionist"))
+    return {"id": mid, "ok": True}
+
+
+@app.post("/api/patients/{pid}/messages/read")
+def api_mark_read(pid: int):
+    db.mark_messages_read(pid)
+    return {"ok": True}
+
+
+@app.get("/api/patients/{pid}/messages/unread")
+def api_unread(pid: int):
+    return {"count": db.count_unread(pid)}
 
 
 # ─── PATIENTS ─────────────────────────────────────────────────────────────
