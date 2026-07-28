@@ -70,8 +70,15 @@ if __name__ == "__main__":
     # finestra nativa o browser
     if _HAVE_WEBVIEW:
         try:
-            webview.create_window("NutriCoach v2 — Dietowin", f"http://127.0.0.1:{PORT}/",
-                                  width=1200, height=800, resizable=True, min_size=(800,600))
+            import webview
+            ico_path = os.path.join(HERE, "assets", "icon.ico")
+            # Il supporto icona dipende dalla piattaforma: Windows .ico
+            wargs = {"title": "NutriCoach v2 — Dietowin",
+                     "url": f"http://127.0.0.1:{PORT}/",
+                     "width": 1200, "height": 800, "resizable": True, "min_size": (800,600)}
+            if os.path.isfile(ico_path):
+                wargs["icon"] = ico_path
+            webview.create_window(**wargs)
             webview.start()
         except Exception as e:
             log.warning("webview fallito: %s -> browser", e)
