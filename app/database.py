@@ -518,9 +518,25 @@ def seed_food_catalog():
         date TEXT NOT NULL DEFAULT (date('now')),
         notes TEXT DEFAULT '',
         FOREIGN KEY (patient_id) REFERENCES patients(id)
+            )""")
+    con.execute("""CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        role TEXT DEFAULT 'nutritionist',
+        clinic_name TEXT DEFAULT '',
+        logo_url TEXT DEFAULT '',
+        theme_color TEXT DEFAULT '#6366f1',
+        created_at TEXT DEFAULT (datetime('now'))
+    )""")
+    con.execute("""CREATE TABLE IF NOT EXISTS sessions (
+        token TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (user_id) REFERENCES users(id)
     )""")
     # Migra colonne patients
-    for col in ["portal_token TEXT DEFAULT NULL", "birth_date TEXT DEFAULT NULL", "language TEXT DEFAULT 'it'"]:
+    for col in ["portal_token TEXT DEFAULT NULL", "birth_date TEXT DEFAULT NULL", "language TEXT DEFAULT 'it'", "user_id INTEGER DEFAULT 1"]:
         try:
             con.execute(f"ALTER TABLE patients ADD COLUMN {col}")
         except Exception:
@@ -991,6 +1007,112 @@ def list_questionnaire_results(pid, questionnaire=None):
             (pid, questionnaire)).fetchall())
     return rows_to_list(con.execute(
         "SELECT * FROM questionnaire_results WHERE patient_id=? ORDER BY date DESC", (pid,)).fetchall())
+
+
+# ─── USER MANAGEMENT ────────────────────────────────────────────────────
+
+def create_user(username, password_hash, role="nutritionist", clinic_name="", logo_url="", theme_color="#6366f1"):
+    """Crea un nuovo utente. Ritorna l'id o None se username esiste."""
+    con = get_db()
+    try:
+        con.execute("INSERT INTO users (username, password_hash, role, clinic_name, logo_url, theme_color) VALUES (?,?,?,?,?,?)",
+                    (username, password_hash, role, clinic_name, logo_url, theme_color))
+        con.commit()
+        return con.execute("SELECT last_insert_rowid()").fetchone()[0]
+    except Exception:
+        return None
+
+
+def get_user(username):
+    """Cerca utente per username."""
+    return row_to_dict(get_db().execute("SELECT * FROM users WHERE username=?", (username,)).fetchone())
+
+
+def get_user_by_id(uid):
+    """Cerca utente per id."""
+    return row_to_dict(get_db().execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone())
+
+
+def create_session(user_id):
+    """Crea sessione token per utente. Ritorna il token."""
+    import secrets
+    token = secrets.token_hex(32)
+    con = get_db()
+    # Delete old sessions for user
+    con.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+    con.execute("INSERT INTO sessions (token, user_id) VALUES (?,?)", (token, user_id))
+    con.commit()
+    return token
+
+
+def get_session(token):
+    """Recupera sessione per token."""
+    return row_to_dict(get_db().execute("SELECT s.*, u.username, u.role, u.clinic_name, u.logo_url, u.theme_color "
+                                        "FROM sessions s JOIN users u ON s.user_id=u.id WHERE s.token=?",
+                                        (token,)).fetchone())
+
+
+def delete_session(token):
+    con = get_db()
+    con.execute("DELETE FROM sessions WHERE token=?", (token,))
+    con.commit()
+
+
+def update_user_settings(uid, clinic_name=None, logo_url=None, theme_color=None):
+    con = get_db()
+    fields = []
+    vals = []
+    if clinic_name is not None:
+        fields.append("clinic_name=?")
+        vals.append(clinic_name)
+    if logo_url is not None:
+        fields.append("logo_url=?")
+        vals.append(logo_url)
+    if theme_color is not None:
+        fields.append("theme_color=?")
+        vals.append(theme_color)
+    if fields:
+        vals.append(uid)
+        con.execute(f"UPDATE users SET {','.join(fields)} WHERE id=?", tuple(vals))
+        con.commit()
+
+
+# ─── STATISTICS ──────────────────────────────────────────────────────────
+
+def get_studio_stats():
+    """Ritorna statistiche aggregate dello studio."""
+    con = get_db()
+    total_patients = con.execute("SELECT COUNT(*) FROM patients").fetchone()[0]
+    # Per categoria
+    cats = rows_to_list(con.execute(
+        "SELECT c.name, COUNT(p.id) as cnt FROM patients p LEFT JOIN categories c ON p.category_id=c.id GROUP BY c.id ORDER BY cnt DESC").fetchall())
+
+    # Per sesso
+    gender = rows_to_list(con.execute(
+        "SELECT sex, COUNT(*) as cnt FROM patients GROUP BY sex").fetchall())
+
+    # Età media
+    age_stats = con.execute(
+        "SELECT AVG(CAST(strftime('%Y','now') AS INTEGER) - CAST(birth_date AS INTEGER)) FROM patients WHERE birth_date IS NOT NULL AND birth_date!=''").fetchone()[0]
+
+    # Ultimi pazienti
+    recent = rows_to_list(con.execute(
+        "SELECT id, name, created FROM patients ORDER BY created DESC LIMIT 5").fetchall())
+
+    # BIA medie (ultima lettura per paziente)
+    bia_avg = row_to_dict(con.execute(
+        "SELECT AVG(weight_kg) as avg_weight, AVG(bmi) as avg_bmi, AVG(bf_pct) as avg_bf, "
+        "AVG(mm_pct) as avg_mm, AVG(tbw_l) as avg_tbw, AVG(ecw_l) as avg_ecw, AVG(pha) as avg_pha "
+        "FROM bia_readings WHERE id IN (SELECT MAX(id) FROM bia_readings GROUP BY patient_id)").fetchone()) or {}
+
+    return {
+        "total_patients": total_patients,
+        "categories": cats,
+        "gender": gender,
+        "avg_age": round(age_stats, 1) if age_stats else 0,
+        "recent_patients": recent,
+        "bia_averages": bia_avg,
+    }
 
 
 # ─── INIT ─────────────────────────────────────────────────────────────────

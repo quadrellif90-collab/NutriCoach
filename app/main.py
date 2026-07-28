@@ -1,7 +1,7 @@
 """
 NutriCoach v2 — App principale FastAPI (modulare, Dietowin-style).
 """
-import os, sys, json, asyncio, datetime as dt
+import os, sys, json, asyncio, datetime as dt, hashlib
 from fastapi import FastAPI, UploadFile, File, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -21,7 +21,7 @@ import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
 from app import ocr_engine  # OCR integrato: Windows OCR + fallback Tesseract
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.14.0")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.15.0")
 
 # Servi file statici (CSS)
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
@@ -623,6 +623,68 @@ def api_allergens():
             results[allergen] = [{"id": m["id"], "name": m["name"], "category": m["category"]} for m in matches]
     return results
 
+
+# ─── AUTH ─────────────────────────────────────────────────────────────────
+
+@app.post("/api/login")
+async def api_login(request: Request):
+    b = await request.json()
+    username = b.get("username", "")
+    password = b.get("password", "")
+    user = db.get_user(username)
+    if not user or user["password_hash"] != hashlib.sha256(password.encode()).hexdigest():
+        raise HTTPException(401, "Credenziali non valide")
+    token = db.create_session(user["id"])
+    return {"ok": True, "token": token, "user": {"id": user["id"], "username": user["username"],
+                                                  "role": user["role"], "clinic_name": user["clinic_name"],
+                                                  "logo_url": user["logo_url"], "theme_color": user["theme_color"]}}
+
+
+@app.post("/api/logout")
+async def api_logout(request: Request):
+    b = await request.json()
+    db.delete_session(b.get("token", ""))
+    return {"ok": True}
+
+
+@app.get("/api/session")
+def api_get_session(token: str = ""):
+    s = db.get_session(token)
+    if not s:
+        raise HTTPException(401, "Sessione non valida")
+    return s
+
+
+@app.get("/api/settings")
+def api_get_settings(token: str = ""):
+    s = db.get_session(token)
+    if not s:
+        raise HTTPException(401, "Non autenticato")
+    return {"clinic_name": s["clinic_name"], "logo_url": s["logo_url"], "theme_color": s["theme_color"],
+            "username": s["username"], "role": s["role"]}
+
+
+@app.post("/api/settings")
+async def api_save_settings(request: Request):
+    b = await request.json()
+    s = db.get_session(b.get("token", ""))
+    if not s:
+        raise HTTPException(401, "Non autenticato")
+    db.update_user_settings(s["user_id"],
+                            clinic_name=b.get("clinic_name"),
+                            logo_url=b.get("logo_url"),
+                            theme_color=b.get("theme_color"))
+    return {"ok": True}
+
+
+# ─── STATISTICS ──────────────────────────────────────────────────────────
+
+@app.get("/api/stats")
+def api_stats():
+    return db.get_studio_stats()
+
+
+# ─── PATIENTS ─────────────────────────────────────────────────────────────
 
 # ─── CATEGORIES ────────────────────────────────────────────────────────────
 

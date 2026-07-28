@@ -15,8 +15,11 @@
   <div class=nav-item data-nav=archivio onclick="nav('archivio')"><span class=ico>📁</span><span>Archivio</span></div>
   <div class=nav-item data-nav=ricettario onclick="nav('ricettario')"><span class=ico>📖</span><span>Ricettario</span></div>
   <div class=spacer></div>
+  <div class=nav-item style=cursor:pointer;font-size:11px onclick=showStats() title=Statistiche>📊</div>
+  <div class=nav-item style=cursor:pointer;font-size:11px onclick=showSettings() title=Impostazioni>⚙️</div>
+  <div class=nav-item style=cursor:pointer;font-size:11px onclick=doLogout() title=Logout>🚪</div>
   <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn>🌙</button>
-  <div class=version>v2.14.0 · Dietowin</div>
+  <div class=version>v2.15.0 · Dietowin</div>
 </div>
 <div class=main>
   <div class=topbar>
@@ -712,6 +715,66 @@ function modal(body){
   $('modal-root').innerHTML=`<div class=modal-overlay onclick="if(event.target===this)closeModal()"><div class=modal><div class=modal-head><span>NutriCoach</span><button class=btn onclick=closeModal() style=border:none;padding:2px 6px>✕</button></div><div class=modal-body>${body}</div></div></div>`;
 }
 function closeModal(){$('modal-root').innerHTML=''}
+// LOGIN / AUTH
+async function doLogin(){
+  const u=$('login-u')?.value,pw=$('login-p')?.value;
+  if(!u||!pw){toast('Inserisci credenziali');return}
+  const r=await jpost('/api/login',{username:u,password:pw});
+  if(r&&r.token){localStorage.setItem('token',r.token);$('login-overlay').style.display='none';setupBrand();toast('Login OK ✓');nav('dashboard')}
+  else toast('Credenziali errate');
+}
+function doLogout(){
+  const t=localStorage.getItem('token');
+  if(t)jpost('/api/logout',{token:t});
+  localStorage.removeItem('token');$('login-overlay').style.display='flex';$('page-title').textContent='';$('view').innerHTML='';
+}
+async function setupBrand(){
+  const t=localStorage.getItem('token');
+  if(!t)return;
+  try{
+    const s=await jget('/api/settings?token='+t);
+    if(s.clinic_name)document.title=s.clinic_name+' - NutriCoach';
+    const meta=qs('meta[name=theme-color]');
+    if(s.theme_color){if(meta)meta.content=s.theme_color;document.documentElement.style.setProperty('--primary',s.theme_color)}
+  }catch(e){}
+}
+async function showSettings(){
+  const t=localStorage.getItem('token');
+  if(!t){toast('Login richiesto');return}
+  const s=await jget('/api/settings?token='+t);
+  modal(`<div class=card style=width:360px><b>⚙️ Impostazioni Studio</b>
+    <label>Nome studio</label><input id=st-name value="${esc(s.clinic_name||'')}">
+    <label>Colore tema</label><input type=color id=st-color value="${s.theme_color||'#6366f1'}">
+    <label>URL Logo</label><input id=st-logo value="${esc(s.logo_url||'')}" placeholder=https://...>
+    <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick=saveSettings()>💾 Salva</button><button class=btn onclick=closeModal()>Chiudi</button></div></div>`);
+}
+async function saveSettings(){
+  const t=localStorage.getItem('token');
+  await jpost('/api/settings',{token:t,clinic_name:$('st-name').value,theme_color:$('st-color').value,logo_url:$('st-logo').value});
+  toast('Impostazioni salvate ✓');closeModal();setupBrand();
+}
+async function showStats(){
+  const s=await jget('/api/stats');
+  const catHtml=s.categories.map(c=>`<div style=display:flex;justify-content:space-between;font-size:11px;padding:2px 0><span>${esc(c.name||'Nessuna')}</span><span>${c.cnt} paz.</span></div>`).join('');
+  const genHtml=s.gender.map(g=>`<span style=margin:0 8px>${g.sex==='M'?'♂️':'♀️'} ${g.cnt}</span>`).join('');
+  const bia=s.bia_averages||{};
+  modal(`<div class=card><b>📊 Statistiche Studio</b>
+    <div class=row><div>👥 Pazienti: <b>${s.total_patients}</b></div><div>${genHtml}</div><div>📅 Età media: <b>${s.avg_age}</b></div></div>
+    <hr style=margin:6px 0>${catHtml}
+    ${bia.avg_weight?`<hr style=margin:6px 0><div style=font-size:10px>⚖️ BIA medio: ${Number(bia.avg_weight).toFixed(1)}kg, BMI ${Number(bia.avg_bmi).toFixed(1)}, BF ${Number(bia.avg_bf).toFixed(1)}%, TBW ${Number(bia.avg_tbw).toFixed(1)}L</div>`:''}
+    <div style=margin-top:8px><button class=btn onclick=closeModal()>Chiudi</button></div></div>`);
+}
 // BOOT
-nav('dashboard');
-</script></body></html>
+(async function(){
+  const token=localStorage.getItem('token');
+  if(token){
+    try{const s=await jget('/api/session?token='+token);if(s&&s.username){$('login-overlay').style.display='none';setupBrand();nav('dashboard');return}}catch(e){}
+  }
+  $('login-overlay').style.display='flex';
+})();
+</script>
+<!-- LOGIN OVERLAY -->
+<div id=login-overlay style="display:none;position:fixed;inset:0;background:var(--bg);z-index:9999;align-items:center;justify-content:center;flex-direction:column">
+  <div class=card style=width:320px><b>🔐 NutriCoach v2</b><br><span style=font-size:11px;color:var(--text2)>Accedi</span>
+  <input id=login-u placeholder=Username style=margin-top:12px><input id=login-p type=password placeholder=Password><div style=margin-top:8px><button class="btn btn-primary" onclick=doLogin()>Accedi</button></div></div>
+</div></body></html>
