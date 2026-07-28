@@ -1,25 +1,41 @@
 <!DOCTYPE html><html lang=it><head>
 <meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
-<title>NutriCoach v2</title>
+<title>NutriCoach v2.20.0</title>
 <link rel=stylesheet href=/static/style.css>
+<style>
+/* ONBOARDING TOUR */
+#onboarding-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;animation:fadeIn .3s}
+.onboarding-card{background:var(--card,#fff);border-radius:16px;padding:32px;max-width:420px;width:90%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.25)}
+.onboarding-card h2{font-size:1.5rem;margin:0 0 8px}
+.onboarding-card p{font-size:14px;color:var(--text2,#666);margin:0 0 20px;line-height:1.5}
+.onboarding-steps{display:flex;justify-content:center;gap:8px;margin-bottom:20px}
+.onboarding-step{width:10px;height:10px;border-radius:50%;background:var(--border,#ddd);transition:all .3s}
+.onboarding-step.active{background:var(--primary,#6366f1);transform:scale(1.3)}
+.onboarding-btns{display:flex;justify-content:space-between;gap:12px}
+.onboarding-btns .btn{flex:1;padding:10px;border-radius:8px;font-size:13px;cursor:pointer;border:none;transition:opacity .2s}
+.btn-skip{background:transparent;color:var(--text2,#888)}.btn-skip:hover{opacity:.7}
+.btn-next{background:var(--primary,#6366f1);color:#fff}.btn-next:hover{opacity:.9}
+.btn-finish{background:#22c55e;color:#fff}.btn-finish:hover{opacity:.9}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+</style>
 </head><body>
 <div class=sidebar>
   <div class=logo>🥗 <span>NutriCoach</span></div>
-  <div class="nav-item active" data-nav=dashboard onclick="nav('dashboard')"><span class=ico>📊</span><span>Dashboard</span></div>
-  <div class=nav-item data-nav=pazienti onclick="nav('pazienti')"><span class=ico>👥</span><span>Pazienti</span></div>
+  <div class="nav-item active" data-nav=dashboard onclick="nav('dashboard')" title="Dashboard: panoramica studio"><span class=ico>📊</span><span>Dashboard</span></div>
+  <div class=nav-item data-nav=pazienti onclick="nav('pazienti')" title="Elenco e gestione pazienti"><span class=ico>👥</span><span>Pazienti</span></div>
   <div class=nav-item data-nav=bia onclick="nav('bia')"><span class=ico>🔬</span><span>BIA</span></div>
-  <div class=nav-item data-nav=dieta onclick="nav('dieta')"><span class=ico>🍽️</span><span>Dieta</span></div>
-  <div class=nav-item data-nav=agenda onclick="nav('agenda')"><span class=ico>📅</span><span>Agenda</span></div>
+  <div class=nav-item data-nav=dieta onclick="nav('dieta')" title="Piani alimentari: crea e modifica"><span class=ico>🍽️</span><span>Dieta</span></div>
+  <div class=nav-item data-nav=agenda onclick="nav('agenda')" title="Calendario appuntamenti"><span class=ico>📅</span><span>Agenda</span></div>
   <div class=nav-item data-nav=notifiche onclick="nav('notifiche')"><span class=ico>📨</span><span>Notifiche</span></div>
   <div class=nav-item data-nav=archivio onclick="nav('archivio')"><span class=ico>📁</span><span>Archivio</span></div>
-  <div class=nav-item data-nav=ricettario onclick="nav('ricettario')"><span class=ico>📖</span><span>Ricettario</span></div>
+  <div class=nav-item data-nav=ricettario onclick="nav('ricettario')" title="Ricettario: crea e gestisci ricette"><span class=ico>📖</span><span>Ricettario</span></div>
   <div class=spacer></div>
-  <div class=nav-item style=cursor:pointer;font-size:11px onclick=showStats() title=Statistiche>📊</div>
-    <div class=nav-item style=cursor:pointer;font-size:11px onclick=showSettings() title=Impostazioni>⚙️</div>
-    <div class=nav-item style=cursor:pointer;font-size:11px;position:relative onclick=toggleNotifDropdown() title=Notifiche id=bell-btn>🔔<span id=bell-badge style="display:none;background:#ef4444;color:#fff;font-size:9px;padding:0 4px;border-radius:8px;position:absolute;top:-2px;right:-4px">0</span></div>
-    <div class=nav-item style=cursor:pointer;font-size:11px onclick=doLogout() title=Logout>🚪</div>
-  <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn>🌙</button>
+  <div class=nav-item style=cursor:pointer;font-size:11px onclick=showStats() title="Statistiche studio">📊</div>
+    <div class=nav-item style=cursor:pointer;font-size:11px onclick=showSettings() title="Impostazioni studio e brand">⚙️</div>
+    <div class=nav-item style=cursor:pointer;font-size:11px;position:relative onclick=toggleNotifDropdown() title="Notifiche: messaggi e promemoria" id=bell-btn>🔔<span id=bell-badge style="display:none;background:#ef4444;color:#fff;font-size:9px;padding:0 4px;border-radius:8px;position:absolute;top:-2px;right:-4px">0</span></div>
+    <div class=nav-item style=cursor:pointer;font-size:11px onclick=doLogout() title="Esci dalla sessione">🚪</div>
+  <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn title="Cambia tema chiaro/scuro">🌙</button>
   <div class=version>v2.17.0 · Dietowin</div>
 </div>
 <div id=notif-dropdown style="display:none;position:fixed;top:50px;right:50px;width:320px;max-height:360px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:10px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.15);font-size:12px">
@@ -225,8 +241,11 @@ async function openPatient(cid){
     <button class=tab-btn onclick=switchTab(this,'progressi')>Progressi</button>
     <button class=tab-btn onclick=switchTab(this,'diario')>📝</button>
     <button class=tab-btn onclick=switchTab(this,'chat')>💬</button>
+    <button class=tab-btn onclick=switchTab(this,'bilancia')>⚖️</button>
+    <button class=tab-btn onclick=switchTab(this,'wearable')>⌚</button>
+    <button class=tab-btn onclick=switchTab(this,'fitness')>🏃</button>
   </div>
-  <div id=patient-pane></div>`;
+      <div id=patient-pane></div>`;
   switchTab(qs('#ptabs .tab-btn'),'anamnesi');
 }
 function returnToDashboard(){
@@ -262,6 +281,9 @@ function switchTab(el,tab){
   else if(tab==='progressi')loadProgressi();
   else if(tab==='diario')loadDiario();
   else if(tab==='chat')loadChat();
+  else if(tab==='bilancia')loadBilancia();
+  else if(tab==='wearable')loadWearable();
+  else if(tab==='fitness')loadFitness();
 }
 async function loadAnamnesi(){
   let a={}; try{a=await jget('/api/patients/'+ST.cid+'/anamnesis')}catch(e){}
@@ -824,17 +846,155 @@ async function markNotifRead(nid){
 async function markAllNotifRead(){
   await jpost('/api/notifications/read-all',{});closeNotifDropdown();pollNotifs();
 }
+
+async function loadBilancia(){
+  const pid=ST.cid;
+  const items=await jget('/api/patients/'+pid+'/scale')||[];
+  let html='<div class=row style=margin-bottom:6px><b>⚖️ Bilancia — Misurazioni</b>'+
+    '<button class="btn btn-sm" onclick=addBilancia()>➕ Aggiungi</button></div><div style=font-size:11px>';
+  if(items.length){
+    items.forEach(m=>{html+='<div class=card style=padding:8px;margin:4px 0><b>'+esc(m.date||'')+'</b> — Peso '+(m.weight_kg||'—')+' kg · BF '+(m.bf_pct||'—')+'% · Muscolo '+(m.muscle_kg||'—')+' kg · '+
+      'Acqua '+(m.tbw_kg||'—')+' kg · VF '+(m.visceral_fat||'—')+' · BMR '+(m.bmr||'—')+
+      ' <span class=tag style=background:var(--bg)>'+esc(m.source||'manual')+'</span>'+
+      '<button class="btn btn-xs" onclick="jdel(\'/api/scale/'+m.id+'\');loadBilancia()">✕</button></div>'});
+  }else html+='<div class=empty>Nessuna misurazione</div>';
+  html+='</div>';
+  $('patient-pane').innerHTML=html;
+}
+async function addBilancia(){
+  modal('<div class=card><b>⚖️ Nuova misurazione</b><div class=field-row>'+
+    '<div><label>Data</label><input id=bs-d type=date value='+today()+'></div>'+
+    '<div><label>Peso (kg)</label><input id=bs-w type=number step=.1></div>'+
+    '<div><label>BF%</label><input id=bs-b type=number step=.1></div></div>'+
+    '<div class=field-row><div><label>Muscolo (kg)</label><input id=bs-m type=number step=.1></div>'+
+    '<div><label>Acqua (kg)</label><input id=bs-t type=number step=.1></div>'+
+    '<div><label>VF</label><input id=bs-v type=number step=.1></div></div>'+
+    '<div class=field-row><div><label>BMR</label><input id=bs-r type=number></div>'+
+    '<div><label>Età metabolica</label><input id=bs-a type=number></div></div>'+
+    '<div class=field-row><div><label>Note</label><input id=bs-n placeholder=Opzionale></div></div>'+
+    '<div style=margin-top:6px><button class="btn btn-primary" onclick=saveBilancia()>💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>');
+}
+async function saveBilancia(){
+  const b={date:$('bs-d')?.value,weight_kg:float($('bs-w')?.value),bf_pct:float($('bs-b')?.value),
+    muscle_kg:float($('bs-m')?.value),tbw_kg:float($('bs-t')?.value),visceral_fat:float($('bs-v')?.value),
+    bmr:int($('bs-r')?.value),metabolic_age:int($('bs-a')?.value),notes:$('bs-n')?.value||''};
+  const r=await jpost('/api/patients/'+ST.cid+'/scale',b);
+  if(r&&r.ok){toast('Salvato ✓');closeModal();loadBilancia()}else toast('Errore');
+}
+
+async function loadWearable(){
+  const pid=ST.cid;
+  const items=await jget('/api/patients/'+pid+'/wearable')||[];
+  let html='<div class=row style=margin-bottom:6px><b>⌚ Wearable — Dati dispositivo</b>'+
+    '<button class="btn btn-sm" onclick=addWearable()>➕ Aggiungi</button></div><div style=font-size:11px>';
+  if(items.length){
+    items.forEach(w=>{html+='<div class=card style=padding:8px;margin:4px 0><b>'+esc(w.date||'')+'</b> · '+esc(w.source)+' · Passi '+(w.steps||0)+' · FC '+(w.heart_rate_avg||'—')+' bpm'+
+      ' · Sonno '+(w.sleep_hours||'—')+'h · Cal '+(w.calories_active||0)+' · Stress '+(w.stress_avg||'—')+
+      '<button class="btn btn-xs" onclick="jdel(\'/api/wearable/'+w.id+'\');loadWearable()">✕</button></div>'});
+  }else html+='<div class=empty>Nessun dato</div>';
+  html+='</div>';
+  $('patient-pane').innerHTML=html;
+}
+async function addWearable(){
+  modal('<div class=card><b>⌚ Nuovo dato wearable</b><div class=field-row>'+
+    '<div><label>Data</label><input id=wr-d type=date value='+today()+'></div>'+
+    '<div><label>Fonte</label><select id=wr-s><option>garmin</option><option>fitbit</option><option>manual</option></select></div>'+
+    '<div><label>Passi</label><input id=wr-st type=number></div></div>'+
+    '<div class=field-row><div><label>FC media</label><input id=wr-hr type=number></div>'+
+    '<div><label>FC riposo</label><input id=wr-rr type=number></div>'+
+    '<div><label>Cal. attive</label><input id=wr-c type=number></div></div>'+
+    '<div class=field-row><div><label>Sonno (h)</label><input id=wr-sl type=number step=.1></div>'+
+    '<div><label>Stress</label><input id=wr-stress type=number></div></div>'+
+    '<div style=margin-top:6px><button class="btn btn-primary" onclick=saveWearable()>💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>');
+}
+async function saveWearable(){
+  const b={date:$('wr-d')?.value,source:$('wr-s')?.value||'garmin',steps:int($('wr-st')?.value)||0,
+    heart_rate_avg:int($('wr-hr')?.value),heart_rate_rest:int($('wr-rr')?.value),
+    calories_active:int($('wr-c')?.value)||0,sleep_hours:float($('wr-sl')?.value),
+    stress_avg:int($('wr-stress')?.value)};
+  const r=await jpost('/api/patients/'+ST.cid+'/wearable',b);
+  if(r&&r.ok){toast('Salvato ✓');closeModal();loadWearable()}else toast('Errore');
+}
+
+async function loadFitness(){
+  const pid=ST.cid;
+  const items=await jget('/api/patients/'+pid+'/fitness')||[];
+  let html='<div class=row style=margin-bottom:6px><b>🏃 Fitness — Attività importate</b>'+
+    '<button class="btn btn-sm" onclick=addFitness()>➕ Aggiungi</button></div><div style=font-size:11px>';
+  if(items.length){
+    items.forEach(f=>{html+='<div class=card style=padding:8px;margin:4px 0><b>'+esc(f.date||'')+'</b> · '+esc(f.source)+' · '+esc(f.activity_type||'')+''+
+      ' · '+(f.duration_min||0)+' min · '+(f.distance_km||0)+' km · '+(f.elevation_m||0)+' m · '+(f.calories||0)+' cal · FC '+(f.avg_hr||'—')+
+      '<button class="btn btn-xs" onclick="jdel(\'/api/fitness/'+f.id+'\');loadFitness()">✕</button></div>'});
+  }else html+='<div class=empty>Nessuna attività importata</div>';
+  html+='</div>';
+  $('patient-pane').innerHTML=html;
+}
+async function addFitness(){
+  modal('<div class=card><b>🏃 Nuova attività</b><div class=field-row>'+
+    '<div><label>Data</label><input id=ft-d type=date value='+today()+'></div>'+
+    '<div><label>Fonte</label><select id=ft-s><option>strava</option><option>trainingpeaks</option><option>manual</option></select></div>'+
+    '<div><label>Tipo</label><select id=ft-t><option>corsa</option><option>bici</option><option>nuoto</option><option>camminata</option><option>altro</option></select></div></div>'+
+    '<div class=field-row><div><label>Durata (min)</label><input id=ft-dur type=number step=.1></div>'+
+    '<div><label>Distanza (km)</label><input id=ft-dist type=number step=.1></div>'+
+    '<div><label>Dislivello (m)</label><input id=ft-el type=number></div></div>'+
+    '<div class=field-row><div><label>Calorie</label><input id=ft-cal type=number></div>'+
+    '<div><label>FC media</label><input id=ft-hr type=number></div>'+
+    '<div><label>Note</label><input id=ft-n placeholder=Opzionale></div></div>'+
+    '<div style=margin-top:6px><button class="btn btn-primary" onclick=saveFitness()>💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>');
+}
+async function saveFitness(){
+  const b={date:$('ft-d')?.value,source:$('ft-s')?.value||'strava',activity_type:$('ft-t')?.value||'',
+    duration_min:float($('ft-dur')?.value),distance_km:float($('ft-dist')?.value),
+    elevation_m:int($('ft-el')?.value),calories:int($('ft-cal')?.value),
+    avg_hr:int($('ft-hr')?.value),notes:$('ft-n')?.value||''};
+  const r=await jpost('/api/patients/'+ST.cid+'/fitness',b);
+  if(r&&r.ok){toast('Salvato ✓');closeModal();loadFitness()}else toast('Errore');
+}
+
+function int(v){const n=parseInt(v);return isNaN(n)?null:n}
+function float(v){const n=parseFloat(v);return isNaN(n)?null:n}
+
 // MODAL
 function modal(body){
   $('modal-root').innerHTML=`<div class=modal-overlay onclick="if(event.target===this)closeModal()"><div class=modal><div class=modal-head><span>NutriCoach</span><button class=btn onclick=closeModal() style=border:none;padding:2px 6px>✕</button></div><div class=modal-body>${body}</div></div></div>`;
 }
 function closeModal(){$('modal-root').innerHTML=''}
+// ONBOARDING TOUR
+function startOnboarding(){
+  if(localStorage.getItem('onboarding_done'))return;
+  const steps=[
+    {icon:'👋',title:'Benvenuto in NutriCoach!',text:'Da qui gestisci i tuoi pazienti, crei piani alimentari e monitori i progressi.'},
+    {icon:'📋',title:'Piani alimentari personalizzati',text:'Crea un piano alimentare personalizzato con pochi click - scegli cibi, porzioni e obiettivi.'},
+    {icon:'📊',title:'Monitoraggio e report',text:'Monitora i progressi con grafici, trend e report dettagliati per ogni paziente.'}
+  ];
+  let step=0;
+  function render(){
+    const s=steps[step];
+    const isLast=step===steps.length-1;
+    $('onboarding-overlay').innerHTML=`<div class=onboarding-card>
+      <div style=font-size:48px;margin-bottom:8px>${s.icon}</div>
+      <h2>${s.title}</h2>
+      <p>${s.text}</p>
+      <div class=onboarding-steps>${steps.map((_,i)=>`<div class="onboarding-step${i===step?' active':''}"></div>`).join('')}</div>
+      <div class=onboarding-btns>
+        <button class="btn btn-skip" onclick=endOnboarding()>Salta</button>
+        ${isLast
+          ?'<button class="btn btn-finish" onclick=endOnboarding()>Fine</button>'
+          :'<button class="btn btn-next" onclick=nextStep()>Avanti →</button>'}
+      </div>
+    </div>`;
+  }
+  window.nextStep=function(){step++;render()};
+  window.endOnboarding=function(){localStorage.setItem('onboarding_done','1');$('onboarding-overlay').style.display='none';$('onboarding-overlay').innerHTML=''};
+  const overlay=document.createElement('div');overlay.id='onboarding-overlay';
+  document.body.appendChild(overlay);render();
+}
 // LOGIN / AUTH
 async function doLogin(){
   const u=$('login-u')?.value,pw=$('login-p')?.value;
   if(!u||!pw){toast('Inserisci credenziali');return}
   const r=await jpost('/api/login',{username:u,password:pw});
-  if(r&&r.token){localStorage.setItem('token',r.token);$('login-overlay').style.display='none';setupBrand();toast('Login OK ✓');nav('dashboard')}
+  if(r&&r.token){localStorage.setItem('token',r.token);$('login-overlay').style.display='none';setupBrand();toast('Login OK ✓');startOnboarding();nav('dashboard')}
   else toast('Credenziali errate');
 }
 function doLogout(){
@@ -882,7 +1042,7 @@ async function showStats(){
 (async function(){
   const token=localStorage.getItem('token');
   if(token){
-    try{const s=await jget('/api/session?token='+token);if(s&&s.username){$('login-overlay').style.display='none';setupBrand();startNotifPoll();nav('dashboard');return}}catch(e){}
+    try{const s=await jget('/api/session?token='+token);if(s&&s.username){$('login-overlay').style.display='none';setupBrand();startNotifPoll();startOnboarding();nav('dashboard');return}}catch(e){}
   }
   $('login-overlay').style.display='flex';
 })();

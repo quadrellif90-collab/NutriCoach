@@ -328,7 +328,7 @@ def api_diet_pdf(pid: int):
         p0 = plans[0]
         targets = {"kcal": p0.get("kcal_target") or 2000, "protein_pct": 30, "carb_pct": 45,
                    "fat_pct": 25, "preset": p0.get("preset") or ""}
-    pdf_bytes = bytes(generate_diet_pdf(patient, targets, days_data, macros))
+    pdf_bytes = bytes(generate_diet_pdf(patient, targets, days_data, macros, brand=db.get_user_by_id(1)))
     fname = f"piano_{patient['name'].replace(' ','_')}_{_today()}.pdf"
     out_path = os.path.join(UPLOAD_DIR, fname)
     with open(out_path, "wb") as f:
@@ -359,7 +359,7 @@ def api_bia_trend_pdf(pid: int):
     from app.diet_pdf import generate_bia_report_pdf
     trend = api_bia_trend(pid)  # dict direct call (not async)
     p = db.get_patient(pid)
-    pdf = bytes(generate_bia_report_pdf(p or {"name": f"P{pid}"}, trend))
+    pdf = bytes(generate_bia_report_pdf(p or {"name": f"P{pid}"}, trend, brand=db.get_user_by_id(1)))
     fname = f"report_bia_{p['name'].replace(' ','_') if p else pid}_{_today()}.pdf"
     out = os.path.join(UPLOAD_DIR, fname)
     with open(out, "wb") as f: f.write(pdf)
@@ -419,7 +419,7 @@ def api_shopping_list_pdf(pid: int):
     from app.diet_pdf import generate_shopping_pdf
     data = api_shopping_list(pid)
     p = db.get_patient(pid)
-    pdf = bytes(generate_shopping_pdf(p or {"name": f"P{pid}"}, data["by_category"]))
+    pdf = bytes(generate_shopping_pdf(p or {"name": f"P{pid}"}, data["by_category"], brand=db.get_user_by_id(1)))
     fname = f"spesa_{p['name'].replace(' ','_') if p else pid}_{_today()}.pdf"
     out = os.path.join(UPLOAD_DIR, fname)
     with open(out, "wb") as f: f.write(pdf)
@@ -458,6 +458,34 @@ def api_portal_data(token: str):
     return {"patient": safe, "plan": days_data, "macros": macros, "last_bia": bia[0] if bia else None}
 
 
+@app.get("/api/portal/{token}/pdf")
+def api_portal_pdf(token: str):
+    """PDF del piano dal portale paziente."""
+    p = db.get_db().execute("SELECT id FROM patients WHERE portal_token=?", (token,)).fetchone()
+    if not p:
+        raise HTTPException(404, "Token non valido")
+    pid = p["id"]
+    from app.diet_pdf import generate_diet_pdf
+    patient = db.get_patient(pid)
+    items = db.list_diet_items(pid)
+    days_data = {}; macros = {}
+    for it in items:
+        d = it.get("day"); m = it.get("meal")
+        days_data.setdefault(d, {}).setdefault(m, []).append(it)
+    for d in ["lun","mar","mer","gio","ven","sab","dom"]:
+        ms = days_data.get(d, {})
+        macros[d] = db.compute_meal_macros(sum(ms.values(), []))
+    plans = db.list_diet_plans(pid)
+    targets = {"kcal":2000,"protein_pct":30,"carb_pct":45,"fat_pct":25,"preset":""}
+    if plans:
+        p0 = plans[0]
+        targets = {"kcal":p0.get("kcal_target") or 2000,"protein_pct":30,"carb_pct":45,"fat_pct":25,"preset":p0.get("preset") or ""}
+    pdf_bytes = bytes(generate_diet_pdf(patient, targets, days_data, macros, brand=db.get_user_by_id(1)))
+    out = os.path.join(UPLOAD_DIR, f"portal_{pid}_{_today()}.pdf")
+    with open(out, "wb") as f: f.write(pdf_bytes)
+    return FileResponse(out, media_type="application/pdf", filename=f"piano_{patient['name'].replace(' ','_')}.pdf")
+
+
 @app.post("/api/patients/{pid}/portal-token")
 def api_gen_portal_token(pid: int):
     """Genera/rigenera token per il portale paziente."""
@@ -469,7 +497,80 @@ def api_gen_portal_token(pid: int):
     return {"token": token, "url": f"/portal/{token}"}
 
 
-# ─── DIET TEMPLATES API ──────────────────────────────────────────────────
+# ─── SCALE MEASUREMENTS API ────────────────────────────────────────────
+
+@app.get("/api/patients/{pid}/scale")
+def api_list_scale(pid: int):
+    return db.list_scale_measurements(pid)
+
+
+@app.post("/api/patients/{pid}/scale")
+async def api_add_scale(pid: int, request: Request):
+    b = await request.json()
+    sid = db.add_scale_measurement(pid,
+        weight_kg=b.get("weight_kg"), bf_pct=b.get("bf_pct"),
+        muscle_kg=b.get("muscle_kg"), tbw_kg=b.get("tbw_kg"),
+        bone_kg=b.get("bone_kg"), visceral_fat=b.get("visceral_fat"),
+        bmr=b.get("bmr"), metabolic_age=b.get("metabolic_age"),
+        date=b.get("date"), source=b.get("source","manual"), notes=b.get("notes",""))
+    return {"id": sid, "ok": True}
+
+
+@app.delete("/api/scale/{sid}")
+def api_delete_scale(sid: int):
+    db.delete_scale_measurement(sid)
+    return {"ok": True}
+
+
+# ─── WEARABLE DATA API ─────────────────────────────────────────────────
+
+@app.get("/api/patients/{pid}/wearable")
+def api_list_wearable(pid: int):
+    return db.list_wearable_data(pid)
+
+
+@app.post("/api/patients/{pid}/wearable")
+async def api_add_wearable(pid: int, request: Request):
+    b = await request.json()
+    wid = db.add_wearable_entry(pid, b.get("source","garmin"),
+        date=b.get("date"), steps=b.get("steps",0),
+        heart_rate_avg=b.get("heart_rate_avg"), heart_rate_rest=b.get("heart_rate_rest"),
+        calories_active=b.get("calories_active",0), sleep_hours=b.get("sleep_hours"),
+        stress_avg=b.get("stress_avg"), raw_data=json.dumps(b.get("raw_data",{})))
+    return {"id": wid, "ok": True}
+
+
+@app.delete("/api/wearable/{wid}")
+def api_delete_wearable(wid: int):
+    db.delete_wearable_entry(wid)
+    return {"ok": True}
+
+
+# ─── FITNESS IMPORTS API ───────────────────────────────────────────────
+
+@app.get("/api/patients/{pid}/fitness")
+def api_list_fitness(pid: int):
+    return db.list_fitness_imports(pid)
+
+
+@app.post("/api/patients/{pid}/fitness")
+async def api_add_fitness(pid: int, request: Request):
+    b = await request.json()
+    fid = db.add_fitness_import(pid, b.get("source","strava"), b.get("activity_type",""),
+        date=b.get("date"), duration_min=b.get("duration_min"),
+        distance_km=b.get("distance_km"), elevation_m=b.get("elevation_m"),
+        calories=b.get("calories"), avg_hr=b.get("avg_hr"),
+        notes=b.get("notes",""), raw_data=json.dumps(b.get("raw_data",{})))
+    return {"id": fid, "ok": True}
+
+
+@app.delete("/api/fitness/{fid}")
+def api_delete_fitness(fid: int):
+    db.delete_fitness_import(fid)
+    return {"ok": True}
+
+
+    # ─── DIET TEMPLATES API ──────────────────────────────────────────────────
 
 @app.get("/api/diet-templates")
 def api_list_diet_templates():
@@ -1020,7 +1121,7 @@ def api_compare(ids: str):
 
 @app.get("/api/version")
 def api_version():
-    _, V = os.path.dirname(__file__), "2.0.0"
+    _, V = os.path.dirname(__file__), "2.20.0"
     return {"version": V, "platform": sys.platform}
 
 # ─── INIT ─────────────────────────────────────────────────────────────────

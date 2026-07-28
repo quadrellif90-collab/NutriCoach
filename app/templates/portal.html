@@ -37,7 +37,8 @@ async function load(){
     const dn={lun:'Lunedì',mar:'Martedì',mer:'Mercoledì',gio:'Giovedì',ven:'Venerdì',sab:'Sabato',dom:'Domenica'};
     const meals=['colazione','spuntino','pranzo','spuntino2','cena'];
     const ml={colazione:'Colazione',spuntino:'Spuntino',pranzo:'Pranzo',spuntino2:'Spuntino',cena:'Cena'};
-    let html=`<div class=header><h1>🍽️ Piano Alimentare</h1><div class=meta>${esc(d.patient.name)}</div></div>`;
+    let html=`<div class=header><h1>🍽️ Piano Alimentare</h1><div class=meta>${esc(d.patient.name)}</div>
+    <a href=/api/portal/${TK}/pdf class=btn style="display:inline-block;margin-top:8px;background:#fff;color:#0d9488;padding:6px 14px;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none" target=_blank>📄 Scarica PDF</a></div></div>`;
     if(d.last_bia) html+=`<div class=card><b>📊 Ultima misurazione BIA</b><div class=bia>Peso: ${d.last_bia.weight_kg||'—'} kg · BF%: ${d.last_bia.bf_pct||'—'} · Massa magra: ${d.last_bia.ffm_kg||'—'} kg</div></div>`;
     days.forEach(day=>{
       const m=d.plan[day]||{}; const mac=d.macros[day]||{};

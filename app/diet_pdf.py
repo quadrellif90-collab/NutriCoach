@@ -23,8 +23,9 @@ for p in ["C:\\Windows\\Fonts\\arial.ttf","C:\\Windows\\Fonts\\Arial.ttf",
 FONT_NAME = "Uni" if _FONT_PATH else "Helvetica"
 
 class DietPDF(FPDF):
-    def __init__(self):
+    def __init__(self, brand=None):
         super().__init__()
+        self.brand = brand or {}
         if _FONT_PATH:
             self.add_font("Uni","",_FONT_PATH,uni=True)
             self.add_font("Uni","B",_FONT_PATH,uni=True)
@@ -35,11 +36,28 @@ class DietPDF(FPDF):
     def _tc(self,r,g,b): self.set_text_color(r,g,b)
 
     def header(self):
-        self._f("B",14); self._tc(13,148,136)
-        self.cell(0,8,"NutriCoach - Piano Alimentare",align="C",new_x="LMARGIN",new_y="NEXT")
+        bn = (self.brand.get("clinic_name") or "").strip()
+        # Logo + clinic name
+        logo_url = self.brand.get("logo_url","")
+        if logo_url and os.path.isfile(logo_url):
+            try:
+                self.image(logo_url, MARGIN, 8, 16)
+                self.set_x(MARGIN+18)
+            except: pass
+        tc = self.brand.get("theme_color","")
+        if not tc: tc = "#0d9488"
+        if tc.startswith("#"): tc = tc[1:]
+        if len(tc) < 6:
+            tc = "0d9488"
+        r,g,b = int(tc[0:2],16), int(tc[2:4],16), int(tc[4:6],16)
+        self._f("B",14); self._tc(r,g,b)
+        title = bn if bn else "NutriCoach - Piano Alimentare"
+        self.cell(0,8,title,align="C",new_x="LMARGIN",new_y="NEXT")
         self._f("",8); self._tc(100,116,139)
-        self.cell(0,4,f"Generato il {dt.date.today().strftime('%d/%m/%Y')} | NutriCoach v2",
-                  align="C",new_x="LMARGIN",new_y="NEXT")
+        sub = f"Generato il {dt.date.today().strftime('%d/%m/%Y')}"
+        if bn: sub += f" | {bn}"
+        else: sub += " | NutriCoach v2"
+        self.cell(0,4,sub,align="C",new_x="LMARGIN",new_y="NEXT")
         self.line(MARGIN,self.get_y(),W-MARGIN,self.get_y()); self.ln(4)
 
     def footer(self):
@@ -142,8 +160,8 @@ class DietPDF(FPDF):
         self.multi_cell(W-2*MARGIN,4,", ".join(foods))
 
 
-def generate_diet_pdf(patient,targets,days_data,macros,recommendations=None,excluded_foods=None):
-    pdf = DietPDF()
+def generate_diet_pdf(patient,targets,days_data,macros,recommendations=None,excluded_foods=None,brand=None):
+    pdf = DietPDF(brand=brand)
     pdf.alias_nb_pages()
     pdf.set_auto_page_break(auto=True,margin=20)
     pdf.add_page()
@@ -155,9 +173,9 @@ def generate_diet_pdf(patient,targets,days_data,macros,recommendations=None,excl
     return pdf.output()
 
 
-def generate_shopping_pdf(patient, by_category):
+def generate_shopping_pdf(patient, by_category, brand=None):
     """Genera lista spesa in PDF raggruppata per categoria."""
-    pdf = DietPDF()
+    pdf = DietPDF(brand=brand)
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.add_page()
     pdf._f("B", 14); pdf._tc(13, 148, 136)
@@ -215,9 +233,9 @@ def _draw_line_chart(pdf, x, y, w, h, values, color=(13, 148, 136), label=""):
         pdf.circle(px, py, 0.8, style="F")
 
 
-def generate_bia_report_pdf(patient, trend):
+def generate_bia_report_pdf(patient, trend, brand=None):
     """Report PDF con grafici evolutivi multi-metrica."""
-    pdf = DietPDF()
+    pdf = DietPDF(brand=brand)
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.add_page()
     pdf._f("B", 14); pdf._tc(13, 148, 136)

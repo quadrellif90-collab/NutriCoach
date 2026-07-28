@@ -1180,7 +1180,7 @@ def count_unread(pid):
 
 
 def ensure_v2_tables():
-    """Crea meal_diary e messages se non esistono (per upgrade v2.15->v2.16)."""
+    """Crea tabelle per upgrade (v2.15->v2.20)."""
     con = get_db()
     con.executescript("""
         CREATE TABLE IF NOT EXISTS meal_diary (
@@ -1204,8 +1204,48 @@ def ensure_v2_tables():
             created_at TEXT DEFAULT (datetime('now')),
             FOREIGN KEY (patient_id) REFERENCES patients(id)
         );
+        CREATE TABLE IF NOT EXISTS app_notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER,
+            title TEXT NOT NULL,
+            message TEXT NOT NULL DEFAULT '',
+            type TEXT NOT NULL DEFAULT 'reminder',
+            read INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (patient_id) REFERENCES patients(id)
+        );
+        CREATE TABLE IF NOT EXISTS scale_measurements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            date TEXT NOT NULL DEFAULT (date('now')),
+            weight_kg REAL, bf_pct REAL, muscle_kg REAL, tbw_kg REAL,
+            bone_kg REAL, visceral_fat REAL, bmr REAL, metabolic_age INTEGER,
+            source TEXT DEFAULT 'manual', notes TEXT DEFAULT '',
+            FOREIGN KEY (patient_id) REFERENCES patients(id)
+        );
+        CREATE TABLE IF NOT EXISTS wearable_data (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            source TEXT NOT NULL DEFAULT 'garmin',
+            date TEXT NOT NULL DEFAULT (date('now')),
+            steps INTEGER DEFAULT 0, heart_rate_avg INTEGER,
+            heart_rate_rest INTEGER, calories_active INTEGER,
+            sleep_hours REAL, stress_avg INTEGER, raw_data TEXT,
+            FOREIGN KEY (patient_id) REFERENCES patients(id)
+        );
+        CREATE TABLE IF NOT EXISTS fitness_imports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id INTEGER NOT NULL,
+            source TEXT NOT NULL DEFAULT 'strava',
+            date TEXT NOT NULL DEFAULT (date('now')),
+            activity_type TEXT, duration_min REAL, distance_km REAL,
+            elevation_m REAL, calories INTEGER, avg_hr INTEGER,
+            notes TEXT DEFAULT '', raw_data TEXT,
+            FOREIGN KEY (patient_id) REFERENCES patients(id)
+        );
     """)
-    con.commit()# ─── APP NOTIFICATIONS CRUD ──────────────────────────────────────────────
+    con.commit()
+
 
 def add_app_notification(patient_id, title, message, notif_type="reminder"):
     con = get_db()
@@ -1235,4 +1275,67 @@ def mark_all_app_read():
 
 def count_app_unread():
     r = get_db().execute("SELECT COUNT(*) FROM app_notifications WHERE read=0").fetchone()
-    return r[0] if r else 0
+    return r[0] if r else 0# ─── SCALE MEASUREMENTS CRUD ──────────────────────────────────────────
+
+def add_scale_measurement(pid, weight_kg=None, bf_pct=None, muscle_kg=None, tbw_kg=None,
+                         bone_kg=None, visceral_fat=None, bmr=None, metabolic_age=None,
+                         date=None, source="manual", notes=""):
+    con = get_db()
+    con.execute("""INSERT INTO scale_measurements
+        (patient_id,date,weight_kg,bf_pct,muscle_kg,tbw_kg,bone_kg,visceral_fat,bmr,metabolic_age,source,notes)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (pid, date or dt.date.today().isoformat(), weight_kg, bf_pct, muscle_kg, tbw_kg,
+         bone_kg, visceral_fat, bmr, metabolic_age, source, notes))
+    con.commit()
+    return con.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+def list_scale_measurements(pid, limit=20):
+    return rows_to_list(get_db().execute(
+        "SELECT * FROM scale_measurements WHERE patient_id=? ORDER BY date DESC LIMIT ?", (pid, limit)).fetchall())
+
+def delete_scale_measurement(sid):
+    get_db().execute("DELETE FROM scale_measurements WHERE id=?", (sid,)).connection.commit()
+
+
+# ─── WEARABLE DATA CRUD ────────────────────────────────────────────────
+
+def add_wearable_entry(pid, source, date=None, steps=0, heart_rate_avg=None,
+                       heart_rate_rest=None, calories_active=0, sleep_hours=None,
+                       stress_avg=None, raw_data=None):
+    con = get_db()
+    con.execute("""INSERT INTO wearable_data
+        (patient_id,source,date,steps,heart_rate_avg,heart_rate_rest,calories_active,sleep_hours,stress_avg,raw_data)
+        VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (pid, source, date or dt.date.today().isoformat(), steps, heart_rate_avg,
+         heart_rate_rest, calories_active, sleep_hours, stress_avg, raw_data))
+    con.commit()
+    return con.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+def list_wearable_data(pid, limit=30):
+    return rows_to_list(get_db().execute(
+        "SELECT * FROM wearable_data WHERE patient_id=? ORDER BY date DESC LIMIT ?", (pid, limit)).fetchall())
+
+def delete_wearable_entry(wid):
+    get_db().execute("DELETE FROM wearable_data WHERE id=?", (wid,)).connection.commit()
+
+
+# ─── FITNESS IMPORTS CRUD ──────────────────────────────────────────────
+
+def add_fitness_import(pid, source, activity_type, date=None, duration_min=None,
+                      distance_km=None, elevation_m=None, calories=None,
+                      avg_hr=None, notes="", raw_data=None):
+    con = get_db()
+    con.execute("""INSERT INTO fitness_imports
+        (patient_id,source,date,activity_type,duration_min,distance_km,elevation_m,calories,avg_hr,notes,raw_data)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+        (pid, source, date or dt.date.today().isoformat(), activity_type,
+         duration_min, distance_km, elevation_m, calories, avg_hr, notes, raw_data))
+    con.commit()
+    return con.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+def list_fitness_imports(pid, limit=30):
+    return rows_to_list(get_db().execute(
+        "SELECT * FROM fitness_imports WHERE patient_id=? ORDER BY date DESC LIMIT ?", (pid, limit)).fetchall())
+
+def delete_fitness_import(fid):
+    get_db().execute("DELETE FROM fitness_imports WHERE id=?", (fid,)).connection.commit()
