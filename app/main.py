@@ -21,7 +21,7 @@ import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
 from app import ocr_engine  # OCR integrato: Windows OCR + fallback Tesseract
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.5.0")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.6.0")
 
 # Servi file statici (CSS)
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
@@ -190,6 +190,36 @@ def api_diet_pdf(pid: int):
     return FileResponse(out_path, media_type="application/pdf", filename=fname)
 
 
+# ─── BIA TREND ───────────────────────────────────────────────────────────
+
+@app.get("/api/patients/{pid}/bia-trend")
+def api_bia_trend(pid: int):
+    """Serie temporale delle misurazioni BIA per grafici multi-metrica."""
+    rows = db.list_bia(pid)
+    metrics = ["weight_kg", "bf_pct", "ffm_kg", "tbw_kg", "phase_angle", "muscle_kg", "bmi"]
+    series = {m: [] for m in metrics}
+    dates = []
+    for r in sorted(rows, key=lambda x: x.get("date", "")):
+        dates.append(r.get("date"))
+        for m in metrics:
+            v = r.get(m)
+            series[m].append(round(v, 2) if v is not None else None)
+    return {"dates": dates, "series": series, "metrics": metrics}
+
+
+@app.get("/api/patients/{pid}/bia-trend/pdf")
+def api_bia_trend_pdf(pid: int):
+    """Report PDF con grafici evolutivi."""
+    from app.diet_pdf import generate_bia_report_pdf
+    trend = api_bia_trend(pid)  # dict direct call (not async)
+    p = db.get_patient(pid)
+    pdf = bytes(generate_bia_report_pdf(p or {"name": f"P{pid}"}, trend))
+    fname = f"report_bia_{p['name'].replace(' ','_') if p else pid}_{_today()}.pdf"
+    out = os.path.join(UPLOAD_DIR, fname)
+    with open(out, "wb") as f: f.write(pdf)
+    return FileResponse(out, media_type="application/pdf", filename=fname)
+
+
 # ─── FABBISOGNO ENERGETICO ─────────────────────────────────────────────────
 
 @app.get("/api/patients/{pid}/energy-needs")
@@ -338,10 +368,6 @@ async def api_bia_upload(pid: int, file: UploadFile = File(...)):
 def api_delete_bia(bid: int):
     db.delete_bia(bid)
     return {"ok": True}
-
-@app.get("/api/patients/{pid}/bia-trend")
-def api_bia_trend(pid: int, field: str = "weight_kg", days: int = 365):
-    return db.bia_trend(pid, field, days)
 
 # ─── MISURE ───────────────────────────────────────────────────────────────
 

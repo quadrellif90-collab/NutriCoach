@@ -177,3 +177,75 @@ def generate_shopping_pdf(patient, by_category):
             pdf.cell(0, 5, f"{it['food']} — {int(it['grams'])} g", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
     return pdf.output()
+
+
+# ─── BIA REPORT PDF (grafici evolutivi disegnati) ──────────────────────────
+
+def _draw_line_chart(pdf, x, y, w, h, values, color=(13, 148, 136), label=""):
+    """Disegna un mini grafico a linee da una lista di valori (None saltati)."""
+    pts = [(i, v) for i, v in enumerate(values) if v is not None]
+    if len(pts) < 1:
+        return
+    pdf.set_draw_color(*color)
+    pdf.set_font("Helvetica", "", 7)
+    pdf.set_text_color(100, 116, 139)
+    if label:
+        pdf.text(x, y - 1, label)
+    if len(pts) == 1:
+        # singolo punto
+        px = x + 5
+        py = y + h - 5
+        pdf.circle(px, py, 1, style="F")
+        return
+    vals = [v for _, v in pts]
+    vmin, vmax = min(vals), max(vals)
+    rng = (vmax - vmin) or 1
+    n = len(pts)
+    for i in range(1, n):
+        x1 = x + 3 + (pts[i-1][0] / max(1, n-1)) * (w - 6)
+        y1 = y + h - 4 - ((pts[i-1][1] - vmin) / rng) * (h - 8)
+        x2 = x + 3 + (pts[i][0] / max(1, n-1)) * (w - 6)
+        y2 = y + h - 4 - ((pts[i][1] - vmin) / rng) * (h - 8)
+        pdf.line(x1, y1, x2, y2)
+    # cerchi sui punti
+    pdf.set_fill_color(*color)
+    for i, v in pts:
+        px = x + 3 + (i / max(1, n-1)) * (w - 6)
+        py = y + h - 4 - ((v - vmin) / rng) * (h - 8)
+        pdf.circle(px, py, 0.8, style="F")
+
+
+def generate_bia_report_pdf(patient, trend):
+    """Report PDF con grafici evolutivi multi-metrica."""
+    pdf = DietPDF()
+    pdf.set_auto_page_break(auto=True, margin=20)
+    pdf.add_page()
+    pdf._f("B", 14); pdf._tc(13, 148, 136)
+    pdf.cell(0, 8, f"Report BIA - {patient.get('name', '-')}", new_x="LMARGIN", new_y="NEXT")
+    pdf._f("", 8); pdf._tc(100, 116, 139)
+    pdf.cell(0, 4, f"Generato il {dt.date.today().strftime('%d/%m/%Y')} | NutriCoach v2", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(4)
+
+    dates = trend.get("dates", [])
+    series = trend.get("series", {})
+    labels = {
+        "weight_kg": "Peso (kg)", "bf_pct": "BF%", "ffm_kg": "Massa magra (kg)",
+        "tbw_kg": "Acqua totale (kg)", "phase_angle": "Angolo di fase (°)", "muscle_kg": "Muscolo (kg)", "bmi": "BMI",
+    }
+    colors = [(13,148,136),(239,68,68),(59,130,246),(34,197,94),(168,85,247),(245,158,11),(100,116,139)]
+    for i, m in enumerate(trend.get("metrics", [])):
+        if pdf.get_y() > H - 50:
+            pdf.add_page()
+        lab = labels.get(m, m)
+        pdf._f("B", 10); pdf._tc(30, 41, 59)
+        pdf.cell(0, 5, lab, new_x="LMARGIN", new_y="NEXT")
+        _draw_line_chart(pdf, MARGIN, pdf.get_y(), W - 2*MARGIN, 22, series.get(m, []), colors[i % len(colors)])
+        pdf.set_y(pdf.get_y() + 24)
+    # Tabella riassuntivo
+    if dates:
+        pdf._f("B", 10); pdf._tc(13, 148, 136)
+        pdf.cell(0, 6, "Dettaglio misurazioni", new_x="LMARGIN", new_y="NEXT")
+        pdf._f("", 7); pdf._tc(30, 41, 59)
+        for d in dates:
+            pdf.cell(0, 4, d, new_x="LMARGIN", new_y="NEXT")
+    return pdf.output()

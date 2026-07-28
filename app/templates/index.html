@@ -14,7 +14,7 @@
   <div class=nav-item data-nav=notifiche onclick="nav('notifiche')"><span class=ico>📨</span><span>Notifiche</span></div>
   <div class=nav-item data-nav=archivio onclick="nav('archivio')"><span class=ico>📁</span><span>Archivio</span></div>
   <div class=spacer></div>
-  <div class=version>v2.5.0 · Dietowin</div>
+  <div class=version>v2.6.0 · Dietowin</div>
 </div>
 <div class=main>
   <div class=topbar>
@@ -381,8 +381,12 @@ async function loadBIA(){
 }
 async function loadBIAReading(){
   const cid=+$('bp-cl').value;if(!cid){$('bp-v').innerHTML='<div class=empty>Seleziona un paziente</div>';return}
-  const [bia,trend]=await Promise.all([jget('/api/patients/'+cid+'/bia'),jget('/api/patients/'+cid+'/bia-trend?field=weight_kg&days=365')]);
-  $('bp-v').innerHTML=`${trend.length>1?`<div class=card>${trendSVG(trend.map(t=>({v:t.weight_kg,d:t.date})))}</div>`:''}<div class=card><b>Storico</b>${bia.length?`<table><tr><th>Data</th><th>Peso</th><th>BF%</th><th>MM%</th><th>PhA</th><th>BMR</th><th></th></tr>
+  const [bia,trend]=await Promise.all([jget('/api/patients/'+cid+'/bia'),jget('/api/patients/'+cid+'/bia-trend')]);
+  const labels={weight_kg:'Peso',bf_pct:'BF%',ffm_kg:'Massa magra',tbw_kg:'Acqua',phase_angle:'PhA',muscle_kg:'Muscolo',bmi:'BMI'};
+  const charts=trend.metrics.map(m=>`<div class=card style=padding:8px><b style=font-size:11px>${labels[m]||m}</b>${trendSVG(trend.dates.map((d,i)=>({v:trend.series[m][i],d})))||'<div class=empty style=padding:8px>1 misurazione</div>'}</div>`).join('');
+  $('bp-v').innerHTML=`<div class=row style=margin-bottom:6px><button class="btn btn-sm btn-outline" onclick="window.open('/api/patients/${cid}/bia-trend/pdf','_blank')">📊 Report PDF</button></div>
+  <div style=display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px>${charts}</div>
+  <div class=card><b>Storico</b>${bia.length?`<table><tr><th>Data</th><th>Peso</th><th>BF%</th><th>MM%</th><th>PhA</th><th>BMR</th><th></th></tr>
   ${bia.map(r=>`<tr><td>${r.date}</td><td>${r.weight_kg||'—'}</td><td>${r.bf_pct||'—'}</td><td>${r.mm_pct||'—'}</td><td>${r.pha||'—'}</td><td>${r.bmr_kcal||'—'}</td>
   <td><button class="btn btn-sm btn-danger" onclick="if(confirm('Eliminare?')){jdel('/api/bia/${r.id}').then(()=>loadBIAReading())}">✕</button></td></tr>`).join('')}</table>`:'<div class=empty>Nessuna BIA</div>'}</div>`;
 }
