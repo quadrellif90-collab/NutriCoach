@@ -477,6 +477,16 @@ def seed_food_catalog():
         targets TEXT DEFAULT '{}',
         owner_id INTEGER DEFAULT NULL
     )""")
+    # Crea recipes
+    con.execute("""CREATE TABLE IF NOT EXISTS recipes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        ingredients TEXT DEFAULT '[]',
+        instructions TEXT DEFAULT '',
+        servings INTEGER DEFAULT 4,
+        category TEXT DEFAULT '',
+        macros TEXT DEFAULT '{}'
+    )""")
     # Migra colonne patients
     for col in ["portal_token TEXT DEFAULT NULL", "birth_date TEXT DEFAULT NULL"]:
         try:
@@ -605,6 +615,94 @@ def compute_meal_macros(items):
                 total["fat_g"] += f["fat_g"] * ratio
                 total["fiber_g"] += f["fiber_g"] * ratio
     return {k: round(v, 1) for k, v in total.items()}
+
+
+# ─── FOOD SWAPS (sostituzione nutriente-equivalente) ─────────────────────
+
+def get_food_swaps(food_id, limit=5):
+    """Trova alimenti nella stessa categoria con profilo nutrizionale simile."""
+    import math
+    con = get_db()
+    food = con.execute("SELECT * FROM food_catalog WHERE id=?", (food_id,)).fetchone()
+    if not food:
+        return []
+    food = dict(food)
+    cat = food["category"]
+    if not cat:
+        candidates = con.execute("SELECT * FROM food_catalog WHERE id != ?", (food_id,)).fetchall()
+    else:
+        candidates = con.execute("SELECT * FROM food_catalog WHERE category=? AND id != ?", (cat, food_id)).fetchall()
+    target = {k: food.get(k, 0) for k in ["kcal", "protein_g", "carbs_g", "fat_g"]}
+    scored = []
+    for c in candidates:
+        c = dict(c)
+        cur = {"kcal": c["kcal"], "protein_g": c["protein_g"], "carbs_g": c["carbs_g"], "fat_g": c["fat_g"]}
+        dist = math.sqrt(
+            ((cur["kcal"] - target["kcal"]) / max(target["kcal"], 1)) ** 2 +
+            ((cur["protein_g"] - target["protein_g"]) / max(target["protein_g"], 1)) ** 2 +
+            ((cur["carbs_g"] - target["carbs_g"]) / max(target["carbs_g"], 1)) ** 2 +
+            ((cur["fat_g"] - target["fat_g"]) / max(target["fat_g"], 1)) ** 2
+        )
+        scored.append((dist, c))
+    scored.sort(key=lambda x: x[0])
+    return [s[1] for s in scored[:limit]]
+
+
+# ─── RECIPES (ricettario personale) ──────────────────────────────────────
+
+def create_recipe(name, ingredients, instructions, servings=4, category="", macros=None):
+    """Crea ricetta. ingredients = lista dict (food_id o name, grams)."""
+    con = get_db()
+    import json
+    cur = con.execute(
+        "INSERT INTO recipes (name, ingredients, instructions, servings, category, macros) VALUES (?,?,?,?,?,?)",
+        (name, json.dumps(ingredients), instructions, servings, category, json.dumps(macros or {}))
+    )
+    con.commit()
+    return cur.lastrowid
+
+
+def get_recipe(rid):
+    import json
+    con = get_db()
+    r = con.execute("SELECT * FROM recipes WHERE id=?", (rid,)).fetchone()
+    if not r: return None
+    d = dict(r)
+    try: d["ingredients"] = json.loads(d["ingredients"]) if isinstance(d["ingredients"], str) else d["ingredients"]
+    except: d["ingredients"] = []
+    try: d["macros"] = json.loads(d["macros"]) if isinstance(d["macros"], str) else d["macros"]
+    except: d["macros"] = {}
+    return d
+
+
+def list_recipes(category="", q=""):
+    import json
+    con = get_db()
+    q = f"%{q}%"
+    if category:
+        rows = con.execute(
+            "SELECT * FROM recipes WHERE category=? AND (name LIKE ? OR instructions LIKE ?) ORDER BY name",
+            (category, q, q)).fetchall()
+    else:
+        rows = con.execute(
+            "SELECT * FROM recipes WHERE name LIKE ? OR instructions LIKE ? ORDER BY name",
+            (q, q)).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        try: d["ingredients"] = json.loads(d["ingredients"]) if isinstance(d["ingredients"], str) else d["ingredients"]
+        except: d["ingredients"] = []
+        try: d["macros"] = json.loads(d["macros"]) if isinstance(d["macros"], str) else d["macros"]
+        except: d["macros"] = {}
+        out.append(d)
+    return out
+
+
+def delete_recipe(rid):
+    con = get_db()
+    con.execute("DELETE FROM recipes WHERE id=?", (rid,))
+    con.commit()
+
 
 def export_all_json():
     """Esporta tutto il DB in un dict JSON-serializzabile."""

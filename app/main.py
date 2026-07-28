@@ -21,7 +21,7 @@ import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
 from app import ocr_engine  # OCR integrato: Windows OCR + fallback Tesseract
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.9.0")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.10.0")
 
 # Servi file statici (CSS)
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
@@ -148,6 +148,69 @@ def api_get_food(fid: int):
         raise HTTPException(404, "Alimento non trovato")
     return f
 
+
+@app.get("/api/foods/{fid}/swaps")
+def api_food_swaps(fid: int, limit: int = 5):
+    """Sostituzioni nutriente-equivalenti per un alimento."""
+    return {"swaps": db.get_food_swaps(fid, limit=limit)}
+
+
+# ─── RECIPES API ─────────────────────────────────────────────────────────
+
+@app.get("/api/recipes")
+def api_list_recipes(category: str = "", q: str = ""):
+    return {"recipes": db.list_recipes(category=category, q=q)}
+
+
+@app.get("/api/recipes/{rid}")
+def api_get_recipe(rid: int):
+    r = db.get_recipe(rid)
+    if not r:
+        raise HTTPException(404, "Ricetta non trovata")
+    return r
+
+
+@app.post("/api/recipes")
+async def api_create_recipe(request: Request):
+    b = await request.json()
+    rid = db.create_recipe(
+        b.get("name", "Ricetta"), b.get("ingredients", []),
+        b.get("instructions", ""), b.get("servings", 4),
+        b.get("category", ""), b.get("macros")
+    )
+    return {"ok": True, "id": rid}
+
+
+@app.delete("/api/recipes/{rid}")
+def api_delete_recipe(rid: int):
+    db.delete_recipe(rid)
+    return {"ok": True}
+
+
+@app.post("/api/recipes/{rid}/apply")
+async def api_apply_recipe(rid: int, request: Request):
+    """Applica una ricetta come pasti per un paziente."""
+    b = await request.json()
+    pid = b.get("patient_id")
+    day = b.get("day", "lun")
+    meal = b.get("meal", "pranzo")
+    recipe = db.get_recipe(rid)
+    if not recipe:
+        raise HTTPException(404, "Ricetta non trovata")
+    count = 0
+    for ing in (recipe.get("ingredients") or []):
+        food_id = ing.get("food_id")
+        grams = ing.get("grams", 100)
+        if food_id:
+            db.add_diet_item(
+                pid=pid, plan_id=None, day=day, meal=meal,
+                food=ing.get("name", ""), grams=grams, food_id=food_id
+            )
+            count += 1
+    return {"ok": True, "items_added": count}
+
+
+# ─── PATIENTS CRUD ────────────────────────────────────────────────────────
 
 @app.get("/api/patients/{pid}/diet-macros/{day}")
 def api_diet_macros(pid: int, day: str):

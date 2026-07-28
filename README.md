@@ -4,211 +4,138 @@
 
 **Gestionale di nutrizione per nutrizionisti, locale, che chiude il loop tra piano alimentare, misure del corpo (BIA/antropometria) e follow-up del cliente — con diario, pianificazione automatica, appuntamenti e notifiche. Tutto offline.**
 
-![Python](https://img.shields.io/badge/Python-3.11-blue) ![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-green) ![Version](https://img.shields.io/badge/Version-v1.5.5-brightgreen) ![License](https://img.shields.io/badge/License-MIT-blue)
+![Python](https://img.shields.io/badge/Python-3.11-blue) ![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-green) ![Version](https://img.shields.io/badge/Version-v2.9.0-brightgreen) ![License](https://img.shields.io/badge/License-MIT-blue)
 
-Latest: **[v1.5.5 — Clinical Nutrition (23 condizioni), Pattern Dietetici, Cartella Clinica unificata, Workflow A–E + fix](https://github.com/quadrellif90-collab/NutriCoach/releases/tag/v1.5.5)**
+Latest: **[v2.9.0 — Template dieta personalizzabili + UI migliorata](https://github.com/quadrellif90-collab/NutriCoach/releases/tag/v2.9.0)**
 
 > 🔒 **100% offline.** Nessun dato lascia la macchina. Nessun account remoto. Nessuna sottoscrizione. I dati dei tuoi clienti vivono solo in `~/.nutricoach/` sul tuo computer.
 
 ---
 
-**Indice:** [TL;DR](#tldr) · [Perché esiste](#perché-esiste) · [Cosa fa l'app (per area)](#cosa-fa-lapp-per-area) · [Avvio rapido](#avvio-rapido) · [Motore nutrizionale (single source of truth)](#motore-nutrizionale-single-source-of-truth) · [Dieta da PDF & OCR](#dieta-da-pdf--ocr) · [BIA & Antropometria](#bia--antropometria) · [Scienza Sport](#scienza-sport) · [Diario & Pianificatore](#diario--pianificatore) · [Follow-up (Notifiche/Agenda/Messaggi)](#follow-up-notificheagendamessaggi) · [Auto-aggiornamento](#auto-aggiornamento) · [Architettura](#architettura) · [Installer & Release](#installer--release) · [Licenza](#licenza)
-
-> Approfondimento su cosa fa nel dettaglio: [**docs/COSA-FA.md**](docs/COSA-FA.md). Presentazione per clienti/stakeholder: [**PRESENTAZIONE.md**](PRESENTAZIONE.md). Come si fa una release / come funziona l'update: [**docs/AGGIORNAMENTO.md**](docs/AGGIORNAMENTO.md). Changelog: [**CHANGELOG.md**](CHANGELOG.md).
-
----
-
 ## TL;DR
 
-NutriCoach è un gestionale **localhost-only** che:
+NutriCoach v2 è un gestionale **localhost-only** stile Dietowin/Nutrium che include:
 
-- Gestisce **clienti** con anagrafica, ricerca e **confronto** tra due clienti (sesso M/F + obiettivo come selettori);
-- **Dashboard** pulita stile Nutrium: statistiche studio (pazienti, appuntamenti oggi, promemoria, da monitorare) + lista pazienti + promemoria;
-- **Scheda paziente a sezioni** (8 tab verticali): Anamnesi · Misure · Dieta · Referti · Appuntamenti · Sintomi · Integratori · Progressi — con header paziente + contatto Email/WhatsApp;
-- **Wizard anamnesi** modale a 4 step (anagrafica → obiettivi → clinica → conferma) che crea il cliente e popola l'anamnesi in un colpo;
-- Ha un **diario alimentare** con ricerca alimenti e **aggregazione automatica di macro + micronutrienti** (Calcio, Ferro, Vitamina C, Potassio, Magnesio);
-- **Pianifica settimane** bilanciate partendo dai tuoi target (kcal / proteine / carboidrati / grassi) — con **preset dieto configurabili** (Mediterranea, Zona, CKD, Carb Cycling, Alto Proteico, Vegano, Keto, Personalizzato);
-- **Tab Scienza Sport** con strategie pro → amatoriali documentate (distribuzione proteica, gut training, periodizzazione a blocchi, creatina, wearable recovery, FTWR, recovery microcycle);
-- Importa referti **BIA** (InBody/Tanita) anche da testo incollato "sporco" o PDF scansionato (OCR);
-- Calcola **antropometria** (BMR Mifflin-St Jeor, % grasso Durnin-Womersley, WHR, FFMI);
-- Tiene **appuntamenti** (calendario), **messaggi** (thread), **acqua** e **note di progresso**;
-- Invia **notifiche** configurabili per cliente (riscontro, report, promemoria) con il nutrizionista che riceve una coda "da inviare";
-- Ha **login locale** (username + password, hash PBKDF2) e **tema chiaro/scuro**;
-- **Si aggiorna da solo** da GitHub Releases (banner + auto-install su Windows).
-- **Chiude il loop clinico**: il piano si **filtra automaticamente** per le condizioni del cliente (esclusioni FODMAP/istamina/integratori), e il **clinical-summary** unifica condizioni, conflitti, esclusioni, integratori e trend in un'unica vista; il **diario** alimenta pattern AI + reintroduzione FODMAP guidata.
+- **Database alimentare professionale** (212 alimenti INRAN/CREA, 11 categorie, valori nutrizionali completi: kcal, proteine, carboidrati, grassi, fibre, zuccheri, sale)
+- **Diario alimentare** con ricerca autocomplete e calcolo macro automatico
+- **Piani alimentari** generati automaticamente per protocollo (Mediterranea, Zona, Keto, Vegano, CKD, Carb Cycling...)
+- **Export PDF professionale** del piano con brand, macro giornalieri, raccomandazioni
+- **Calcolo fabbisogno energetico** (Mifflin-St Jeor, Harris-Benedict, Katch-McArdle) con TDEE e target per obiettivo
+- **Lista della spesa automatica** dal piano (aggregata per alimento e per categoria) + export PDF
+- **BIA & Antropometria** con OCR integrato (Windows.Media.Ocr, 14/14 campi da PDF AKERN) e grafici evolutivi multi-metrica
+- **Portale paziente** (vista read-only via link protetto con token)
+- **Backup automatico** giornaliero + export/import JSON/CSV
+- **Template dieta personalizzabili** e **tema chiaro/scuro**
 
-Tutti i calcoli derivano da **un solo motore** (`meal_planner.py` / `nutrition_engine.py`): diario, piano e riepilogo sono *viste* coerenti, mai numeri discordanti. Le condizioni cliniche (23) sono la **single source of truth** del filtraggio: da esse derivano esclusioni, integratori e pattern dietetici.
+Tutti i calcoli derivano da **un solo motore**: diario, piano, lista spesa e PDF sono *viste* coerenti, mai numeri discordanti.
 
 ---
 
-## Perché esiste
+## 🚀 Novità v2.x (8 capitoli completati)
 
-I software di dietetica in circolazione cadono spesso in due limiti:
-
-- **Cloud obbligatorio**: i dati sensibili dei pazienti finiscono su server di terzi (problema GDPR per il nutrizionista);
-- **Fogli di calcolo separati**: dieta, misure e follow-up vivono in file diversi, i numeri non tornano mai tra loro.
-
-NutriCoach nasce per essere l'opposto: **uno strumento proprio, portatile, privato**, dove il motore di calcolo è uno solo e ogni schermata è una vista di quei numeri. Il nutrizionista importa la dieta del cliente, registra le misure, pianifica, e il follow-up (notifiche/appuntamenti) gli ricorda cosa fare — tutto sul suo PC.
-
----
-
-## Cosa fa l'app (per area)
-
-| Area | Cosa fa | Dove (modulo) |
-|------|---------|---------------|
-| **Dashboard** | Statistiche studio (pazienti, appuntamenti oggi, promemoria, da monitorare) + lista pazienti + promemoria | `app.py` (UI) |
-| **Clienti** | Anagrafica, ricerca, confronto tra due clienti, sesso M/F + obiettivo | `db.py`, `app.py` |
-| **Clinical Nutrition** | **23 condizioni** (IBS/FODMAP, SIBO, IBD, GERD, celiachia, NCGS, allergie IgE, EoE, lattosio, dispepsia, obesità, T2D, ipertensione, osteoporosi, endometriosi, MASLD, PCOS, istamina…) con strategie evidence-based 2024-2026; **conflitti** tra condizioni, **integratori** e **protocolli phased** (es. FODMAP 3 fasi) | `clinical_nutrition.py`, `app.py` |
-| **Pattern Dietetici** | 7 pattern evidence-based (Mediterranea, DASH, MIND, Portfolio, basso IG, RPAH/FAILSAFE, Supporto Barriera) con suggerimento per condizione | `clinical_nutrition.py` (DIET_PATTERNS) |
-| **Cartella Clinica** | Vista unificata per cliente: condizioni → conflitti → esclusioni → integratori → fase dieta → sintomi → trend peso | `/api/clients/{cid}/clinical-summary` |
-| **Dieta da PDF** | Import con gruppi alternativa + grammature; **OCR su scansioni**; calcolo macro/giorno; spesa; riepilogo; export HTML/PDF | `diet_parser.py`, `ocr.py`, `pdf_export.py`, `nutrition_engine.py` |
-| **Diario** | Builder manuale voce-per-voce, ricerca alimenti, **aggregazione automatica macro + micro**; **AI pattern** + **reintroduzione FODMAP guidata** (ordine Monash) | `meal_planner.py`, `nutrition_db.py`, `clinical_nutrition.py` |
-| **Pianificatore** | Settimana bilanciata generata dai target (kcal/P/C/F) **filtra automaticamente le esclusioni cliniche** + **preset dieto** + export PDF clinico | `meal_planner.py`, `diet_presets.py`, `pdf_export.py` |
-| **BIA** | Parsing referti InBody/Tanita (paste o PDF, anche scansionati/OCR), riconoscimento robusto su testo "sporco" | `bia_parser.py`, `ocr.py` |
-| **Antropometria** | BMR (Mifflin-St Jeor), % grasso (Durnin-Womersley), WHR, FFMI, classificazione | `anthropometry.py` |
-| **Scienza Sport** | Strategie pro→amatoriali con calcolatori (proteina, gut training, blocchi, creatina, wearable) + report PDF | `sport_science.py`, `pdf_sport_science.py` |
-| **Onboarding** | **Wizard anamnesi 4-step** (anagrafica → obiettivi → clinica → conferma) che crea il cliente e popola l'anamnesi | UI + `/api/clients/{cid}/anamnesis` |
-| **Notifiche** | Configurabili per cliente (riscontro/report/promemoria) con frequenza e canale; coda "da inviare"; invio via Email/WhatsApp (bridge pywebview) | `notifications.py`, `app.py` |
-| **Messaggi** | Thread locale per cliente | `db.py` |
-| **Agenda** | Calendario mensile appuntamenti (per cliente o generale) | `db.py`, UI |
-| **Acqua & Progressi** | Log idratazione e note di avanzamento | `db.py` |
-| **Login / Tema** | Account nutrizionista (PBKDF2), toggle chiaro/scuro persistente | `auth.py`, UI |
-
-Il dettaglio di ogni area (flusso, formule, endpoint) è in [**docs/COSA-FA.md**](docs/COSA-FA.md).
+| Ver | Capitolo | Funzionalità chiave |
+|-----|----------|---------------------|
+| **v2.1.0** | OCR Engine | Windows.Media.Ocr embedded (nessuna dipendenza), 14/14 campi BIA da PDF |
+| **v2.2.0** | Database alimenti | 212 alimenti, 11 categorie, ricerca, valori completi |
+| **v2.3.0** | Export PDF piano | Tabella 7×5, macro giornalieri, raccomandazioni, alimenti esclusi |
+| **v2.4.0** | Fabbisogno calorico | Mifflin/Harris/Katch-McArdle, TDEE, target per obiettivo |
+| **v2.5.0** | Lista spesa | Aggregazione grammature, raggruppamento per categoria, PDF |
+| **v2.6.0** | Grafici evolutivi | 7 metriche BIA, sparkline SVG + report PDF |
+| **v2.7.0** | Portale paziente | Vista read-only protetta da token, mobile-friendly |
+| **v2.8.0** | Backup + export | Backup giornaliero auto, CSV/JSON, import paziente |
+| **v2.9.0** | Template + UI | Template dieta riusabili, tema scuro/chiaro |
 
 ---
 
 ## Avvio rapido
 
 ```bash
-# Sviluppo / web app
+# Clona e installa
+git clone https://github.com/quadrellif90-collab/NutriCoach.git
+cd NutriCoach
 pip install -r requirements.txt
-python run.py                 # apre http://127.0.0.1:8090 nel browser
 
-# Build desktop (EXE Windows) + installer NSIS
-pyinstaller NutriCoach.spec --clean --noconfirm
-makensis /DVERSION=1.5.5 installer.nsi     # -> NutriCoach-Setup-1.5.5.exe
-
-# Build desktop (macOS .dmg) — richiede macOS
-pyinstaller NutriCoach.spec --clean --noconfirm
-# impacchetta dist/NutriCoach in .app + hdiutil -> NutriCoach-1.5.5.dmg
+# Avvia (Windows)
+python run_v2.py
+# oppure con porta personalizzata
+python run_v2.py 8400
 ```
 
-Nessun `.exe` necessario per la modalità web: il backend FastAPI gira e l'interfaccia è HTML nel browser. I dati utente restano in `~/.nutricoach/`.
+Apri `http://127.0.0.1:8400` nel browser.
+
+**Build EXE:** `python build_exe.py` (PyInstaller) → `dist/NutriCoach.exe`
 
 ---
 
-## Motore nutrizionale (single source of truth)
+## Database alimentare
 
-Modulo [`meal_planner.py`](meal_planner.py) + [`nutrition_db.py`](nutrition_db.py) + [`nutrition_engine.py`](nutrition_engine.py). **Un solo motore calcola, gli altri moduli sono viste di quei numeri:**
+`nutrition_db.py` contiene 212 alimenti italiani (fonte INRAN/CREA) con valori per 100g:
+- kcal, proteine, carboidrati, grassi, fibre, zuccheri, sale
+- 11 categorie: latticini, carni, pesce, cereali, legumi, verdure, frutta, frutta secca, olii grassi, bevande, varie
 
-- **Ricerca alimenti** su ~240 alimenti di riferimento (fonti INRAN/LARN) con match fuzzy (sinonimi, singolare/plurale).
-- **Micronutrienti**: ogni alimento porta Calcio, Ferro, Vitamina C, Potassio, Magnesio oltre a macro (kcal, P, C, F, fibra, zuccheri, sale).
-- **Aggregazione**: `diary_totals()` somma macro+micro di tutte le voci del diario — niente doppi calcoli.
-- **Pianificazione**: `generate_plan(targets)` compone 7 giorni × 5 pasti bilanciati (proteina/carb/verdura/grasso/frutta) vicino ai target.
-- **Preset dieto**: `diet_presets.py` espone target macro per tipo di dieta (Mediterranea, Zona, CKD, Carb Cycling, Alto Proteico, Vegano, Keto, Personalizzato).
-
-Tutte le funzioni hanno test (`tests/test_nutricoach.py`).
+La tabella `food_catalog` viene popolata automaticamente al primo avvio (migrazione automatica per DB esistenti).
 
 ---
 
-## Dieta da PDF & OCR
+## Motore BIA & OCR
 
-[`diet_parser.py`](diet_parser.py) importa piani alimentari. Supporta i **gruppi con alternative** (OR-exclusivi: scegli *un* alimento per gruppo) e le **grammature** per alimento. Da lì: calcolo **macro/giorno**, **lista spesa**, **riepilogo** ed **export** in HTML e PDF.
-
-**OCR reale per PDF scansionati:** se il PDF non ha testo selezionabile, [`ocr.py`](ocr.py) renderizza le pagine e le passa a **Tesseract**, che è **bundlato dentro l'EXE/dmg** (installato in CI via `choco`/`brew`). Se il binario non è disponibile, l'app mostra comunque le immagini per copia manuale.
-
----
-
-## BIA & Antropometria
-
-[`bia_parser.py`](bia_parser.py) importa misurazioni da referti di bioimpedenziometria:
-
-- **Paste di testo** (anche da PDF scansionato/OCR) o upload PDF nativo;
-- estrazione: peso, BMI, massa grassa/magra, acqua totale (TBW), **angolo di fase** (PhA);
-- **robusto sul testo "sporco"**: decimali (`75,2` o `75.2`), valori tra parentesi `(75.2)`, PDF a due colonne, numeri confusi con le unità (`m2` non catturato come `2`).
-
-[`anthropometry.py`](anthropometry.py) calcola BMR (Mifflin-St Jeor), % grasso (Durnin-Womersley), WHR, FFMI e li classifica. Test: `tests/test_nutricoach.py` (incluso il parser BIA su casi problematici).
+`app/ocr_engine.py` utilizza **Windows.Media.Ocr** (API nativa Windows 10/11, italiano) per estrarre i valori dai referti PDF AKERN/InBody:
+- Rende il PDF in immagini (PyMuPDF)
+- Estrae il testo con coordinate
+- Parsa la tabella "Risultati" in sequenza
+- Mappa 14 campi: peso, altezza, BMI, FM, BF%, FFM, TBW, ECW, ICW, BCM, SMM, ASMM, PhA, Idratazione
+- Fallback su Tesseract se `winsdk` non è disponibile
 
 ---
 
-## Scienza Sport
+## Calcolo fabbisogno (v2.4.0)
 
-Tab **🔬 Scienza Sport**: approcci documentati nel mondo elite (WorldTour ciclismo, calcio pro) resi applicabili ad amatoriale/semi-pro, con calcolatori reali e fonti 2024-2026 citate:
-
-- **A Distribuzione proteica**: 1.6–2.2 g/kg, 4–5 pasti, ~3 g leucina; nota "mito finestra anabolica 30'".
-- **B Gut training**: protocollo 4 settimane (30→120 g/h), 2:1 glucosio:fruttosio.
-- **C Periodizzazione a blocchi**: fasi → target carb % coerente a FTWR.
-- **D Creatina**: loading 0.3 g/kg × 5–7g, mant. 3–5 g/d (anche donne).
-- **E Wearable recovery**: Oura/WHOOP/Garmin, trend su settimane.
-- FTWR fueling, recovery microcycle (calcio pro), nota chetoni UCI.
-
-Report PDF esportabile per cliente (endpoint `/api/clients/{cid}/sport-science-report`).
+`app/energy_calc.py`:
+- **Mifflin-St Jeor**: `10·kg + 6.25·cm − 5·età + (5 M / −161 F)`
+- **Harris-Benedict** (rivista)
+- **Katch-McArdle**: `370 + 21.6·LBM` (se BF% nota)
+- **TDEE** = BMR × fattore attività
+- **Target kcal** = TDEE ± obiettivo (dimagrimento −15%, massa +10%, performance +5%)
 
 ---
 
-## Diario & Pianificatore
+## Portale paziente (v2.7.0)
 
-- **Diario**: aggiungi voci (alimento + grammi) e il motore aggrega macro + micro in tempo reale. Puoi usare gli alimenti di riferimento o aggiungerne di personalizzati (`foods_custom`).
-- **Pianificatore**: inserisci i target (kcal / P / C / F) o scegli un **preset dieto**; ottieni una settimana di pasti bilanciati, pronta da mostrare o adattare al cliente.
+Genera un link protetto (`/api/patients/{pid}/portal-token`) che il paziente può aprire per vedere il proprio piano alimentare in formato mobile-friendly. Il token è opaco (secrets.token_urlsafe) e i dati sensibili non vengono esposti.
 
 ---
 
-## Follow-up (Notifiche/Agenda/Messaggi)
+## Backup & Export (v2.8.0)
 
-- **Notifiche**: per ogni cliente scegli *quali* messaggi inviare (riscontro settimanale, promemoria report, ecc.), su che canale e con che frequenza. Il nutrizionista vede una **coda "da inviare"** generata automaticamente dalle scadenze. Da NutriCoach puoi **inviare davvero** via Email (client di sistema / `mailto:`) o WhatsApp (`wa.me`) tramite il bridge della finestra nativa (pywebview) — nessun server intermedio, il messaggio parte dal tuo PC.
-- **Agenda**: calendario mensile degli appuntamenti, per cliente o generale; click su un giorno per aggiungerne uno.
-- **Messaggi**: thread locale per cliente (simula la conversazione; nessun cloud).
+- **Backup automatico** giornaliero in `~/.nutricoach/backups/` (copia DB + dump JSON)
+- **Export CSV** di tutti i pazienti
+- **Export/Import JSON** di un singolo paziente (BIA, dieta, appuntamenti, documenti)
 
 ---
 
 ## Architettura
 
-- `app.py` — backend FastAPI (tutti gli endpoint REST, inclusi `/api/self-update/*`)
-- `run.py` — entrypoint (uvicorn, apre il browser, log su file, check update all'avvio)
-- `db.py` — SQLite (`~/.nutricoach/nutricoach.db`): clienti, misure, diete, BIA, appuntamenti, messaggi, acqua, note
-- `nutrition_db.py` — database alimenti di riferimento (macro + micro)
-- `nutrition_engine.py` — calcolo nutrienti / pasti
-- `meal_planner.py` — **motore unico**: aggrega macro+micro, genera piani
-- `diet_parser.py` / `bia_parser.py` — import referti (+ `ocr.py` per scansioni)
-- `diet_presets.py` — preset dieto configurabili
-- `sport_science.py` / `pdf_sport_science.py` — strategie pro + report PDF
-- `anthropometry.py` — BMR, %grasso, WHR, FFMI
-- `charts.py` — grafici SVG offline
-- `pdf_export.py` — export PDF (reportlab)
-- `notifications.py` — motore notifiche
-- `auth.py` — login locale (PBKDF2)
-- `version.py` — versione app (auto-update)
-- `templates/dashboard.html` — UI (italiano, tema chiaro/scuro)
-- `assets/icon.png` + `icon.ico` + `icon.icns` — branding
-- `.github/workflows/build.yml` — CI: build Win (exe + installer NSIS, Tesseract bundlato) e Mac (.dmg) su tag
-
-Dati in `~/.nutricoach/`; **nessun cloud**.
-
----
-
-## Auto-aggiornamento
-
-NutriCoach verifica all'avvio l'ultima release su GitHub (`releases/latest`) e, se è più nuova di `version.py`, mostra un banner "Aggiornamento disponibile". Su **Windows** l'installer si lancia in silenzioso (`/S`) e l'app si riavvia; su **Mac** il banner segnala la novità e l'utente trascina il `.app` nel dmg. I dati in `~/.nutricoach/` **non vengono mai toccati**. Dettagli per sviluppatori in [**docs/AGGIORNAMENTO.md**](docs/AGGIORNAMENTO.md).
-
----
-
-## Installer & Release
-
-| Piattaforma | Asset | Note |
-|---|---|---|
-| Windows | `NutriCoach-Setup-<ver>.exe` (installer NSIS) | doppio click → Program Files + scorciatoie + icona |
-| Windows | `NutriCoach.exe` (portatile) | estrai e avvia, nessuna installazione |
-| macOS | `NutriCoach-<ver>.dmg` | apri e trascina in Applicazioni |
-
-Vedi [**Releases**](https://github.com/quadrellif90-collab/NutriCoach/releases).
-
-> **macOS**: l'app non è firmata/notarizzata da Apple. Al primo avvio, se compare "app non può essere aperta", fai click destro → **Apri**, oppure da Terminale: `xattr -dr com.apple.quarantine /Applications/NutriCoach.app`.
+```
+NutriCoach/
+├── app/
+│   ├── main.py          # FastAPI app + tutte le route API
+│   ├── database.py      # SQLite, migrazioni automatiche
+│   ├── diet_pdf.py      # Generazione PDF (piano, spesa, report BIA)
+│   ├── energy_calc.py   # Fabbisogno calorico
+│   ├── ocr_engine.py    # OCR Windows.Media.Ocr + fallback Tesseract
+│   ├── templates/
+│   │   ├── index.html   # UI principale (Dietowin-style)
+│   │   └── portal.html  # Portale paziente read-only
+│   ├── static/style.css # CSS con tema chiaro/scuro
+│   ├── diet_presets.py  # Protocolli dietetici
+│   └── ...
+├── nutrition_db.py      # Database alimenti (INRAN/CREA)
+├── run_v2.py            # Avvio server
+└── build_exe.py         # Build PyInstaller
+```
 
 ---
 
 ## Licenza
 
-MIT — vedi [`LICENSE`](LICENSE).
-
-© 2026 Filippo Siviglia — NutriCoach. Costruito localmente, per nutrizionisti che vogliono i propri dati sul proprio computer.
+MIT — vedi [LICENSE](LICENSE).

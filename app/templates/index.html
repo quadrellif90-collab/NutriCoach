@@ -13,9 +13,10 @@
   <div class=nav-item data-nav=agenda onclick="nav('agenda')"><span class=ico>📅</span><span>Agenda</span></div>
   <div class=nav-item data-nav=notifiche onclick="nav('notifiche')"><span class=ico>📨</span><span>Notifiche</span></div>
   <div class=nav-item data-nav=archivio onclick="nav('archivio')"><span class=ico>📁</span><span>Archivio</span></div>
+  <div class=nav-item data-nav=ricettario onclick="nav('ricettario')"><span class=ico>📖</span><span>Ricettario</span></div>
   <div class=spacer></div>
   <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn>🌙</button>
-  <div class=version>v2.9.0 · Dietowin</div>
+  <div class=version>v2.10.0 · Dietowin</div>
 </div>
 <div class=main>
   <div class=topbar>
@@ -44,7 +45,7 @@ function clr(){const c=['#6366f1','#0d9488','#f59e0b','#ef4444','#8b5cf6','#ec48
 async function nav(n){
   ST.nav=n;
   qsa('.nav-item').forEach(e=>e.classList.toggle('active',e.dataset.nav===n));
-  $('page-title').textContent={'dashboard':'Dashboard','pazienti':'Pazienti','bia':'BIA & Misure','dieta':'Dieta','agenda':'Agenda','notifiche':'Notifiche','archivio':'Archivio'}[n]||n;
+  $('page-title').textContent={'dashboard':'Dashboard','pazienti':'Pazienti','bia':'BIA & Misure','dieta':'Dieta','agenda':'Agenda','notifiche':'Notifiche','archivio':'Archivio','ricettario':'Ricettario'}[n]||n;
   if(n==='dashboard')await loadDashboard();
   else if(n==='pazienti')await loadPazienti();
   else if(n==='bia')await loadBIA();
@@ -52,6 +53,7 @@ async function nav(n){
   else if(n==='agenda')loadAgenda();
   else if(n==='notifiche')loadNotifiche();
   else if(n==='archivio')loadArchivio();
+  else if(n==='ricettario')loadRicettario();
 }
 // THEME TOGGLE
 function toggleTheme(){
@@ -62,6 +64,66 @@ function toggleTheme(){
   $('theme-btn').textContent=next==='dark'?'☀️':'🌙';
 }
 (function(){const t=localStorage.getItem('nc-theme');if(t){document.documentElement.setAttribute('data-theme',t);const b=$('theme-btn');if(b)b.textContent=t==='dark'?'☀️':'🌙';}})();
+// RICETTARIO
+async function loadRicettario(q){
+  const qp=q||'';
+  const r=await jget('/api/recipes?q='+encodeURIComponent(qp));
+  const rc=r.recipes||[];
+  $('view').innerHTML=`<div class=row style=margin:8px 0>
+    <input id=rq placeholder="Cerca ricetta..." value="${esc(qp)}" oninput="loadRicettario(this.value)" style=flex:1>
+    <button class=btn onclick=showAddRecipe()>➕ Nuova ricetta</button>
+  </div>
+  ${rc.length?rc.map(r=>`<div class=card><div style=display:flex;justify-content:space-between;align-items:center>
+    <b>${esc(r.name)}</b>
+    <div><span class=tag>${esc(r.category||'—')}</span> <span style=font-size:10px;color:var(--text2)>${r.servings||4} porz.</span></div>
+  </div>
+  <div style=font-size:10px;color:var(--text2);margin:2px 0>${(r.ingredients||[]).map(i=>i.name||'?').join(', ')}</div>
+  <div style=font-size:10px;margin:2px 0>${r.macros?`📊 ${r.macros.kcal||'?'}kcal · P${r.macros.protein_g||'?'}g · C${r.macros.carbs_g||'?'}g · F${r.macros.fat_g||'?'}g`:'📊 —'}</div>
+  <div style=margin-top:4px;display:flex;gap:4px>
+    <button class="btn btn-sm btn-outline" onclick="applyRecipe(${r.id},'${esc(r.name)}')">➕ Al piano</button>
+    <button class="btn btn-sm btn-danger" onclick="delRecipe(${r.id})">✕</button>
+  </div></div>`).join(''):'<div class=card empty>Nessuna ricetta. Creane una!</div>'}`;
+}
+function showAddRecipe(){
+  modal(`<div class=card><b>📖 Nuova ricetta</b>
+  <label>Nome</label><input id=rn>
+  <label>Categoria</label><select id=rc><option value=antipasti>Antipasti</option><option value=primi>Primi</option><option value=secondi selected>Secondi</option><option value=contorni>Contorni</option><option value=dolci>Dolci</option></select>
+  <label>Porzioni</label><input id=rs type=number value=4>
+  <label>Ingredienti (food_id:grammi, separati da virgola)</label><textarea id=ri rows=3 placeholder="es. 1:200, 29:150, 45:100"></textarea>
+  <div style=font-size:10px;color:var(--text2)>Usa ID alimento (es. 1=petto pollo, 29=pasta, ecc.)</div>
+  <label>Istruzioni</label><textarea id=rt rows=3></textarea>
+  <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick=saveRecipe()>💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
+}
+async function saveRecipe(){
+  const name=$('rn').value; if(!name){toast('Inserisci nome');return}
+  const ingText=$('ri').value;
+  const ingredients=[];
+  if(ingText){
+    ingText.split(',').forEach(p=>{
+      const parts=p.trim().split(':');
+      if(parts.length===2) ingredients.push({food_id:parseInt(parts[0]),name:'',grams:parseFloat(parts[1])||100});
+    });
+  }
+  await jpost('/api/recipes',{
+    name, category:$('rc').value, servings:parseInt($('rs').value)||4,
+    ingredients, instructions:$('rt').value
+  });
+  toast('Ricetta salvata ✓');closeModal();loadRicettario();
+}
+async function delRecipe(rid){
+  if(!confirm('Eliminare questa ricetta?'))return;
+  await jdel('/api/recipes/'+rid);
+  toast('Ricetta eliminata');loadRicettario();
+}
+async function applyRecipe(rid,rname){
+  if(!ST.cid){toast('Apri prima un paziente');return}
+  if(!confirm(`Applicare "${rname}" al paziente corrente?`))return;
+  const day=prompt('Giorno (lun/mar/mer/...):','lun')||'lun';
+  const meal=prompt('Past (colazione/pranzo/cena/...):','pranzo')||'pranzo';
+  const r=await jpost('/api/recipes/'+rid+'/apply',{patient_id:ST.cid,day,meal});
+  if(r&&r.ok)toast(`Ricetta applicata (${r.items_added} ingredienti) ✓`);
+  else toast('Errore');
+}
 // DASHBOARD
 async function loadDashboard(){
   const cls=await jget('/api/patients');
@@ -260,8 +322,17 @@ async function onFoodSearch(q){
   if(!q||q.length<2){res.innerHTML='';return}
   const data=await jget('/api/foods?q='+encodeURIComponent(q)+'&limit=10');
   if(data.length){
-    res.innerHTML=data.map(f=>`<div class=food-result onclick="selectFood(${f.id},'${esc(f.name)}',${f.kcal},${f.protein_g},${f.carbs_g},${f.fat_g})" style=padding:4px 6px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;font-size:11px><span>${esc(f.name)}</span><span style=color:var(--text2)>${f.kcal}kcal P${f.protein_g} C${f.carbs_g} F${f.fat_g}</span></div>`).join('');
+    res.innerHTML=data.map(f=>`<div class=food-result onclick="selectFood(${f.id},'${esc(f.name)}',${f.kcal},${f.protein_g},${f.carbs_g},${f.fat_g})" style=padding:4px 6px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:11px><span>${esc(f.name)}</span><span><span style=color:var(--text2)>${f.kcal}kcal P${f.protein_g} C${f.carbs_g} F${f.fat_g}</span><button class="btn btn-sm btn-outline" onclick="event.stopPropagation();showSwaps(${f.id})" style=margin-left:6px;font-size:9px>🔄</button></span></div>`).join('');
   } else {res.innerHTML='<div class=empty style=font-size:11px>Nessun risultato</div>'}
+}
+async function showSwaps(fid){
+  const r=await jget(`/api/foods/${fid}/swaps`);
+  const swaps=r.swaps||[];
+  if(!swaps.length){toast('Nessuna alternativa trovata');return}
+  modal(`<div class=card><b>🔄 Sostituzioni nutriente-equivalenti</b>
+  ${swaps.map((s,i)=>`<div style=padding:4px 0;border-bottom:1px solid var(--border);cursor:pointer;font-size:11px onclick="selectFood(${s.id},'${esc(s.name)}',${s.kcal},${s.protein_g},${s.carbs_g},${s.fat_g});closeModal()"><b>${i+1}.</b> ${esc(s.name)} <span style=color:var(--text2)>${s.kcal}kcal P${s.protein_g} C${s.carbs_g} F${s.fat_g}</span></div>`).join('')||'<div class=empty>Nessuna alternativa</div>'}
+  <div style=margin-top:8px><button class=btn onclick=closeModal()>Chiudi</button></div></div>`);
+}
 }
 let _selectedFood=null;
 function selectFood(id,name,kcal,p,c,f){
