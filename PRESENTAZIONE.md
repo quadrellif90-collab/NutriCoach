@@ -1,118 +1,238 @@
-# 🍏 NutriCoach v2.9.0 — Presentazione
+# 🥗 NutriCoach v2.20.0
 
-**Il gestionale di nutrizione locale che chiude il loop clinico tra dieta, misure e follow-up.**
+## Gestionale di Nutrizione Professionale — 100% Offline
 
-> *Dietowin-style, 100% offline, zero abbonamenti, zero cloud.*
-
----
-
-## 🎯 Perché NutriCoach
-
-I software di dietetica cadono in due limiti:
-1. **Cloud obbligatorio** → dati sensibili pazienti fuori GDPR
-2. **Fogli di calcolo separati** → i numeri non tornano mai
-
-NutriCoach è l'opposto: **uno strumento tuo, portatile, privato**, con un solo motore di calcolo. Ogni schermata è una *vista* coerente degli stessi numeri.
+> **Un unico strumento per l'intero flusso di lavoro del nutrizionista:**
+> dall'acquisizione dei dati BIA, alla generazione del piano alimentare,
+> al follow-up del paziente, fino all'analisi dei risultati.
 
 ---
 
-## ✨ Cosa fa (8 capitoli completati)
+## 🎯 Il Problema
 
-### 1. 🗄️ Database alimentare professionale (v2.2.0)
-- 212 alimenti italiani (fonte INRAN/CREA)
-- 11 categorie: latticini, carni, pesce, cereali, legumi, verdure, frutta, frutta secca, olii grassi, bevande, varie
-- Valori completi: kcal, proteine, carboidrati, grassi, fibre, zuccheri, sale
-- Ricerca autocomplete integrata nel diario
+I nutrizionisti oggi usano **3-4 strumenti diversi**:
+1. Un software per i piani alimentari (Dietowin, Nutrium)
+2. Un foglio di calcolo per BIA e trend
+3. Un CRM per pazienti e appuntamenti
+4. WhatsApp/email per il follow-up
 
-### 2. 📄 Export PDF piano alimentare (v2.3.0)
-- Tabella settimanale 7 giorni × 5 pasti con grammature
-- Riepilogo macro giornaliero (kcal, P, C, F)
-- Sezioni raccomandazioni cliniche e alimenti esclusi
-- Font Unicode (Arial/Segoe) per caratteri italiani
+**Risultato:** dati sparsi, lavoro duplicato, nessuna coerenza.
 
-### 3. 🔥 Calcolo fabbisogno calorico (v2.4.0)
-- Mifflin-St Jeor, Harris-Benedict, Katch-McArdle
-- TDEE per livello attività
-- Target kcal per obiettivo (dimagrimento/mantenimento/massa/performance)
-- Pulsante "Calcola fabbisogno" auto-compila il piano
+## ✅ La Soluzione
 
-### 4. 🛒 Lista della spesa automatica (v2.5.0)
-- Aggrega grammature per alimento dal piano settimanale
-- Raggruppamento per categoria alimentare
-- Export PDF con checkbox
+NutriCoach **unifica tutto** in un'unica applicazione locale:
 
-### 5. 📊 Grafici evolutivi BIA (v2.6.0)
-- 7 metriche: peso, BF%, massa magra, acqua, PhA, muscolo, BMI
-- Sparkline SVG interattive + report PDF con grafici a linee
-
-### 6. 🔗 Portale paziente (v2.7.0)
-- Link protetto da token (secrets.token_urlsafe)
-- Vista read-only mobile-friendly del piano
-- Dati sensibili non esposti
-
-### 7. 💾 Backup automatico + export/import (v2.8.0)
-- Backup giornaliero idempotente (copia DB + JSON)
-- Export CSV pazienti, export/import JSON singolo paziente
-
-### 8. 🎨 Template dieta + UI migliorata (v2.9.0)
-- Template dieta personalizzabili e riusabili
-- Tema chiaro/scuro (persistito in localStorage)
+| Funzione | NutriCoach | Alternativa |
+|----------|-----------|-------------|
+| Database alimenti | ✅ 212 prodotti INRAN/CREA | Dietowin (a pagamento) |
+| Piani alimentari | ✅ 5 template + personalizzabili | Nutrium ($50/mese) |
+| BIA + OCR | ✅ Integrato (Windows.Media.Ocr) | Lettura manuale |
+| Grafici trend | ✅ 7 metriche + radar chart | Excel |
+| Portale paziente | ✅ Token protetto | Abbonamento cloud |
+| Chat | ✅ Messaggistica integrata | WhatsApp |
+| Wearable | ✅ Garmin, Fitbit, Strava | — |
+| Backup | ✅ Automatico giornaliero | — |
+| **Prezzo** | **💰 Gratuito, 100% offline** | **€30-100/mese** |
 
 ---
 
-## 🔬 OCR Engine integrato (v2.1.0)
+## 🏗️ Architettura — Dietowin Pro Model
 
-Estrae **14/14 campi BIA** da PDF AKERN/InBody:
-- **Windows.Media.Ocr** (API nativa Windows 10/11, italiano) — nessuna dipartenza esterna
-- Fallback Tesseract se `winsdk` non disponibile
-- TBW derivato da ECW+ICW, PhA e Idratazione catturati
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    DATA AGGREGATOR                          │
+│  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────────────┐ │
+│  │ BIA  │  │  DB  │  │ Trend│  │ PDF  │  │ Categorie    │ │
+│  │ OCR  │  │ Alim │  │ Chart│  │ Rep  │  │ Gruppi       │ │
+│  └──────┘  └──────┘  └──────┘  └──────┘  └──────────────┘ │
+│                      │                                      │
+│               ┌──────┴──────┐                               │
+│               │   Paziente  │                               │
+│               └──────┬──────┘                               │
+│                      │                                      │
+│  ┌───────────────────┼────────────────────┐                 │
+│  │   Agenda FollowUp │  Notifiche Bulk    │                 │
+│  │   Archivio Doc    │  WhatsApp / Email  │                 │
+│  └───────────────────┴────────────────────┘                 │
+└─────────────────────────────────────────────────────────────┘
+                      │
+          ┌───────────┴───────────┐
+          │  DIET GENERATOR       │
+          │  (secondario)         │
+          └───────────────────────┘
+```
+
+**Principio base:** ogni feature segue il pattern **Create → View → Trend → Compare → Delete**.
 
 ---
 
-## 🏗️ Architettura
+## 📊 Le 22 Feature Complete
 
-| Componente | Modulo |
-|------------|--------|
-| API server | `app/main.py` (FastAPI) |
-| Database | `app/database.py` (SQLite + migrazioni auto) |
-| PDF | `app/diet_pdf.py` (fpdf2) |
-| Fabbisogno | `app/energy_calc.py` |
-| OCR | `app/ocr_engine.py` (Windows.Media.Ocr) |
-| Alimenti | `nutrition_db.py` (INRAN/CREA) |
-| UI | `app/templates/index.html` + `portal.html` |
+### 1️⃣ Database Alimentare Professionale ⭐ #1
+| Sotto-feature | Stato |
+|---------------|-------|
+| Ricerca alimenti con valori nutrizionali completi | ✅ |
+| 11 categorie (cereali, legumi, verdure, frutta, proteine...) | ✅ |
+| 212 prodotti italiani — fonte INRAN / CREA | ✅ |
+| Sostituzione automatica (swap nutriente-equivalente) | ✅ |
+| Liste della spesa automatiche dal piano alimentare | ✅ |
+
+### 2️⃣ Piani Alimentari Professionali ⭐ #2
+| Sotto-feature | Stato |
+|---------------|-------|
+| Export PDF con logo studio, intestazione brandizzata | ✅ |
+| Analisi nutrizionale completa (kcal, distribuzione %, micro) | ✅ |
+| Grammatura automatica basata sul fabbisogno | ✅ |
+| Ricettario personale / biblioteca ricette | ✅ |
+| Piano in lingua del paziente (italiano, inglese) | ✅ |
+| Template dieta (mediterraneo, keto, vegano, zona, CKD, carb cycling) | ✅ |
+
+### 3️⃣ App Paziente / Portale ⭐ #3
+| Sotto-feature | Stato |
+|---------------|-------|
+| Leva paziente per visualizzare piano alimentare | ✅ |
+| Check pasti consumati e aderenza | ✅ |
+| Diario alimentare self-reporting (mood, fame, soddisfazione) | ✅ |
+| Chat paziente-nutrizionista | ✅ |
+| Notifiche push/desktop native (campanella, polling, badge) | ✅ |
+| Export piano in PDF dal portale | ✅ |
+
+### 4️⃣ Analytics e Reportistica ⭐ #4
+| Sotto-feature | Stato |
+|---------------|-------|
+| Grafici evolutivi (peso, BF%, MM%, PhA, TBW, ECW/ICW, SMM) | ✅ |
+| Report di progresso in PDF (BIA trend multi-metrica) | ✅ |
+| Radar chart confronto (FFMI, FMI, BFM, Hydration, SMM) | ✅ |
+| Dashboard aderenza al piano | ✅ |
+
+### 5️⃣ Funzionalità Cliniche
+| Sotto-feature | Stato |
+|---------------|-------|
+| Calcolo fabbisogno (Mifflin / Harris / Katch-McArdle) + TDEE | ✅ |
+| FFMI / FMI / WHR (indici composizione corporea) | ✅ |
+| Allergie e intolleranze nel profilo paziente | ✅ |
+| Interazioni farmaci-nutrienti | ✅ |
+| Questionari clinici (anamnesi, sintomi, follow-up) | ✅ |
+
+### 6️⃣ Amministrazione Studio
+| Sotto-feature | Stato |
+|---------------|-------|
+| Backup automatico giornaliero | ✅ |
+| Export CSV/JSON + import pazienti | ✅ |
+| Multi-utente con login e sessioni | ✅ |
+| Brand personalizzato (logo, nome studio, colore tema) | ✅ |
+| Statistiche studio (pazienti, piani, aderenza) | ✅ |
+
+### 7️⃣ Integrazione Dispositivi
+| Sotto-feature | Stato |
+|---------------|-------|
+| Bilance impedenziometriche (peso, BF%, muscolo, TBW, VF, BMR) | ✅ |
+| Wearable Garmin / Fitbit (passi, FC, sonno, stress) | ✅ |
+| Import attività Strava / TrainingPeaks (corsa, bici, nuoto) | ✅ |
+
+### 8️⃣ Esperienza Utente
+| Sotto-feature | Stato |
+|---------------|-------|
+| Tema chiaro/scuro | ✅ |
+| UI reattiva e mobile-friendly | ✅ |
+| Tour onboarding interattivo al primo accesso | ✅ |
+| Tooltip informativi su ogni sezione | ✅ |
+| Notifiche desktop native real-time | ✅ |
 
 ---
 
-## 🚀 Quick start
+## 🔧 Specifiche Tecniche
+
+| Componente | Tecnologia |
+|------------|-----------|
+| **Backend** | Python 3.11 + FastAPI |
+| **Database** | SQLite (`~/.nutricoach/nutricoach.db`) — 20+ tabelle |
+| **Frontend** | Vanilla JS + CSS (nessun framework) |
+| **PDF** | FPDF2 con font Unicode |
+| **OCR** | Windows.Media.Ocr (primario) + Tesseract (fallback) |
+| **Auth** | Sessioni con hash SHA-256 |
+| **Avvio** | `run_v2.py` (uvicorn) o `NutriCoach.exe` (PyInstaller) |
+
+---
+
+## 🚀 Avvio
 
 ```bash
+git clone https://github.com/quadrellif90-collab/NutriCoach.git
+cd NutriCoach
 pip install -r requirements.txt
-python run_v2.py 8400
+python run_v2.py
 # Apri http://127.0.0.1:8400
 ```
 
-Build EXE: `python build_exe.py` → `dist/NutriCoach.exe`
+**Login:** `admin` / `admin123`
 
 ---
 
-## 📊 Confronto con i competitor
+## 📈 Roadmap Completata
 
-| Feature | NutriCoach v2.9 | Dietowin 11 | Nutrium |
-|---------|----------------|------------|---------|
-| Offline / privacy | ✅ 100% | ⚠️ cloud | ❌ cloud |
-| DB alimenti integrato | ✅ 212 | ✅ | ✅ |
-| OCR BIA integrato | ✅ Windows OCR | ❌ | ❌ |
-| Export PDF piano | ✅ | ✅ | ✅ |
-| Fabbisogno calorico | ✅ 3 formule | ✅ | ✅ |
-| Portale paziente | ✅ | ❌ | ✅ |
-| Backup automatico | ✅ | ⚠️ | ❌ |
-| Tema scuro | ✅ | ❌ | ✅ |
-| **Prezzo** | **Gratuito (MIT)** | **€/anno** | **€/mese** |
+```
+v2.1.0  ████████████████████████████████░░  OCR BIA
+v2.2.0  ████████████████████████████████░░  Database Alimenti
+v2.3.0  ████████████████████████████████░░  Export PDF
+v2.4.0  ████████████████████████████████░░  Fabbisogno
+v2.5.0  ████████████████████████████████░░  Lista Spesa
+v2.6.0  ████████████████████████████████░░  Grafici
+v2.7.0  ████████████████████████████████░░  Portale
+v2.8.0  ████████████████████████████████░░  Backup
+v2.9.0  ████████████████████████████████░░  Template + Tema
+v2.10.0 ████████████████████████████████░░  Backup auto + Stats
+v2.11.0 ████████████████████████████████░░  Ricettario + Swap
+v2.12.0 ████████████████████████████████░░  Radar + Performance
+v2.13.0 ████████████████████████████████░░  Dashboard Aderenza
+v2.14.0 ████████████████████████████████░░  Multi-lingua + Allergeni
+v2.15.0 ████████████████████████████████░░  Farmaci + Questionari
+v2.16.0 ████████████████████████████████░░  Check pasti + Chat
+v2.17.0 ████████████████████████████████░░  Notifiche
+v2.20.0 ████████████████████████████████░░  Bilanci, Wearable, Fitness
+        ████████████████████████████████  22/22 ✅
+```
 
 ---
 
-## 📜 Licenza
+## 📦 Database — 20+ Tabelle
 
-MIT — usa, modifica, ridistribuisci liberamente.
+```
+patients
+├── bia_measurements
+├── scale_measurements    ← Nuovo v2.20
+├── wearable_data          ← Nuovo v2.20
+├── fitness_imports        ← Nuovo v2.20
+├── diet_plans
+│   ├── meals
+│   └── meal_diary
+├── messages
+├── app_notifications
+├── appointments
+├── recipes
+├── documents
+├── medications
+├── quiz_questions
+│   └── quiz_answers
+├── food_catalog
+├── food_category
+├── diet_templates
+└── users / user_settings
+```
 
-**🔗 Repository:** https://github.com/quadrellif90-collab/NutriCoach
+---
+
+## 🏁 Conclusione
+
+NutriCoach v2.20.0 è **completo** — tutte le 22 feature sono state implementate, testate e rilasciate.
+
+Non ci sono abbonamenti. Non ci sono server cloud. I dati dei tuoi pazienti sono **solo tuoi**, sul **tuo computer**, con **backup automatici** giornalieri.
+
+> **Un solo strumento. Zero canoni. Massimo controllo.**
+
+---
+
+<p align="center">
+  <a href="https://github.com/quadrellif90-collab/NutriCoach">github.com/quadrellif90-collab/NutriCoach</a><br>
+  <strong>NutriCoach v2.20.0</strong> — 🥗 by quadrellif90
+</p>
