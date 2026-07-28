@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang=it>
+<head>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>NutriCoach — Portale Paziente</title>
+<style>
+:root{--bg:#f0f4f8;--card:#fff;--primary:#0d9488;--text:#1e293b;--text2:#64748b;border:#e2e8f0}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,Segoe UI,system-ui,sans-serif;background:var(--bg);color:var(--text);padding:16px}
+.wrap{max-width:760px;margin:0 auto}
+.header{background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;padding:20px;border-radius:12px;margin-bottom:16px}
+.header h1{font-size:18px;margin-bottom:4px}
+.header .meta{font-size:12px;opacity:.9}
+.card{background:var(--card);border-radius:10px;padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.card b{display:block;margin-bottom:8px;font-size:14px}
+.day-title{font-weight:600;font-size:12px;color:var(--primary);margin:10px 0 4px;text-transform:capitalize}
+.meal{margin-bottom:6px}
+.meal .ml{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text2)}
+.food{display:flex;justify-content:space-between;font-size:12px;padding:3px 6px;background:var(--bg);border-radius:4px;margin:2px 0}
+.macros{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:11px;color:var(--text2)}
+.macros span{background:var(--bg);padding:4px 8px;border-radius:6px}
+.bia{font-size:12px;color:var(--text2)}
+.error{text-align:center;padding:40px;color:var(--danger)}
+</style>
+</head>
+<body>
+<div class=wrap id=app><div class=card>Caricamento...</div></div>
+<script>
+const TK=location.pathname.split('/').pop();
+async function load(){
+  try{
+    const r=await fetch('/api/portal/'+TK+'/data');
+    if(!r.ok){document.getElementById('app').innerHTML='<div class=error>Token non valido</div>';return;}
+    const d=await r.json();
+    const days=['lun','mar','mer','gio','ven','sab','dom'];
+    const dn={lun:'Lunedì',mar:'Martedì',mer:'Mercoledì',gio:'Giovedì',ven:'Venerdì',sab:'Sabato',dom:'Domenica'};
+    const meals=['colazione','spuntino','pranzo','spuntino2','cena'];
+    const ml={colazione:'Colazione',spuntino:'Spuntino',pranzo:'Pranzo',spuntino2:'Spuntino',cena:'Cena'};
+    let html=`<div class=header><h1>🍽️ Piano Alimentare</h1><div class=meta>${esc(d.patient.name)}</div></div>`;
+    if(d.last_bia) html+=`<div class=card><b>📊 Ultima misurazione BIA</b><div class=bia>Peso: ${d.last_bia.weight_kg||'—'} kg · BF%: ${d.last_bia.bf_pct||'—'} · Massa magra: ${d.last_bia.ffm_kg||'—'} kg</div></div>`;
+    days.forEach(day=>{
+      const m=d.plan[day]||{}; const mac=d.macros[day]||{};
+      html+=`<div class=card><div class=day-title>${dn[day]}</div>`;
+      meals.forEach(meal=>{
+        const items=m[meal]||[];
+        if(items.length){
+          html+=`<div class=meal><div class=ml>${ml[meal]}</div>`;
+          items.forEach(it=>html+=`<div class=food><span>${esc(it.food)}</span><span>${it.grams} g</span></div>`);
+          html+=`</div>`;
+        }
+      });
+      html+=`<div class=macros><span>🔥 ${Math.round(mac.kcal||0)} kcal</span><span>P ${Math.round(mac.protein_g||0)}g</span><span>C ${Math.round(mac.carbs_g||0)}g</span><span>F ${Math.round(mac.fat_g||0)}g</span></div></div>`;
+    });
+    document.getElementById('app').innerHTML=html;
+  }catch(e){document.getElementById('app').innerHTML='<div class=error>Errore di rete</div>';}
+}
+function esc(s){return String(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+load();
+</script>
+</body>
+</html>

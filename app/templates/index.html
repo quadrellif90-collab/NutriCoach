@@ -14,7 +14,7 @@
   <div class=nav-item data-nav=notifiche onclick="nav('notifiche')"><span class=ico>📨</span><span>Notifiche</span></div>
   <div class=nav-item data-nav=archivio onclick="nav('archivio')"><span class=ico>📁</span><span>Archivio</span></div>
   <div class=spacer></div>
-  <div class=version>v2.6.0 · Dietowin</div>
+  <div class=version>v2.7.0 · Dietowin</div>
 </div>
 <div class=main>
   <div class=topbar>
@@ -105,7 +105,8 @@ async function openPatient(cid){
   $('view').innerHTML=`<div class=card><div class=row><div style=width:40px;height:40px;border-radius:50%;background:${clr()};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700>${init(c.name)}</div>
     <div style=flex:1><b>${esc(c.name)}</b><div class=meta>${c.sex||'?'} · ${c.goal||'—'} · ${c.sport||'—'}</div></div>
   ${c.phone?`<button class="btn btn-sm btn-outline" onclick="window.open('https://wa.me/${c.phone.replace(/[^0-9]/g,'')}','_blank')">💬</button>`:''}
-  <button class="btn btn-sm btn-danger" onclick=deletePatient(${c.id})>✕</button></div></div>
+  <button class="btn btn-sm btn-danger" onclick=deletePatient(${c.id})>✕</button>
+  <button class="btn btn-sm btn-outline" onclick=genPortal()>🔗 Portale</button></div></div>
   <div class=tab-bar id=ptabs>
     <button class="tab-btn active" onclick=switchTab(this,'anamnesi')>Anamnesi</button>
     <button class=tab-btn onclick=switchTab(this,'bia')>BIA</button>
@@ -127,6 +128,14 @@ async function deletePatient(cid){
   await jdel('/api/patients/'+cid);
   toast('Paziente eliminato');
   if(ST.cid===cid)nav('pazienti'); else nav('pazienti');
+}
+async function genPortal(){
+  const r=await jpost('/api/patients/'+ST.cid+'/portal-token',{});
+  if(r&&r.url){
+    const full=location.origin+r.url;
+    navigator.clipboard?.writeText(full).then(()=>toast('Link copiato ✓'));
+    modal(`<div class=card><b>🔗 Portale paziente</b><div style=font-size:11px;word-break:break-all;background:var(--bg);padding:8px;border-radius:6px;margin:6px 0>${full}</div><button class="btn btn-primary" onclick="window.open('${r.url}','_blank')">🌐 Apri portale</button></div>`);
+  } else toast('Errore');
 }
 // PATIENT TABS
 function switchTab(el,tab){

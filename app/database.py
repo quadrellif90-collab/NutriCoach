@@ -470,11 +470,10 @@ def seed_food_catalog():
                           "sugar_g REAL DEFAULT 0", "salt_g REAL DEFAULT 0"]),
     ]:
         con.execute(f"CREATE TABLE IF NOT EXISTS {tbl} ({','.join(cols)})")
-    # Migra colonne diet_items
-    for col in ["food_id INTEGER DEFAULT NULL", "kcal REAL DEFAULT NULL",
-                "protein_g REAL DEFAULT NULL", "carbs_g REAL DEFAULT NULL", "fat_g REAL DEFAULT NULL"]:
+    # Migra colonne patients
+    for col in ["portal_token TEXT DEFAULT NULL", "birth_date TEXT DEFAULT NULL"]:
         try:
-            con.execute(f"ALTER TABLE diet_items ADD COLUMN {col}")
+            con.execute(f"ALTER TABLE patients ADD COLUMN {col}")
         except Exception:
             pass
     con.commit()

@@ -21,7 +21,7 @@ import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
 from app import ocr_engine  # OCR integrato: Windows OCR + fallback Tesseract
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.6.0")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.7.0")
 
 # Servi file statici (CSS)
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
@@ -278,6 +278,49 @@ def api_shopping_list_pdf(pid: int):
     out = os.path.join(UPLOAD_DIR, fname)
     with open(out, "wb") as f: f.write(pdf)
     return FileResponse(out, media_type="application/pdf", filename=fname)
+
+
+# ─── PATIENT PORTAL (read-only public) ──────────────────────────────────
+
+@app.get("/portal/{token}")
+def api_portal(token: str):
+    p = db.get_db().execute("SELECT id FROM patients WHERE portal_token=?", (token,)).fetchone()
+    if not p:
+        raise HTTPException(404, "Token non valido")
+    return FileResponse(str(__import__("pathlib").Path(__file__).parent / "templates" / "portal.html"))
+
+
+@app.get("/api/portal/{token}/data")
+def api_portal_data(token: str):
+    """Dati JSON del portale paziente (separato dall'HTML)."""
+    p = db.get_db().execute("SELECT id FROM patients WHERE portal_token=?", (token,)).fetchone()
+    if not p:
+        raise HTTPException(404, "Token non valido")
+    pid = p["id"]
+    patient = db.get_patient(pid)
+    safe = {k: v for k, v in patient.items() if k not in ("portal_token",)}
+    items = db.list_diet_items(pid)
+    days_data = {}
+    for it in items:
+        d = it.get("day"); m = it.get("meal")
+        days_data.setdefault(d, {}).setdefault(m, []).append({"food": it.get("food"), "grams": it.get("grams")})
+    macros = {}
+    for d in ["lun", "mar", "mer", "gio", "ven", "sab", "dom"]:
+        ms = days_data.get(d, {})
+        macros[d] = db.compute_meal_macros(sum(ms.values(), []))
+    bia = db.list_bia(pid, limit=1)
+    return {"patient": safe, "plan": days_data, "macros": macros, "last_bia": bia[0] if bia else None}
+
+
+@app.post("/api/patients/{pid}/portal-token")
+def api_gen_portal_token(pid: int):
+    """Genera/rigenera token per il portale paziente."""
+    import secrets
+    token = secrets.token_urlsafe(16)
+    con = db.get_db()
+    con.execute("UPDATE patients SET portal_token=? WHERE id=?", (token, pid))
+    con.commit()
+    return {"token": token, "url": f"/portal/{token}"}
 
 
 # ─── PATIENTS CRUD ────────────────────────────────────────────────────────
