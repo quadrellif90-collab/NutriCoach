@@ -16,11 +16,15 @@
   <div class=nav-item data-nav=ricettario onclick="nav('ricettario')"><span class=ico>📖</span><span>Ricettario</span></div>
   <div class=spacer></div>
   <div class=nav-item style=cursor:pointer;font-size:11px onclick=showStats() title=Statistiche>📊</div>
-  <div class=nav-item style=cursor:pointer;font-size:11px onclick=showSettings() title=Impostazioni>⚙️</div>
-  <div class=nav-item style=cursor:pointer;font-size:11px onclick=doLogout() title=Logout>🚪</div>
+    <div class=nav-item style=cursor:pointer;font-size:11px onclick=showSettings() title=Impostazioni>⚙️</div>
+    <div class=nav-item style=cursor:pointer;font-size:11px;position:relative onclick=toggleNotifDropdown() title=Notifiche id=bell-btn>🔔<span id=bell-badge style="display:none;background:#ef4444;color:#fff;font-size:9px;padding:0 4px;border-radius:8px;position:absolute;top:-2px;right:-4px">0</span></div>
+    <div class=nav-item style=cursor:pointer;font-size:11px onclick=doLogout() title=Logout>🚪</div>
   <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn>🌙</button>
-  <div class=version>v2.16.0 · Dietowin</div>
+  <div class=version>v2.17.0 · Dietowin</div>
 </div>
+<div id=notif-dropdown style="display:none;position:fixed;top:50px;right:50px;width:320px;max-height:360px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:10px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.15);font-size:12px">
+  <div style=display:flex;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border)><b>🔔 Notifiche</b><button class="btn btn-sm" onclick="closeNotifDropdown();markAllNotifRead()">✔️ Tutte lette</button></div>
+  <div id=notif-list></div></div>
 <div class=main>
   <div class=topbar>
     <h1 id=page-title>Dashboard</h1>
@@ -780,6 +784,46 @@ function trendSVG(values){
   <text x=${w-20} y=${h-2} font-size=8 fill=var(--text2)>${Math.round(max)}</text>
   </svg>`;
 }
+// NOTIFICATIONS (in-app + desktop)
+let notifInterval;
+function startNotifPoll(){
+  if(notifInterval)clearInterval(notifInterval);
+  notifInterval=setInterval(pollNotifs,15000);pollNotifs();
+  if(Notification&&Notification.permission==='default')Notification.requestPermission();
+}
+async function pollNotifs(){
+  try{
+    const r=await jget('/api/notifications/unread');
+    const badge=$('bell-badge');
+    if(r.count>0){badge.textContent=r.count;badge.style.display='inline'}else{badge.style.display='none'}
+    // Desktop notification for new messages
+    const all=await jget('/api/notifications');
+    const unreadMentions=(all||[]).filter(n=>!n.read);
+  }catch(e){}
+}
+async function toggleNotifDropdown(){
+  const dd=$('notif-dropdown');
+  if(dd.style.display!=='none'){dd.style.display='none';return}
+  dd.style.display='block';
+  const notifs=await jget('/api/notifications')||[];
+  $('notif-list').innerHTML=notifs.length?notifs.map(n=>`<div style="padding:8px 10px;border-bottom:1px solid var(--border);cursor:pointer;${n.read?'opacity:.6':''}" onclick="markNotifRead(${n.id})">
+    <div style=font-size:11px>${esc(n.title)}</div>
+    <div style=font-size:10px;color:var(--text2);margin-top:2px>${esc(n.message||'')}</div>
+    <div style=font-size:9px;color:var(--text2);margin-top:2px>${n.created_at?.slice(0,16)||''} ${n.patient_name?'· '+esc(n.patient_name):''}</div>
+  </div>`).join(''):'<div style=padding:20px;text-align:center;color:var(--text2)>Nessuna notifica</div>';
+  // Send desktop notifications for unread
+  if(Notification&&Notification.permission==='granted'){
+    const unread=notifs.filter(n=>!n.read);
+    unread.slice(0,3).forEach(n=>{try{new Notification(n.title,{body:n.message?.slice(0,100)||''})}catch(e){}});
+  }
+}
+function closeNotifDropdown(){$('notif-dropdown').style.display='none'}
+async function markNotifRead(nid){
+  await jpost('/api/notifications/'+nid+'/read',{});toggleNotifDropdown();pollNotifs();
+}
+async function markAllNotifRead(){
+  await jpost('/api/notifications/read-all',{});closeNotifDropdown();pollNotifs();
+}
 // MODAL
 function modal(body){
   $('modal-root').innerHTML=`<div class=modal-overlay onclick="if(event.target===this)closeModal()"><div class=modal><div class=modal-head><span>NutriCoach</span><button class=btn onclick=closeModal() style=border:none;padding:2px 6px>✕</button></div><div class=modal-body>${body}</div></div></div>`;
@@ -838,7 +882,7 @@ async function showStats(){
 (async function(){
   const token=localStorage.getItem('token');
   if(token){
-    try{const s=await jget('/api/session?token='+token);if(s&&s.username){$('login-overlay').style.display='none';setupBrand();nav('dashboard');return}}catch(e){}
+    try{const s=await jget('/api/session?token='+token);if(s&&s.username){$('login-overlay').style.display='none';setupBrand();startNotifPoll();nav('dashboard');return}}catch(e){}
   }
   $('login-overlay').style.display='flex';
 })();

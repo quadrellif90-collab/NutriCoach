@@ -1205,4 +1205,34 @@ def ensure_v2_tables():
             FOREIGN KEY (patient_id) REFERENCES patients(id)
         );
     """)
+    con.commit()# ─── APP NOTIFICATIONS CRUD ──────────────────────────────────────────────
+
+def add_app_notification(patient_id, title, message, notif_type="reminder"):
+    con = get_db()
+    con.execute("INSERT INTO app_notifications (patient_id, title, message, type) VALUES (?,?,?,?)",
+                (patient_id, title, message, notif_type))
     con.commit()
+    return con.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+
+def get_app_notifications(limit=50, unread_only=False):
+    con = get_db()
+    q = """SELECT n.*, p.name as patient_name
+           FROM app_notifications n LEFT JOIN patients p ON n.patient_id=p.id"""
+    if unread_only:
+        q += " WHERE n.read=0"
+    q += " ORDER BY n.created_at DESC LIMIT ?"
+    return rows_to_list(con.execute(q, (limit,)).fetchall())
+
+
+def mark_app_read(nid):
+    get_db().execute("UPDATE app_notifications SET read=1 WHERE id=?", (nid,)).connection.commit()
+
+
+def mark_all_app_read():
+    get_db().execute("UPDATE app_notifications SET read=1 WHERE read=0").connection.commit()
+
+
+def count_app_unread():
+    r = get_db().execute("SELECT COUNT(*) FROM app_notifications WHERE read=0").fetchone()
+    return r[0] if r else 0

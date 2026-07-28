@@ -21,7 +21,7 @@ import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
 from app import ocr_engine  # OCR integrato: Windows OCR + fallback Tesseract
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.16.0")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.17.0")
 
 # Servi file statici (CSS)
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
@@ -725,6 +725,10 @@ def api_messages(pid: int):
 async def api_send_message(pid: int, request: Request):
     b = await request.json()
     mid = db.send_message(pid, b.get("text", ""), b.get("sender", "nutritionist"))
+    if b.get("sender") == "patient":
+        p = db.get_patient(pid)
+        db.add_app_notification(pid, f"💬 Messaggio da {p['name']}",
+                                b.get("text","")[:80], "message")
     return {"id": mid, "ok": True}
 
 
@@ -737,6 +741,39 @@ def api_mark_read(pid: int):
 @app.get("/api/patients/{pid}/messages/unread")
 def api_unread(pid: int):
     return {"count": db.count_unread(pid)}
+
+
+# ─── NOTIFICATIONS (IN-APP) ──────────────────────────────────────────────
+
+NOTIF_ICONS = {"message":"💬","appointment":"📅","reminder":"⏰","alert":"⚠️"}
+
+@app.get("/api/notifications")
+def api_notifications(unread: bool = False):
+    return db.get_app_notifications(unread_only=unread)
+
+
+@app.get("/api/notifications/unread")
+def api_notif_unread():
+    return {"count": db.count_app_unread()}
+
+
+@app.post("/api/notifications/{nid}/read")
+def api_notif_read(nid: int):
+    db.mark_app_read(nid)
+    return {"ok": True}
+
+
+@app.post("/api/notifications/read-all")
+def api_notif_read_all():
+    db.mark_all_app_read()
+    return {"ok": True}
+
+
+@app.post("/api/notifications")
+async def api_create_notif(request: Request):
+    b = await request.json()
+    nid = db.add_app_notification(b.get("patient_id"), b.get("title",""), b.get("message",""), b.get("type","reminder"))
+    return {"id": nid, "ok": True}
 
 
 # ─── PATIENTS ─────────────────────────────────────────────────────────────
