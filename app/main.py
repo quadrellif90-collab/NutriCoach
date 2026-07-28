@@ -21,7 +21,7 @@ import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
 from app import ocr_engine  # OCR integrato: Windows OCR + fallback Tesseract
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.3.0")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.4.0")
 
 # Servi file statici (CSS)
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
@@ -188,6 +188,29 @@ def api_diet_pdf(pid: int):
     with open(out_path, "wb") as f:
         f.write(pdf_bytes)
     return FileResponse(out_path, media_type="application/pdf", filename=fname)
+
+
+# ─── FABBISOGNO ENERGETICO ─────────────────────────────────────────────────
+
+@app.get("/api/patients/{pid}/energy-needs")
+def api_energy_needs(pid: int, activity: str = "moderato", goal: str = "mantenimento"):
+    """Calcola BMR/TDEE/target kcal dai dati del paziente (ultima BIA)."""
+    from app import energy_calc
+    p = db.get_patient(pid)
+    if not p:
+        raise HTTPException(404, "Paziente non trovato")
+    bia = db.list_bia(pid, limit=1)
+    b = bia[0] if bia else {}
+    weight = b.get("weight_kg")
+    height = b.get("height_cm")
+    bf = b.get("bf_pct")
+    age = energy_calc.age_from_birth(p.get("birth_date")) or 35
+    if not weight:
+        raise HTTPException(400, "Nessuna misurazione BIA con peso: inserire prima una BIA")
+    if not height:
+        height = 170
+    return energy_calc.energy_needs(weight, height, age, p.get("sex", "M"),
+                                    activity=activity, goal=goal, bf_pct=bf)
 
 
 # ─── PATIENTS CRUD ────────────────────────────────────────────────────────

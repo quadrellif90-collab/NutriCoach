@@ -14,7 +14,7 @@
   <div class=nav-item data-nav=notifiche onclick="nav('notifiche')"><span class=ico>📨</span><span>Notifiche</span></div>
   <div class=nav-item data-nav=archivio onclick="nav('archivio')"><span class=ico>📁</span><span>Archivio</span></div>
   <div class=spacer></div>
-  <div class=version>v2.3.0 · Dietowin</div>
+  <div class=version>v2.4.0 · Dietowin</div>
 </div>
 <div class=main>
   <div class=topbar>
@@ -261,6 +261,10 @@ function showGenPlan(){
     const presets=pr.presets||[];
     const conds=cl.conditions||{};
     modal(`<div class=card><b>✨ Genera piano</b>
+    <div class=row style=margin:4px 0><select id=gp-act style=width:auto><option value=sedentario>Sedentario</option><option value=leggero>Leggero</option><option value=moderato selected>Moderato</option><option value=intenso>Intenso</option><option value=molto_intenso>Molto intenso</option></select>
+    <select id=gp-goal style=width:auto><option value=dimagrimento>Dimagrimento</option><option value=mantenimento selected>Mantenimento</option><option value=massa>Massa</option><option value=performance>Performance</option></select>
+    <button class="btn btn-sm btn-outline" onclick=calcEnergy()>🔥 Calcola fabbisogno</button></div>
+    <div id=gp-energy style=font-size:10px;color:var(--text2);margin-bottom:4px></div>
     <label>Protocollo</label><select id=gp-preset onchange=onPresetChange()><option value="">— Manuale —</option>${presets.map(p=>`<option value=${p.key}>${p.label}</option>`).join('')}</select>
     <div class=field-row><div><label>kcal</label><input id=gp-k type=number value=2000></div><div><label>P%</label><input id=gp-p type=number value=30></div>
     <div><label>C%</label><input id=gp-c type=number value=45></div><div><label>F%</label><input id=gp-f type=number value=25></div></div>
@@ -269,6 +273,18 @@ function showGenPlan(){
     ${Object.keys(conds).map(k=>`<label class=chk style=font-size:10px><input type=checkbox value=${k} ${sel.includes(k)?'checked':''}>${conds[k].name||k}</label>`).join('')}</div>
     <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick=genPlan()>⚡ Genera</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
   });
+}
+async function calcEnergy(){
+  try{
+    const act=$('gp-act').value, goal=$('gp-goal').value;
+    const e=await jget('/api/patients/'+ST.cid+'/energy-needs?activity='+act+'&goal='+goal);
+    if(e&&e.target_kcal){
+      $('gp-k').value=e.target_kcal;
+      const bmrs=Object.entries(e.bmr).map(([k,v])=>k+': '+v).join(' · ');
+      $('gp-energy').innerHTML=`🔥 BMR [${bmrs}] → TDEE ${e.tdee} kcal → <b>Target ${e.target_kcal} kcal</b> (${e.goal_adjustment_pct>0?'+':''}${e.goal_adjustment_pct}%)${e.protein_g_range?' · Proteine '+e.protein_g_range[0]+'-'+e.protein_g_range[1]+'g':''}`;
+      toast('Fabbisogno calcolato ✓');
+    } else {$('gp-energy').textContent=e.error||'Errore calcolo';toast('Servono dati BIA')}
+  }catch(err){toast('Inserire prima una BIA con peso')}
 }
 function onPresetChange(){
   const key=$('gp-preset').value; if(!key)return;
