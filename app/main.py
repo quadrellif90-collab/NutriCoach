@@ -21,7 +21,7 @@ import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
 from app import ocr_engine  # OCR integrato: Windows OCR + fallback Tesseract
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.10.0")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.11.0")
 
 # Servi file statici (CSS)
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
@@ -153,6 +153,49 @@ def api_get_food(fid: int):
 def api_food_swaps(fid: int, limit: int = 5):
     """Sostituzioni nutriente-equivalenti per un alimento."""
     return {"swaps": db.get_food_swaps(fid, limit=limit)}
+
+
+# ─── BODY COMPOSITION API (FFMI, FMI, WHR, BMI, radar) ───────────────────
+
+@app.get("/api/patients/{pid}/body-composition")
+def api_body_comp(pid: int):
+    """Calcola FFMI, FMI, WHR, BMI per il paziente."""
+    results = db.get_body_composition_data(pid)
+    if not results:
+        raise HTTPException(404, "Dati insufficienti (servono peso + altezza + BF%)")
+    return results
+
+
+@app.get("/api/patients/{pid}/radar")
+def api_radar(pid: int):
+    """Dati per radar chart confronto metriche BIA (valore, min, max)."""
+    comp = db.get_body_composition_data(pid)
+    if not comp:
+        raise HTTPException(404, "Dati insufficienti")
+    radar = {
+        "metrics": [],
+        "patient_name": comp.get("name", ""),
+    }
+    # Ranges di riferimento (normalizzati 0-100)
+    refs = {
+        "ffmi": {"label": "FFMI", "min": 14, "max": 26, "unit": "kg/m²"},
+        "fmi": {"label": "FMI", "min": 2, "max": 12, "unit": "kg/m²"},
+        "bmi": {"label": "BMI", "min": 16, "max": 35, "unit": "kg/m²"},
+        "bf_pct": {"label": "BF%", "min": 5, "max": 40, "unit": "%"},
+        "mm_pct": {"label": "MM%", "min": 20, "max": 50, "unit": "%"},
+        "pha": {"label": "PhA", "min": 3, "max": 12, "unit": "°"},
+    }
+    for key, ref in refs.items():
+        val = comp.get(key)
+        if val is not None:
+            # normalizza 0-100
+            norm = max(0, min(100, (val - ref["min"]) / (ref["max"] - ref["min"]) * 100))
+            radar["metrics"].append({
+                "key": key, "label": ref["label"],
+                "value": val, "normalized": round(norm, 1),
+                "min": ref["min"], "max": ref["max"], "unit": ref["unit"]
+            })
+    return radar
 
 
 # ─── RECIPES API ─────────────────────────────────────────────────────────

@@ -16,7 +16,7 @@
   <div class=nav-item data-nav=ricettario onclick="nav('ricettario')"><span class=ico>📖</span><span>Ricettario</span></div>
   <div class=spacer></div>
   <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn>🌙</button>
-  <div class=version>v2.10.0 · Dietowin</div>
+  <div class=version>v2.11.0 · Dietowin</div>
 </div>
 <div class=main>
   <div class=topbar>
@@ -572,12 +572,55 @@ async function runCompare(){
   const ids=Array.from(qsa('.cp:checked')).map(c=>c.value);
   if(ids.length<2){toast('Seleziona 2+ pazienti');return}
   const r=await jget('/api/patients/compare?ids='+ids.join(','));
-  const fields=['name','weight_kg','bmi','bf_pct','mm_pct','pha','tbw_l','bmr_kcal','ffmi','whr'];
-  const labels=['Nome','Peso','BMI','BF%','MM%','PhA','TBW','BMR','FFMI','WHR'];
-  closeModal();
-  modal(`<div class=card><b>⚖️ Confronto</b><table class=cmp-table><tr><th>Metrica</th>${r.map(x=>`<th>${esc(x.name)}</th>`).join('')}</tr>
-  ${fields.map((f,i)=>`<tr><td class=metric>${labels[i]}</td>${r.map(x=>`<td>${x[f]??'—'}</td>`).join('')}</tr>`).join('')}</table>
-  <div style=margin-top:8px><button class=btn onclick=closeModal()>Chiudi</button></div></div>`);
+  const fields=['name','weight_kg','bmi','bf_pct','mm_pct','pha','tbw_l','bmr_kcal','ffmi','fmi','whr'];
+    const labels=['Nome','Peso','BMI','BF%','MM%','PhA','TBW','BMR','FFMI','FMI','WHR'];
+    closeModal();
+    modal(`<div class=card><b>⚖️ Confronto</b><table class=cmp-table><tr><th>Metrica</th>${r.map(x=>`<th>${esc(x.name)}</th>`).join('')}</tr>
+    ${fields.map((f,i)=>`<tr><td class=metric>${labels[i]}</td>${r.map(x=>`<td>${x[f]??'—'}</td>`).join('')}</tr>`).join('')}<tr><td class=metric>Radar</td>${r.map(x=>`<td><button class="btn btn-sm btn-outline" onclick=showRadar(${x.id})>📊</button></td>`).join('')}</tr></table></div>`);
+  }
+  function showRadar(pid){
+    jget('/api/patients/'+pid+'/radar').then(rd=>{
+      const m=rd.metrics||[];
+      if(!m.length){toast('Dati insufficienti per radar');return}
+      const cx=150,cy=150,r=120,levels=5,tags=m.length,angle=Math.PI*2/tags;
+      let svg=`<svg width=320 height=320 viewBox="0 0 300 300" style=max-width:320px>`;
+      // Livelli concentrici
+      for(let lv=1;lv<=levels;lv++){
+        const pr=lv/levels*r;
+        let pts='';
+        for(let i=0;i<tags;i++){
+          const a=-Math.PI/2+angle*i;
+          pts+=(i?'L':'M')+(cx+pr*Math.cos(a))+','+(cy+pr*Math.sin(a));
+        }
+        svg+=`<path d="${pts}Z" fill=none stroke=var(--border) stroke-width=.5/>`;
+      }
+      // Assi radiali
+      for(let i=0;i<tags;i++){
+        const a=-Math.PI/2+angle*i;
+        svg+=`<line x1=${cx} y1=${cy} x2=${cx+r*Math.cos(a)} y2=${cy+r*Math.sin(a)} stroke=var(--border) stroke-width=.5/>`;
+        const lx=cx+(r+15)*Math.cos(a),ly=cy+(r+15)*Math.sin(a);
+        svg+=`<text x=${lx} y=${ly} text-anchor=middle font-size=8 fill=var(--text)>${m[i].label}</text>`;
+      }
+      // Area dati
+      let pts='';
+      for(let i=0;i<tags;i++){
+        const a=-Math.PI/2+angle*i;
+        const pr=m[i].normalized/100*r;
+        pts+=(i?'L':'M')+(cx+pr*Math.cos(a))+','+(cy+pr*Math.sin(a));
+      }
+      svg+=`<path d="${pts}Z" fill=var(--primary) fill-opacity=.25 stroke=var(--primary) stroke-width=1.5/>`;
+      // Punti
+      for(let i=0;i<tags;i++){
+        const a=-Math.PI/2+angle*i;
+        const pr=m[i].normalized/100*r;
+        svg+=`<circle cx=${cx+pr*Math.cos(a)} cy=${cy+pr*Math.sin(a)} r=3 fill=var(--primary)/>`;
+      }
+      svg+=`</svg><div style=font-size:10px;color:var(--text2);text-align:center>`;
+      m.forEach(mm=>{svg+=`<span style=margin:0 6px>${mm.label}: ${mm.value}${mm.unit}</span>`});
+      svg+=`</div>`;
+      modal(`<div class=card><b>📊 Radar chart — ${rd.patient_name||''}</b>${svg}<button class=btn onclick=closeModal()>Chiudi</button></div>`);
+    });
+  }
 }
 // SVG TREND HELPER
 function trendSVG(values){

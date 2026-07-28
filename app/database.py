@@ -425,39 +425,45 @@ def delete_progress_note(nid):
 
 def compare_patients(ids):
     """Ritorna snapshot antropometrico per confronto multiplo pazienti."""
-    from anthropometry import compute_anthropometry
     results = []
     for pid in ids:
-        p = get_patient(pid)
-        if not p:
-            continue
-        # ultima BIA + misure per dati recenti
-        con = get_db()
-        bia = con.execute("SELECT * FROM bia_readings WHERE patient_id=? ORDER BY date DESC LIMIT 1", (pid,)).fetchone()
-        meas = con.execute("SELECT * FROM measurements WHERE patient_id=? ORDER BY date DESC LIMIT 1", (pid,)).fetchone()
-        bia_d = row_to_dict(bia) or {}
-        meas_d = row_to_dict(meas) or {}
-        weight = bia_d.get("weight_kg") or meas_d.get("weight_kg") or p.get("weight_kg")
-        height = bia_d.get("height_cm") or meas_d.get("height_cm")
-        bf = bia_d.get("bf_pct")
-        mm = bia_d.get("mm_pct")
-        pha = bia_d.get("pha")
-        tbw = bia_d.get("tbw_l")
-        bmr = bia_d.get("bmr_kcal")
-        bmi = round(weight / ((height/100)**2), 1) if weight and height else None
-        ffmi = round((weight * (1 - (bf or 0)/100)) / ((height/100)**2), 1) if weight and height and bf is not None else None
-        whr = round(meas_d.get("waist_cm",0) / meas_d.get("hip_cm",1), 2) if meas_d.get("waist_cm") and meas_d.get("hip_cm") else None
-        results.append({
-            "id": pid, "name": p.get("name"), "sex": p.get("sex"),
-            "age": p.get("birth_date"), "goal": p.get("goal"), "sport": p.get("sport"),
-            "weight_kg": weight, "height_cm": height, "bmi": bmi,
-            "bf_pct": bf, "mm_pct": mm, "pha": pha,
-            "tbw_l": tbw, "bmr_kcal": bmr,
-            "ffmi": ffmi, "whr": whr,
-        })
+        comp = get_body_composition_data(pid)
+        if comp:
+            results.append(comp)
     return results
 
-# ─── FOOD CATALOG ──────────────────────────────────────────────────
+
+def get_body_composition_data(pid):
+    """Ritorna BMI, FFMI, FMI, WHR, BF%, MM%, PhA per un paziente."""
+    p = get_patient(pid)
+    if not p:
+        return None
+    con = get_db()
+    bia = con.execute("SELECT * FROM bia_readings WHERE patient_id=? ORDER BY date DESC LIMIT 1", (pid,)).fetchone()
+    meas = con.execute("SELECT * FROM measurements WHERE patient_id=? ORDER BY date DESC LIMIT 1", (pid,)).fetchone()
+    bia_d = row_to_dict(bia) or {}
+    meas_d = row_to_dict(meas) or {}
+    weight = bia_d.get("weight_kg") or meas_d.get("weight_kg") or p.get("weight_kg")
+    height = bia_d.get("height_cm") or meas_d.get("height_cm")
+    bf = bia_d.get("bf_pct")
+    mm = bia_d.get("mm_pct")
+    pha = bia_d.get("pha")
+    tbw = bia_d.get("tbw_l")
+    bmr = bia_d.get("bmr_kcal")
+    bmi = round(weight / ((height/100)**2), 1) if weight and height else None
+    ffmi = round((weight * (1 - (bf or 0)/100)) / ((height/100)**2), 1) if weight and height and bf is not None else None
+    fmi = round((weight * ((bf or 0)/100)) / ((height/100)**2), 1) if weight and height and bf is not None else None
+    whr = round(meas_d.get("waist_cm",0) / meas_d.get("hip_cm",1), 2) if meas_d.get("waist_cm") and meas_d.get("hip_cm") else None
+    return {
+        "id": pid, "name": p.get("name"), "sex": p.get("sex"),
+        "weight_kg": weight, "height_cm": height, "bmi": bmi,
+        "bf_pct": bf, "mm_pct": mm, "pha": pha,
+        "tbw_l": tbw, "bmr_kcal": bmr,
+        "ffmi": ffmi, "fmi": fmi, "whr": whr,
+    }
+
+
+# ─── FOOD CATALOG ─────────────────────────────────────
 
 def seed_food_catalog():
     """Popola food_catalog da nutrition_db se vuoto."""
