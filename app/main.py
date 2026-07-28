@@ -21,7 +21,7 @@ import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
 from app import ocr_engine  # OCR integrato: Windows OCR + fallback Tesseract
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.0.0")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.2.0")
 
 # Servi file statici (CSS)
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
@@ -127,6 +127,34 @@ async def api_generate_plan(pid: int, request: Request):
     did = db.add_diet_plan(pid, title, preset or "", conditions, int(kcal), int(p), int(c), int(f), plan)
     plan["diet_id"] = did
     return plan
+
+
+# ─── FOOD CATALOG ──────────────────────────────────────────────────
+
+@app.get("/api/foods")
+def api_foods_search(q: str = "", cat: str = "", limit: int = 30):
+    return db.search_food_catalog(query=q, category=cat, limit=limit)
+
+
+@app.get("/api/foods/categories")
+def api_food_categories():
+    return db.get_food_categories()
+
+
+@app.get("/api/foods/{fid}")
+def api_get_food(fid: int):
+    f = db.get_food(fid)
+    if not f:
+        raise HTTPException(404, "Alimento non trovato")
+    return f
+
+
+@app.get("/api/patients/{pid}/diet-macros/{day}")
+def api_diet_macros(pid: int, day: str):
+    """Calcola macro totali per un giorno specifico."""
+    items = db.list_diet_items(pid, day=day)
+    return db.compute_meal_macros(items)
+
 
 # ─── PATIENTS CRUD ────────────────────────────────────────────────────────
 

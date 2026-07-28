@@ -119,6 +119,11 @@ def init_db():
             food TEXT NOT NULL,
             grams REAL DEFAULT 100,
             alternative TEXT DEFAULT '',
+            food_id INTEGER DEFAULT NULL,
+            kcal REAL DEFAULT NULL,
+            protein_g REAL DEFAULT NULL,
+            carbs_g REAL DEFAULT NULL,
+            fat_g REAL DEFAULT NULL,
             FOREIGN KEY (patient_id) REFERENCES patients(id)
         );
         CREATE TABLE IF NOT EXISTS appointments (
@@ -182,8 +187,21 @@ def init_db():
             note TEXT NOT NULL,
             FOREIGN KEY (patient_id) REFERENCES patients(id)
         );
+        CREATE TABLE IF NOT EXISTS food_catalog (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            category TEXT DEFAULT '',
+            kcal REAL DEFAULT 0,
+            protein_g REAL DEFAULT 0,
+            carbs_g REAL DEFAULT 0,
+            fat_g REAL DEFAULT 0,
+            fiber_g REAL DEFAULT 0,
+            sugar_g REAL DEFAULT 0,
+            salt_g REAL DEFAULT 0
+        );
     """)
     con.commit()
+    seed_food_catalog()
     return con
 
 # ─── HELPER ──────────────────────────────────────────────────────────────
@@ -291,11 +309,11 @@ def add_diet_plan(pid, title, preset, conditions, kcal, p, c, f, plan_json):
 def list_diet_plans(pid):
     return rows_to_list(get_db().execute("SELECT id,title,date,preset,kcal_target FROM diet_plans WHERE patient_id=? ORDER BY date DESC", (pid,)).fetchall())
 
-def add_diet_item(pid, plan_id, day, meal, food, grams, alternative=""):
+def add_diet_item(pid, plan_id, day, meal, food, grams=100, alternative="", food_id=None, kcal=None, protein_g=None, carbs_g=None, fat_g=None):
     con = get_db()
     date = dt.date.today().isoformat()
-    con.execute("INSERT INTO diet_items (patient_id,plan_id,date,day,meal,food,grams,alternative) VALUES (?,?,?,?,?,?,?,?)",
-                (pid, plan_id, date, day, meal, food, grams, alternative))
+    con.execute("INSERT INTO diet_items (patient_id,plan_id,date,day,meal,food,grams,alternative,food_id,kcal,protein_g,carbs_g,fat_g) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (pid, plan_id, date, day, meal, food, grams, alternative, food_id, kcal, protein_g, carbs_g, fat_g))
     con.commit()
     return con.execute("SELECT last_insert_rowid()").fetchone()[0]
 
@@ -438,6 +456,132 @@ def compare_patients(ids):
             "ffmi": ffmi, "whr": whr,
         })
     return results
+
+# ─── FOOD CATALOG ──────────────────────────────────────────────────
+
+def seed_food_catalog():
+    """Popola food_catalog da nutrition_db se vuoto."""
+    con = get_db()
+    # Migrazioni per DB preesistente (v2.2.0+)
+    for tbl, cols in [
+        ("food_catalog", ["id INTEGER PRIMARY KEY AUTOINCREMENT", "name TEXT NOT NULL UNIQUE",
+                          "category TEXT DEFAULT ''", "kcal REAL DEFAULT 0", "protein_g REAL DEFAULT 0",
+                          "carbs_g REAL DEFAULT 0", "fat_g REAL DEFAULT 0", "fiber_g REAL DEFAULT 0",
+                          "sugar_g REAL DEFAULT 0", "salt_g REAL DEFAULT 0"]),
+    ]:
+        con.execute(f"CREATE TABLE IF NOT EXISTS {tbl} ({','.join(cols)})")
+    # Migra colonne diet_items
+    for col in ["food_id INTEGER DEFAULT NULL", "kcal REAL DEFAULT NULL",
+                "protein_g REAL DEFAULT NULL", "carbs_g REAL DEFAULT NULL", "fat_g REAL DEFAULT NULL"]:
+        try:
+            con.execute(f"ALTER TABLE diet_items ADD COLUMN {col}")
+        except Exception:
+            pass
+    con.commit()
+    cnt = con.execute("SELECT COUNT(*) FROM food_catalog").fetchone()[0]
+    if cnt > 0:
+        return cnt  # già popolato
+    try:
+        import sys as _sys
+        _nutri_root = os.path.dirname(os.path.dirname(__file__))
+        if _nutri_root not in _sys.path:
+            _sys.path.insert(0, _nutri_root)
+        import nutrition_db as ndb
+        cat_map = {
+            "latticini": ["latte", "yogurt", "formaggio", "ricotta", "mozzarella", "parmigiano",
+                          "grana", "pecorino", "burro", "stracchino", "philadelphia", "fiordilatte",
+                          "uova", "albumi", "tuorlo", "kefir", "panna", "latteria", "certosa",
+                          "galbanino", "crema"],
+            "carni": ["pollo", "tacchino", "manzo", "vitello", "maiale", "coniglio", "agnello",
+                      "bresaola", "prosciutto", "salame", "mortadella", "carpaccio", "salsiccia",
+                      "hamburger", "speck", "wurstel", "cotechino", "zampone"],
+            "pesce": ["salmone", "tonno", "sgombro", "merluzzo", "orata", "branzino", "trota",
+                      "acciughe", "sarde", "sogliola", "cernia", "polpo", "seppia", "calamari",
+                      "gamberi", "code", "moscardini", "nasello", "palombo", "rombo",
+                      "spigola", "pesce spada"],
+            "cereali": ["pasta", "riso", "farro", "orzo", "cous cous", "cuscus", "quinoa",
+                        "bulgur", "grano saraceno", "avena", "fiocchi", "semolino", "miglio",
+                        "amaranto", "pane", "cracker", "grissini", "fette"],
+            "legumi": ["lenticchie", "ceci", "fagioli", "piselli", "soia", "fave", "cicerchie",
+                       "hummus", "edamame"],
+            "verdure": ["zucchine", "melanzane", "peperoni", "pomodori", "spinaci", "bietole",
+                        "cavolfiore", "broccoli", "cavolo", "insalata", "lattuga", "rucola",
+                        "valeriana", "carote", "sedano", "finocchi", "cipolla", "aglio",
+                        "asparagi", "carciofi", "funghi", "radicchio", "zucca", "patate",
+                        "patata", "verza", "scarola", "indivia", "porro", "barbabietola",
+                        "sedano rapa", "cetriolo", "ravanelli"],
+            "frutta": ["mela", "pera", "banana", "arancia", "kiwi", "fragole", "mirtilli",
+                       "lamponi", "ciliegie", "pesca", "albicocca", "susina", "prugna",
+                       "uva", "melone", "anguria", "cocco", "ananas", "mango", "papaya",
+                       "fichi", "cachi", "mandarino", "pompelmo", "limone", "avocado",
+                       "ribes", "more"],
+            "olii grassi": ["olio", "oliva", "semi", "lino", "cocco olio", "avocado olio"],
+            "frutta secca": ["mandorle", "noci", "nocciole", "arachidi", "pistacchi",
+                             "pinoli", "anacardi", "macadamia", "noci pecan"],
+            "semi": ["semi", "chia", "lino semi", "sesamo", "girasole", "zucca", "papavero"],
+            "bevande": ["caffè", "te", "camomilla", "tisana", "acqua", "vino", "birra",
+                        "succo", "spremuta", "centrifugato", "estratto", "smoothie"]
+        }
+        for name, info in ndb.FOODS.items():
+            kcal, prot, car, fat, fib, sug, sal = info
+            cat = "varie"
+            for cname, keywords in cat_map.items():
+                if any(k in name.lower() for k in keywords):
+                    cat = cname; break
+            if "latte" in name and "cocco" not in name and "mandorla" not in name and "avena" not in name and "soia" not in name:
+                cat = "latticini"
+            try:
+                con.execute("INSERT OR IGNORE INTO food_catalog (name,category,kcal,protein_g,carbs_g,fat_g,fiber_g,sugar_g,salt_g) VALUES (?,?,?,?,?,?,?,?,?)",
+                          (name, cat, kcal, prot, car, fat, fib, sug, sal))
+            except:
+                pass
+        con.commit()
+        cnt = con.execute("SELECT COUNT(*) FROM food_catalog").fetchone()[0]
+        return cnt
+    except ImportError:
+        return 0
+
+def search_food_catalog(query="", category="", limit=30):
+    """Cerca alimenti per nome o categoria."""
+    con = get_db()
+    if query:
+        q = f"%{query}%"
+        if category:
+            return rows_to_list(con.execute(
+                "SELECT * FROM food_catalog WHERE (name LIKE ? OR name LIKE ?) AND category=? ORDER BY name LIMIT ?",
+                (q, f"%{query}%", category, limit)).fetchall())
+        return rows_to_list(con.execute(
+            "SELECT * FROM food_catalog WHERE name LIKE ? OR name LIKE ? ORDER BY CASE WHEN name LIKE ? THEN 0 ELSE 1 END, name LIMIT ?",
+            (q, f"%{query}%", f"{query}%", limit)).fetchall())
+    if category:
+        return rows_to_list(con.execute(
+            "SELECT * FROM food_catalog WHERE category=? ORDER BY name LIMIT ?", (category, limit)).fetchall())
+    return rows_to_list(con.execute(
+        "SELECT * FROM food_catalog ORDER BY name LIMIT ?", (limit,)).fetchall())
+
+def get_food_categories():
+    return [r["category"] for r in rows_to_list(
+        get_db().execute("SELECT DISTINCT category FROM food_catalog WHERE category!='' ORDER BY category").fetchall())]
+
+def get_food(fid):
+    return row_to_dict(get_db().execute("SELECT * FROM food_catalog WHERE id=?", (fid,)).fetchone())
+
+def compute_meal_macros(items):
+    """Calcola totali kcal/P/C/F per una lista di item dieta con food_id."""
+    total = {"kcal": 0.0, "protein_g": 0.0, "carbs_g": 0.0, "fat_g": 0.0, "fiber_g": 0.0}
+    for item in items:
+        fid = item.get("food_id")
+        grams = float(item.get("grams", 100) or 100)
+        if fid:
+            f = get_food(fid)
+            if f:
+                ratio = grams / 100.0
+                total["kcal"] += f["kcal"] * ratio
+                total["protein_g"] += f["protein_g"] * ratio
+                total["carbs_g"] += f["carbs_g"] * ratio
+                total["fat_g"] += f["fat_g"] * ratio
+                total["fiber_g"] += f["fiber_g"] * ratio
+    return {k: round(v, 1) for k, v in total.items()}
 
 # ─── INIT ─────────────────────────────────────────────────────────────────
 
