@@ -43,6 +43,7 @@ def init_db():
             sport TEXT DEFAULT '',
             notes TEXT DEFAULT '',
             allergies TEXT DEFAULT '',
+            language TEXT DEFAULT 'it',
             pathologies TEXT DEFAULT '{}',
             category_id INTEGER,
             created TEXT DEFAULT (date('now')),
@@ -501,7 +502,7 @@ def seed_food_catalog():
         macros TEXT DEFAULT '{}'
     )""")
     # Migra colonne patients
-    for col in ["portal_token TEXT DEFAULT NULL", "birth_date TEXT DEFAULT NULL"]:
+    for col in ["portal_token TEXT DEFAULT NULL", "birth_date TEXT DEFAULT NULL", "language TEXT DEFAULT 'it'"]:
         try:
             con.execute(f"ALTER TABLE patients ADD COLUMN {col}")
         except Exception:
@@ -590,10 +591,17 @@ def search_food_catalog(query="", category="", limit=30):
 
 def get_food_categories():
     return [r["category"] for r in rows_to_list(
-        get_db().execute("SELECT DISTINCT category FROM food_catalog WHERE category!='' ORDER BY category").fetchall())]
+        get_db().execute("SELECT DISTINCT category FROM food_catalog ORDER BY category").fetchall()) if r["category"]]
+
+
+def get_all_foods():
+    """Ritorna tutti gli alimenti."""
+    return rows_to_list(get_db().execute("SELECT * FROM food_catalog ORDER BY name").fetchall())
+
 
 def get_food(fid):
     return row_to_dict(get_db().execute("SELECT * FROM food_catalog WHERE id=?", (fid,)).fetchone())
+
 
 def compute_meal_macros(items):
     """Calcola totali kcal/P/C/F per una lista di item dieta (food_id o macro salvati)."""

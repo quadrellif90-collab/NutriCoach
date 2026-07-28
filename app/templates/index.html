@@ -16,7 +16,7 @@
   <div class=nav-item data-nav=ricettario onclick="nav('ricettario')"><span class=ico>📖</span><span>Ricettario</span></div>
   <div class=spacer></div>
   <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn>🌙</button>
-  <div class=version>v2.12.0 · Dietowin</div>
+  <div class=version>v2.13.0 · Dietowin</div>
 </div>
 <div class=main>
   <div class=topbar>
@@ -201,7 +201,7 @@ async function openPatient(cid){
   ST.name=c.name; ST.weight=c.weight_kg||null;
   $('page-title').textContent=esc(c.name);
   $('view').innerHTML=`<div class=card><div class=row><div style=width:40px;height:40px;border-radius:50%;background:${clr()};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700>${init(c.name)}</div>
-    <div style=flex:1><b>${esc(c.name)}</b><div class=meta>${c.sex||'?'} · ${c.goal||'—'} · ${c.sport||'—'}</div></div>
+    <div style=flex:1><b>${esc(c.name)}</b><div class=meta>${c.sex||'?'} · ${c.goal||'—'} · ${c.sport||'—'} ${c.allergies?`⚡ ${esc(c.allergies)}`:''} ${c.language&&c.language!=='it'?`🌐 ${c.language}`:''}</div></div>
   ${c.phone?`<button class="btn btn-sm btn-outline" onclick="window.open('https://wa.me/${c.phone.replace(/[^0-9]/g,'')}','_blank')">💬</button>`:''}
   <button class="btn btn-sm btn-danger" onclick=deletePatient(${c.id})>✕</button>
   <button class="btn btn-sm btn-outline" onclick=genPortal()>🔗 Portale</button></div></div>
@@ -259,17 +259,23 @@ async function loadAnamnesi(){
 }
 async function showAnamnesiForm(){
   let a={}; try{a=await jget('/api/patients/'+ST.cid+'/anamnesis')}catch(e){}
+  // Load patient for language+allergies
+  let p={}; try{p=await jget('/api/patients/'+ST.cid)}catch(e){}
   const sel=a.conditions||[];
   const cl=await jget('/api/clinical-conditions');
   const all=cl.conditions||{};
   const html=Object.keys(all).map(k=>`<label class=chk style=font-size:11px><input type=checkbox class=ac value=${k} ${sel.includes(k)?'checked':''}>${all[k].name||k}</label>`).join('');
-  modal(`<div class=card><b>✏️ Anamnesi</b><label>Condizioni cliniche</label><div style=display:flex;flex-wrap:wrap;gap:4px;max-height:180px;overflow:auto;margin-bottom:6px>${html}</div><label>Note</label><textarea id=an-notes rows=3>${esc(a.notes||'')}</textarea>
+  modal(`<div class=card><b>✏️ Anamnesi</b><label>Condizioni cliniche</label><div style=display:flex;flex-wrap:wrap;gap:4px;max-height:180px;overflow:auto;margin-bottom:6px>${html}</div><label>Allergie/intolleranze</label><input id=an-allerg value="${esc(p.allergies||'')}" placeholder="es. glutine, lattosio"><label>Lingua</label><select id=an-lang><option value=it ${p.language==='it'?'selected':''}>Italiano</option><option value=en ${p.language==='en'?'selected':''}>English</option><option value=fr ${p.language==='fr'?'selected':''}>Français</option><option value=de ${p.language==='de'?'selected':''}>Deutsch</option><option value=es ${p.language==='es'?'selected':''}>Español</option></select><label>Note</label><textarea id=an-notes rows=3>${esc(a.notes||'')}</textarea>
   <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick=saveAnamnesi()>💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
 }
 async function saveAnamnesi(){
   const conds=Array.from(qsa('.ac:checked')).map(c=>c.value);
   const notes=$('an-notes').value;
   const r=await jpost('/api/patients/'+ST.cid+'/anamnesis',{conditions:conds,notes});
+  // Save allergies+language
+  const allerg=$('an-allerg')?.value;
+  const lang=$('an-lang')?.value;
+  await fetch('/api/patients/'+ST.cid,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({allergies:allerg||'',language:lang||'it'})});
   if(r&&r.ok){toast('Anamnesi salvata ✓');closeModal();loadAnamnesi()}else toast('Errore');
 }
 // PATIENT BIA

@@ -21,7 +21,7 @@ import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
 from app import ocr_engine  # OCR integrato: Windows OCR + fallback Tesseract
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.12.0")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.13.0")
 
 # Servi file statici (CSS)
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
@@ -573,16 +573,58 @@ async def api_create_patient(request: Request):
     pid = db.add_patient(b.get("name",""), b.get("sex","M"), b.get("phone",""), b.get("email",""),
                          b.get("goal",""), b.get("sport",""), b.get("notes",""), b.get("allergies",""),
                          b.get("category_id"))
+    # language can be updated separately
+    lang = b.get("language")
+    if lang:
+        db.update_patient(pid, language=lang)
     return {"ok": True, "id": pid}
 
 @app.put("/api/patients/{pid}")
 async def api_update_patient(pid: int, request: Request):
     b = await request.json()
-    allowed = {"name","sex","phone","email","goal","sport","notes","allergies","category_id","birth_date"}
+    allowed = {"name","sex","phone","email","goal","sport","notes","allergies","category_id","birth_date","language"}
     kw = {k: v for k, v in b.items() if k in allowed}
     if kw:
         db.update_patient(pid, **kw)
     return {"ok": True}
+
+
+# ─── ALLERGENS ───────────────────────────────────────────────────────────
+
+@app.get("/api/allergens")
+def api_allergens():
+    """Restituisce lista di allergeni noti e alimenti che li contengono."""
+    foods = db.get_all_foods() if hasattr(db, 'get_all_foods') else db.search_food_catalog(query="", limit=500)
+    known_allergens = {
+        "glutine": ["grano","farro","orzo","segale","avena","cracker","pane","pasta","semolino","cous cous","bulgur"],
+        "lattosio": ["latte","yogurt","formaggio","ricotta","mozzarella","parmigiano","panna","burro","crema di latte","latti","gelato"],
+        "uova": ["uovo","uova","frittata","maionese","pasta all'uovo"],
+        "soia": ["soia","tofu","tempeh","edamame","salsa di soia"],
+        "arachidi": ["arachidi","burro d'arachidi","olio d'arachidi"],
+        "frutta secca": ["mandorle","noci","nocciole","pistacchi","anacardi","noci pecan","macadamia"],
+        "crostacei": ["gamberi","gamberetti","aragosta","scampi","mazzancolle"],
+        "pesce": ["salmone","tonno","merluzzo","sogliola","orata","branzino","trota","sgombro","acciughe"],
+        "sedano": ["sedano","sedano rapa"],
+        "senape": ["senape","semi di senape"],
+        "sesamo": ["sesamo","olio di sesamo","pasta di sesamo","tahini"],
+    }
+    results = {}
+    for allergen, keywords in known_allergens.items():
+        matches = []
+        for kw in keywords:
+            for f in foods:
+                if kw.lower() in f.get("name","").lower() and f not in matches:
+                    matches.append(f)
+                    if len(matches) >= 10:
+                        break
+            if len(matches) >= 10:
+                break
+        if matches:
+            results[allergen] = [{"id": m["id"], "name": m["name"], "category": m["category"]} for m in matches]
+    return results
+
+
+# ─── CATEGORIES ────────────────────────────────────────────────────────────
 
 @app.delete("/api/patients/{pid}")
 def api_delete_patient(pid: int):
