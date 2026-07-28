@@ -16,7 +16,7 @@
   <div class=nav-item data-nav=ricettario onclick="nav('ricettario')"><span class=ico>📖</span><span>Ricettario</span></div>
   <div class=spacer></div>
   <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn>🌙</button>
-  <div class=version>v2.11.0 · Dietowin</div>
+  <div class=version>v2.12.0 · Dietowin</div>
 </div>
 <div class=main>
   <div class=topbar>
@@ -135,10 +135,24 @@ async function loadDashboard(){
   </div>
   <div class=card><b>👥 Ultimi pazienti</b>
   ${cls.slice(0,5).map(c=>`<div class=patient-card onclick="openPatient(${c.id})"><div class=init style=background:${clr()}>${init(c.name)}</div><div class=info><b>${esc(c.name)}</b><div class=meta>${c.goal||'—'} · ${c.sport||''}</div></div></div>`).join('')||'<div class=empty>Nessun paziente</div>'}</div>
+  <div class=card id=dash-trends style=max-height:180px;overflow:auto><b>📈 Trend ultime letture</b><div style=font-size:10px;color:var(--text2) id=dash-trend-content>Caricamento...</div></div>
   <div class=row style=margin-top:12px>
     <button class="btn btn-sm btn-outline" onclick="doBackup()">💾 Backup ora</button>
     <button class="btn btn-sm btn-outline" onclick="exportPatients()">📤 Export CSV</button>
   </div>`;
+  // Carica trend per i primi 3 pazienti
+  Promise.all(cls.slice(0,3).map(c=>jget('/api/patients/'+c.id+'/bia-trend').then(r=>{if(r&&r.length>1){return {name:c.name,trend:r}}return null}).catch(()=>null))).then(trends=>{
+    const t=trends.filter(Boolean);
+    $('dash-trend-content').innerHTML=t.length?t.map(p=>`<div style=margin:2px 0><b>${esc(p.name)}</b> ${trendSVG(p.trend.slice(-6).map(x=>({v:x.weight_kg})))}</div>`).join(''):'<span>Nessun trend disponibile</span>';
+  });
+}
+async function showAdherence(pid){
+  const r=await jget('/api/patients/'+pid+'/adherence');
+  const ad=r.adherence||[];
+  if(!ad.length){toast('Nessun piano attivo');return}
+  modal(`<div class=card><b>📊 Aderenza dieta</b><table class=cmp-table><tr><th>Giorno</th><th>Target</th><th>Effettivo</th><th>%</th></tr>
+  ${ad.map(d=>`<tr><td>${d.label}</td><td>${d.target_kcal} kcal</td><td>${d.actual_kcal} kcal</td><td><b>${d.completion_pct}%</b></td></tr>`).join('')}</table>
+  <div style=margin-top:8px><button class=btn onclick=closeModal()>Chiudi</button></div></div>`);
 }
 async function doBackup(){
   toast('Backup in corso...');
@@ -297,7 +311,8 @@ async function loadPatientDieta(){
   <button class="btn btn-sm" onclick=showGenPlan()>⚡ Genera piano</button>
   <button class="btn btn-sm btn-outline" onclick=showAddFood()>➕ Alimento</button>
   <button class="btn btn-sm btn-outline" onclick="window.open('/api/patients/'+ST.cid+'/diet/pdf','_blank')">📄 Export PDF</button>
-  <button class="btn btn-sm btn-outline" onclick="window.open('/api/patients/'+ST.cid+'/shopping-list/pdf','_blank')">🛒 Lista spesa</button></div>
+  <button class="btn btn-sm btn-outline" onclick="window.open('/api/patients/'+ST.cid+'/shopping-list/pdf','_blank')">🛒 Lista spesa</button>
+  <button class="btn btn-sm btn-outline" onclick="showAdherence(ST.cid)">📊 Aderenza</button></div>
   <div class=diet-grid>${days.map(d=>{
     const m=macros[d]||{};
     return `<div class=diet-day><div class=day-label>${dayNames[d]}</div>

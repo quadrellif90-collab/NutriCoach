@@ -21,7 +21,7 @@ import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
 from app import ocr_engine  # OCR integrato: Windows OCR + fallback Tesseract
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.11.0")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.12.0")
 
 # Servi file statici (CSS)
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
@@ -196,6 +196,46 @@ def api_radar(pid: int):
                 "min": ref["min"], "max": ref["max"], "unit": ref["unit"]
             })
     return radar
+
+
+# ─── ADHERENCE REPORT ────────────────────────────────────────────────────
+
+@app.get("/api/patients/{pid}/adherence")
+def api_adherence(pid: int, days_back: int = 7):
+    """Report aderenza dieta: macro target vs effettivi per giorno."""
+    from datetime import datetime, timedelta
+    plan = db.get_latest_diet_plan(pid)
+    if not plan:
+        return {"adherence": [], "message": "Nessun piano attivo"}
+    # calcola target giornalieri dal piano
+    plan_data = (plan.get("plan_json") or plan.get("plan") or "{}")
+    import json
+    try: plan_data = json.loads(plan_data) if isinstance(plan_data, str) else plan_data
+    except: plan_data = {}
+    targets = {"kcal": plan.get("kcal") or 0, "pct_p": (plan.get("p") or 30) / 100,
+               "pct_c": (plan.get("c") or 45) / 100, "pct_f": (plan.get("f") or 25) / 100}
+    days_of_week = ["lun","mar","mer","gio","ven","sab","dom"]
+    labels = {"lun":"Lunedì","mar":"Martedì","mer":"Mercoledì","gio":"Giovedì",
+              "ven":"Venerdì","sab":"Sabato","dom":"Domenica"}
+    adherence = []
+    for d in days_of_week:
+        items = db.list_diet_items(pid, day=d)
+        macros = db.compute_meal_macros(items)
+        current = {k: macros.get(k, 0) for k in ["kcal","protein_g","carbs_g","fat_g"]}
+        target_kcal = targets.get("kcal") or 2000
+        target_p = round(target_kcal * targets.get("pct_p", 0.3) / 4, 1)
+        target_c = round(target_kcal * targets.get("pct_c", 0.45) / 4, 1)
+        target_f = round(target_kcal * targets.get("pct_f", 0.25) / 9, 1)
+        pct = round(min(100, (current["kcal"] / max(target_kcal, 1)) * 100), 1)
+        adherence.append({
+            "day": d, "label": labels.get(d, d),
+            "target_kcal": target_kcal, "actual_kcal": current["kcal"],
+            "target_p": target_p, "actual_p": current.get("protein_g", 0),
+            "target_c": target_c, "actual_c": current.get("carbs_g", 0),
+            "target_f": target_f, "actual_f": current.get("fat_g", 0),
+            "completion_pct": pct
+        })
+    return {"adherence": adherence, "patient_id": pid}
 
 
 # ─── RECIPES API ─────────────────────────────────────────────────────────

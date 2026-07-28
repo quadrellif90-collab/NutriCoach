@@ -309,6 +309,13 @@ def add_diet_plan(pid, title, preset, conditions, kcal, p, c, f, plan_json):
 def list_diet_plans(pid):
     return rows_to_list(get_db().execute("SELECT id,title,date,preset,kcal_target FROM diet_plans WHERE patient_id=? ORDER BY date DESC", (pid,)).fetchall())
 
+
+def get_latest_diet_plan(pid):
+    """Ritorna il piano alimentare più recente con tutti i dati (kcal, p, c, f)."""
+    row = get_db().execute("SELECT * FROM diet_plans WHERE patient_id=? ORDER BY date DESC LIMIT 1", (pid,)).fetchone()
+    return row_to_dict(row) if row else None
+
+
 def add_diet_item(pid, plan_id, day, meal, food, grams=100, alternative="", food_id=None, kcal=None, protein_g=None, carbs_g=None, fat_g=None):
     con = get_db()
     date = dt.date.today().isoformat()
