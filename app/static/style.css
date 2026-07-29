@@ -43,17 +43,31 @@ table{width:100%;border-collapse:collapse;font-size:12px}
 th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)}
 th{font-weight:600;color:var(--text2);font-size:11px;background:var(--bg)}
 tr:hover{background:#f8fafc}
-/* BUTTONS */
-.btn{padding:6px 14px;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;font-weight:500;transition:.15s;display:inline-flex;align-items:center;gap:5px;background:var(--card);color:var(--text)}
+/* BUTTONS — enhanced with active, disabled, loading states */
+.btn{padding:6px 14px;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;font-weight:500;transition:all .12s;display:inline-flex;align-items:center;gap:5px;background:var(--card);color:var(--text);user-select:none;position:relative}
 .btn:hover{background:var(--bg)}
+.btn:active{transform:scale(.96)}
+.btn:disabled,.btn[disabled]{opacity:.5;cursor:not-allowed;pointer-events:none}
 .btn-primary{background:var(--primary);color:#fff;border-color:var(--primary)}
 .btn-primary:hover{background:var(--primary-hover)}
+.btn-primary:active{background:var(--primary-hover);transform:scale(.96)}
 .btn-primary:disabled{opacity:.5;cursor:not-allowed}
+/* Loading spinner for all buttons */
+.btn-loading{position:relative;color:transparent!important;pointer-events:none}
+.btn-loading::after{content:"";position:absolute;left:calc(50% - 8px);top:calc(50% - 8px);width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spinner .6s linear infinite}
+.btn-primary.btn-loading::after{border-color:rgba(255,255,255,.3);border-top-color:#fff}
+.btn-outline.btn-loading{color:transparent!important}
+.btn-outline.btn-loading::after{border:2px solid rgba(13,148,136,.3);border-top-color:var(--primary)}
+.btn-danger.btn-loading::after{border:2px solid rgba(239,68,68,.3);border-top-color:var(--danger)}
+@keyframes spinner{to{transform:rotate(360deg)}}
 .btn-sm{padding:4px 8px;font-size:11px}
 .btn-outline{border-color:var(--primary);color:var(--primary);background:transparent}
 .btn-outline:hover{background:var(--primary-light)}
+.btn-outline:active{transform:scale(.96)}
+.btn-outline:disabled{opacity:.5;cursor:not-allowed}
 .btn-danger{color:var(--danger);border-color:var(--danger)}
 .btn-danger:hover{background:#fef2f2}
+.btn-danger:active{transform:scale(.96)}
 .btn-xs{padding:2px 6px;font-size:9px}
 /* DIET GRID */
 .diet-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:8px}
@@ -85,12 +99,34 @@ textarea{resize:vertical;min-height:50px}
 .cmp-table th,.cmp-table td{border:1px solid var(--border);padding:6px 10px;text-align:center}
 .cmp-table th{background:var(--bg);font-weight:600;font-size:11px}
 .cmp-table .metric{font-weight:600;text-align:left;color:var(--text2);white-space:nowrap}
-/* TOAST */
-#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 24px;background:#1e293b;color:#fff;border-radius:8px;font-size:13px;opacity:0;transition:.3s;z-index:9999;pointer-events:none;display:flex;align-items:center;gap:8px;white-space:nowrap}
-#toast.show{opacity:1}
-#toast.toast-success{background:#059669}#toast.toast-error{background:#dc2626}#toast.toast-warn{background:#d97706}
-/* SKELETON */
-.skeleton{background:linear-gradient(90deg,var(--border) 25%,transparent 50%,var(--border) 75%);background-size:200% 100%;animation:skeleton 1.4s infinite;border-radius:4px}@keyframes skeleton{0%{background-position:200% 0}100%{background-position:-200% 0}}
+/* TOAST — enhanced with animation */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 24px;background:#1e293b;color:#fff;border-radius:8px;font-size:13px;opacity:0;transition:opacity .3s,transform .25s;z-index:9999;pointer-events:none;display:flex;align-items:center;gap:8px;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.2)}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.toast-success{background:#059669}#toast.toast-error{background:#dc2626}#toast.toast-warn{background:#d97706}#toast.toast-info{background:#2563eb}
+/* SKELETON — variants for cards, text, tables */
+.skeleton{background:linear-gradient(90deg,var(--border) 25%,transparent 50%,var(--border) 75%);background-size:200% 100%;animation:skeleton 1.4s infinite;border-radius:4px}
+.skeleton-card{height:80px;margin-bottom:10px}
+.skeleton-text{height:12px;margin:4px 0;width:60%}
+.skeleton-text.wide{width:80%}
+.skeleton-text.narrow{width:40%}
+.skeleton-btn{height:32px;width:80px;display:inline-block}
+.skeleton-table{height:200px;width:100%}
+@keyframes skeleton{0%{background-position:200% 0}100%{background-position:-200% 0}}
+/* AI STATUS INDICATOR */
+.ai-status{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--text2);padding:2px 8px;background:var(--primary-light);border-radius:12px}
+.ai-status .dot{width:6px;height:6px;border-radius:50%;background:var(--primary);animation:pulse 1.5s ease-in-out infinite}
+.ai-status .dot.idle{animation:none;background:var(--text2)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+/* ERROR / WARNING / INFO / SUCCESS BANNERS */
+.msg-error,.msg-warn,.msg-info,.msg-success{padding:8px 12px;border-radius:6px;font-size:11px;display:flex;align-items:center;gap:6px;margin:4px 0}
+.msg-error{background:#fef2f2;color:#dc2626;border:1px solid #fecaca}
+.msg-warn{background:#fffbeb;color:#d97706;border:1px solid #fde68a}
+.msg-info{background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe}
+.msg-success{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0}
+[data-theme=dark] .msg-error{background:#450a0a;color:#fca5a5;border-color:#7f1d1d}
+[data-theme=dark] .msg-warn{background:#451a03;color:#fcd34d;border-color:#78350f}
+[data-theme=dark] .msg-info{background:#1e3a5f;color:#93c5fd;border-color:#1e40af}
+[data-theme=dark] .msg-success{background:#14532d;color:#86efac;border-color:#166534}
 /* RESPONSIVE */
 @media(max-width:768px){.sidebar{width:56px;overflow:hidden}.sidebar .logo span,.nav-item span:not(.ico),.sidebar .version,.sidebar .spacer{display:none}.nav-item{justify-content:center;padding:10px}.main{margin-left:56px}.diet-grid{grid-template-columns:repeat(2,1fr)}}
 /* SCROLLBAR */

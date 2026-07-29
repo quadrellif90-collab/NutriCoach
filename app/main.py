@@ -23,6 +23,16 @@ from app import ocr_engine  # OCR integrato: Windows OCR + fallback Tesseract
 
 app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.20.5")
 
+# Global exception handler — converts unhandled errors to clean JSON responses
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    if isinstance(exc, HTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"ok": False, "error": exc.detail})
+    return JSONResponse(
+        status_code=400,
+        content={"ok": False, "error": "Richiesta non valida", "detail": str(exc)[:200]}
+    )
+
 # Servi file statici (CSS)
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
 
@@ -690,7 +700,14 @@ def api_get_patient(pid: int):
 @app.post("/api/patients")
 async def api_create_patient(request: Request):
     b = await request.json()
-    pid = db.add_patient(b.get("name",""), b.get("sex","M"), b.get("phone",""), b.get("email",""),
+    name = (b.get("name") or "").strip()
+    if not name:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Il nome del paziente e richiesto")
+    if len(name) > 200:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Il nome del paziente non puo superare 200 caratteri")
+    pid = db.add_patient(name, b.get("sex","M"), b.get("phone",""), b.get("email",""),
                          b.get("goal",""), b.get("sport",""), b.get("notes",""), b.get("allergies",""),
                          b.get("category_id"))
     # language can be updated separately

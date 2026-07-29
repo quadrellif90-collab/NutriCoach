@@ -56,15 +56,34 @@ const API=''; let ST={nav:'dashboard',clients:[],cid:null,cats:[],name:null,weig
 function $(id){return document.getElementById(id)}
 function qs(s){return document.querySelector(s)}
 function qsa(s){return document.querySelectorAll(s)}
-function toast(m,opt){opt=opt||{};const t=$('toast');t.textContent='';const ic={success:'✅',error:'❌',warn:'⚠️',info:'ℹ️'};t.className='';if(opt.type)t.classList.add('toast-'+opt.type);t.innerHTML=(ic[opt.type]||'')+' '+esc(m);t.classList.add('show');const dur=opt.duration||(opt.type==='error'?4000:opt.type==='warn'?3000:opt.type==='info'?0:2400);if(dur)setTimeout(()=>t.classList.remove('show'),dur)}
-function jget(u){return fetch(API+u).then(r=>r.json())}
-function jpost(u,b){return fetch(API+u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json())}
-function jdel(u){return fetch(API+u,{method:'DELETE'}).then(r=>r.json())}
-function jpatch(u,b){return fetch(API+u,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json())}
-function esc(s){return s==null?'':String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
+function esc(s){return s==null?'':String(s).replace(/[&<>]/g,c=>({'&':'&','<':'<','>':'>'}[c]))}
 function today(){return new Date().toISOString().slice(0,10)}
 function init(n){return(n||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase()}
 function clr(){const c=['#6366f1','#0d9488','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6'];return c[Math.floor(Math.random()*c.length)]}
+
+/* === ENHANCED TOAST with 4 types + auto-dismiss === */
+function toast(m,opt){opt=opt||{};const t=$('toast');t.textContent='';const ic={success:'✅',error:'❌',warn:'⚠️',info:'ℹ️'};t.className='';if(opt.type)t.classList.add('toast-'+opt.type);t.innerHTML=(ic[opt.type]||'')+' '+esc(m);t.classList.add('show');const dur=opt.duration||(opt.type==='error'?5000:opt.type==='warn'?3500:opt.type==='info'?2500:2400);if(dur)setTimeout(()=>t.classList.remove('show'),dur)}
+
+/* === ENHANCED API HELPERS with error handling + 401 interceptor === */
+async function jget(u){try{const r=await fetch(API+u);if(r.status===401){localStorage.removeItem('token');clr();$('login-overlay')&&($('login-overlay').style.display='flex');toast('Sessione scaduta, effettua di nuovo il login',{type:'warn'});return null}if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore caricamento: '+e.message,{type:'error'});return null}}
+async function jpost(u,b){try{const r=await fetch(API+u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});if(r.status===401){localStorage.removeItem('token');clr();$('login-overlay')&&($('login-overlay').style.display='flex');toast('Sessione scaduta, effettua di nuovo il login',{type:'warn'});return null}if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore salvataggio: '+e.message,{type:'error'});return null}}
+async function jdel(u){try{const r=await fetch(API+u,{method:'DELETE'});if(r.status===401){localStorage.removeItem('token');clr();$('login-overlay')&&($('login-overlay').style.display='flex');toast('Sessione scaduta, effettua di nuovo il login',{type:'warn'});return null}if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore eliminazione: '+e.message,{type:'error'});return null}}
+async function jpatch(u,b){try{const r=await fetch(API+u,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});if(r.status===401){localStorage.removeItem('token');clr();$('login-overlay')&&($('login-overlay').style.display='flex');toast('Sessione scaduta, effettua di nuovo il login',{type:'warn'});return null}if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore aggiornamento: '+e.message,{type:'error'});return null}}
+
+/* === LOADING STATE HELPER for buttons === */
+function setLoading(el,loading,label){if(!el)return;if(loading){el._origText=el.innerHTML;el._origDisabled=el.disabled;el.disabled=true;el.classList.add('btn-loading');if(label)el.innerHTML=label}else{el.disabled=el._origDisabled||false;el.classList.remove('btn-loading');if(el._origText)el.innerHTML=el._origText;delete el._origText;delete el._origDisabled}}
+
+/* === AI STATUS INDICATOR === */
+function showAIStatus(msg,containerId){const c=document.getElementById(containerId);if(!c)return;c.innerHTML='<span class="ai-status"><span class="dot"></span> '+esc(msg)+'</span>'}
+function hideAIStatus(containerId){const c=document.getElementById(containerId);if(c)c.innerHTML=''}
+
+/* === FORMAT HELPERS for messages === */
+function errMsg(e,fallback){const m=(e&&e.message)||(e&&String(e))||fallback||'Operazione non riuscita';return '<div class="msg-error">'+esc(m)+'</div>'}
+function warnMsg(m){return '<div class="msg-warn">'+esc(m)+'</div>'}
+function infoMsg(m){return '<div class="msg-info">'+esc(m)+'</div>'}
+function successMsg(m){return '<div class="msg-success">'+esc(m)+'</div>'}
+
+// NAVIGATION
 // NAVIGATION
 async function nav(n){
   ST.nav=n;
