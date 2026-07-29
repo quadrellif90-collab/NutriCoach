@@ -206,6 +206,191 @@ def init_db():
             salt_g REAL DEFAULT 0
         );
     """)
+    # --- Fresh-start version check ---
+    cur.execute("CREATE TABLE IF NOT EXISTS _app_version (version TEXT PRIMARY KEY, created TEXT DEFAULT (datetime('now')))")
+    cur.execute("SELECT version FROM _app_version LIMIT 1")
+    row = cur.fetchone()
+    if not row or row[0] != '2.20.6':
+        # Disable foreign keys for clean drop
+        cur.execute("PRAGMA foreign_keys=OFF")
+        # Drop all data tables for fresh start
+        for tbl in ['patient_groups','bia_readings','measurements','diet_plans','diet_items','diet_templates','appointments','notifications','documents','symptoms','progress_notes','recipes','meal_diary','messages','app_documents','quiz_questions','quiz_answers','medications','user_settings','scale_measurements','wearable_data','fitness_imports','food_catalog','food_category','categories','groups_t','patients']:
+            cur.execute(f'DROP TABLE IF EXISTS {tbl}')
+        cur.execute("PRAGMA foreign_keys=ON")
+        # Recreate all tables
+        cur.executescript("""
+            CREATE TABLE IF NOT EXISTS patients (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                sex TEXT DEFAULT 'M',
+                birth_date TEXT,
+                phone TEXT,
+                email TEXT,
+                goal TEXT DEFAULT '',
+                sport TEXT DEFAULT '',
+                notes TEXT DEFAULT '',
+                allergies TEXT DEFAULT '',
+                language TEXT DEFAULT 'it',
+                pathologies TEXT DEFAULT '{}',
+                category_id INTEGER,
+                created TEXT DEFAULT (date('now')),
+                updated TEXT DEFAULT (date('now'))
+            );
+            CREATE TABLE IF NOT EXISTS categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                color TEXT DEFAULT '#6366f1'
+            );
+            CREATE TABLE IF NOT EXISTS groups_t (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS patient_groups (
+                patient_id INTEGER NOT NULL,
+                group_id INTEGER NOT NULL,
+                PRIMARY KEY (patient_id, group_id),
+                FOREIGN KEY (patient_id) REFERENCES patients(id),
+                FOREIGN KEY (group_id) REFERENCES groups_t(id)
+            );
+            CREATE TABLE IF NOT EXISTS bia_readings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id INTEGER NOT NULL,
+                date TEXT NOT NULL DEFAULT (date('now')),
+                source TEXT DEFAULT 'manual',
+                weight_kg REAL, height_cm REAL, bmi REAL,
+                bf_pct REAL, bf_kg REAL,
+                mm_pct REAL, mm_kg REAL,
+                ffm_kg REAL,
+                tbw_l REAL, ecw_l REAL, icw_l REAL,
+                pha REAL, bmr_kcal REAL,
+                smm_kg REAL, asmm_kg REAL, bcm_kg REAL,
+                visceral_fat_level REAL,
+                protein_kg REAL, mineral_kg REAL,
+                fmi REAL, ffmi REAL,
+                hydration_pct REAL,
+                notes TEXT DEFAULT '',
+                FOREIGN KEY (patient_id) REFERENCES patients(id)
+            );
+            CREATE TABLE IF NOT EXISTS measurements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id INTEGER NOT NULL,
+                date TEXT NOT NULL DEFAULT (date('now')),
+                weight_kg REAL, height_cm REAL,
+                waist_cm REAL, hip_cm REAL,
+                arm_cm REAL, thigh_cm REAL, calf_cm REAL,
+                chest_cm REAL,
+                notes TEXT DEFAULT '',
+                FOREIGN KEY (patient_id) REFERENCES patients(id)
+            );
+            CREATE TABLE IF NOT EXISTS diet_plans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id INTEGER NOT NULL,
+                title TEXT DEFAULT '',
+                date TEXT NOT NULL DEFAULT (date('now')),
+                preset TEXT DEFAULT '',
+                conditions TEXT DEFAULT '[]',
+                kcal_target INTEGER DEFAULT 0,
+                p_target INTEGER DEFAULT 0,
+                c_target INTEGER DEFAULT 0,
+                f_target INTEGER DEFAULT 0,
+                plan_json TEXT DEFAULT '{}',
+                created TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (patient_id) REFERENCES patients(id)
+            );
+            CREATE TABLE IF NOT EXISTS diet_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id INTEGER NOT NULL,
+                plan_id INTEGER,
+                date TEXT NOT NULL DEFAULT (date('now')),
+                day TEXT NOT NULL,
+                meal TEXT NOT NULL,
+                food TEXT NOT NULL,
+                grams REAL DEFAULT 100,
+                alternative TEXT DEFAULT '',
+                food_id INTEGER DEFAULT NULL,
+                kcal REAL DEFAULT NULL,
+                protein_g REAL DEFAULT NULL,
+                carbs_g REAL DEFAULT NULL,
+                fat_g REAL DEFAULT NULL,
+                FOREIGN KEY (patient_id) REFERENCES patients(id)
+            );
+            CREATE TABLE IF NOT EXISTS appointments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                appt_date TEXT NOT NULL,
+                appt_time TEXT DEFAULT '',
+                status TEXT DEFAULT 'open',
+                follow_up INTEGER DEFAULT 0,
+                outcome TEXT DEFAULT '',
+                notes TEXT DEFAULT '',
+                created TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (patient_id) REFERENCES patients(id)
+            );
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id INTEGER NOT NULL,
+                type TEXT DEFAULT 'email',
+                subject TEXT DEFAULT '',
+                message TEXT DEFAULT '',
+                sent INTEGER DEFAULT 0,
+                sent_date TEXT,
+                bulk_id TEXT,
+                created TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (patient_id) REFERENCES patients(id)
+            );
+            CREATE TABLE IF NOT EXISTS documents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id INTEGER NOT NULL,
+                title TEXT DEFAULT '',
+                doc_type TEXT DEFAULT '',
+                file_path TEXT DEFAULT '',
+                notes TEXT DEFAULT '',
+                date TEXT NOT NULL DEFAULT (date('now')),
+                FOREIGN KEY (patient_id) REFERENCES patients(id)
+            );
+            CREATE TABLE IF NOT EXISTS symptoms (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id INTEGER NOT NULL,
+                date TEXT NOT NULL DEFAULT (date('now')),
+                time TEXT DEFAULT '',
+                bloating INTEGER DEFAULT 0,
+                pain INTEGER DEFAULT 0,
+                gas INTEGER DEFAULT 0,
+                nausea INTEGER DEFAULT 0,
+                heartburn INTEGER DEFAULT 0,
+                constipation INTEGER DEFAULT 0,
+                diarrhea INTEGER DEFAULT 0,
+                bristol INTEGER DEFAULT 0,
+                urgency INTEGER DEFAULT 0,
+                incomplete INTEGER DEFAULT 0,
+                foods TEXT DEFAULT '',
+                notes TEXT DEFAULT '',
+                FOREIGN KEY (patient_id) REFERENCES patients(id)
+            );
+            CREATE TABLE IF NOT EXISTS progress_notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id INTEGER NOT NULL,
+                date TEXT NOT NULL DEFAULT (date('now')),
+                note TEXT NOT NULL,
+                FOREIGN KEY (patient_id) REFERENCES patients(id)
+            );
+            CREATE TABLE IF NOT EXISTS food_catalog (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                category TEXT DEFAULT '',
+                kcal REAL DEFAULT 0,
+                protein_g REAL DEFAULT 0,
+                carbs_g REAL DEFAULT 0,
+                fat_g REAL DEFAULT 0,
+                fiber_g REAL DEFAULT 0,
+                sugar_g REAL DEFAULT 0,
+                salt_g REAL DEFAULT 0
+            );
+        """)
+        cur.execute("INSERT OR REPLACE INTO _app_version (version) VALUES ('2.20.6')")
+    else:
+        cur.execute("INSERT OR IGNORE INTO _app_version (version) VALUES ('2.20.6')")
     con.commit()
     seed_food_catalog()
     return con

@@ -21,7 +21,7 @@ import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
 from app import ocr_engine  # OCR integrato: Windows OCR + fallback Tesseract
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.20.5")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.20.6")
 
 # Global exception handler — converts unhandled errors to clean JSON responses
 @app.exception_handler(Exception)
@@ -1170,7 +1170,7 @@ def api_delete_progress(nid: int):
 
 @app.get("/api/version")
 def api_version():
-    _, V = os.path.dirname(__file__), "2.20.5"
+    _, V = os.path.dirname(__file__), "2.20.6"
     return {"version": V, "platform": sys.platform}
 
 # ─── INIT ─────────────────────────────────────────────────────────────────

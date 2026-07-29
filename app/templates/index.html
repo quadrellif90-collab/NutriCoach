@@ -1,7 +1,7 @@
 <!DOCTYPE html><html lang=it><head>
 <meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
-<title>NutriCoach v2.20.5</title>
+<title>NutriCoach v2.20.6</title>
 <link rel=stylesheet href=/static/style.css>
 <style>
 /* ONBOARDING TOUR */
@@ -36,7 +36,7 @@
     <div class=nav-item style=cursor:pointer;font-size:11px;position:relative onclick=toggleNotifDropdown() title="Notifiche: messaggi e promemoria" id=bell-btn>🔔<span id=bell-badge style="display:none;background:#ef4444;color:#fff;font-size:9px;padding:0 4px;border-radius:8px;position:absolute;top:-2px;right:-4px">0</span></div>
     <div class=nav-item style=cursor:pointer;font-size:11px onclick=doLogout() title="Esci dalla sessione">🚪</div>
   <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn title="Cambia tema chiaro/scuro">🌙</button>
-  <div class=version>v2.20.5 · Dietowin</div>
+  <div class=version>v2.20.6 · Dietowin</div>
 </div>
 <div id=notif-dropdown style="display:none;position:fixed;top:50px;right:50px;width:320px;max-height:360px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:10px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.15);font-size:12px">
   <div style=display:flex;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border)><b>🔔 Notifiche</b><button class="btn btn-sm" onclick="closeNotifDropdown();markAllNotifRead()">✔️ Tutte lette</button></div>
@@ -1095,6 +1095,8 @@ async function showStats(){
 // BOOT
 (async function(){
   const token=localStorage.getItem('token');
+  const dbVersion=localStorage.getItem('nc-db-version');
+  if(dbVersion!=='2.20.6'){localStorage.clear();localStorage.setItem('nc-db-version','2.20.6');}
   if(token){
     try{const s=await jget('/api/session?token='+token);if(s&&s.username){$('login-overlay').style.display='none';setupBrand();startNotifPoll();startOnboarding();nav('dashboard');return}}catch(e){}
   }
@@ -1102,7 +1104,7 @@ async function showStats(){
 })();
 </script>
 <!-- LOGIN OVERLAY -->
-<div id=login-overlay style="display:none;position:fixed;inset:0;background:var(--bg);z-index:9999;align-items:center;justify-content:center;flex-direction:column">
+<div id=login-overlay style="display:flex;position:fixed;inset:0;background:var(--bg);z-index:9999;align-items:center;justify-content:center;flex-direction:column">
   <div class=card style=width:320px><b>🔐 NutriCoach v2</b><br><span style=font-size:11px;color:var(--text2)>Accedi</span>
   <input id=login-u placeholder=Username style=margin-top:12px><input id=login-p type=password placeholder=Password><div style=margin-top:8px><button class="btn btn-primary" onclick=doLogin()>Accedi</button></div></div>
 </div></body></html>
