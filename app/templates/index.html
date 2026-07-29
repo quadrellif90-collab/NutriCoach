@@ -56,7 +56,7 @@ const API=''; let ST={nav:'dashboard',clients:[],cid:null,cats:[],name:null,weig
 function $(id){return document.getElementById(id)}
 function qs(s){return document.querySelector(s)}
 function qsa(s){return document.querySelectorAll(s)}
-function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600)}
+function toast(m,opt){opt=opt||{};const t=$('toast');t.textContent='';const ic={success:'✅',error:'❌',warn:'⚠️',info:'ℹ️'};t.className='';if(opt.type)t.classList.add('toast-'+opt.type);t.innerHTML=(ic[opt.type]||'')+' '+esc(m);t.classList.add('show');const dur=opt.duration||(opt.type==='error'?4000:opt.type==='warn'?3000:opt.type==='info'?0:2400);if(dur)setTimeout(()=>t.classList.remove('show'),dur)}
 function jget(u){return fetch(API+u).then(r=>r.json())}
 function jpost(u,b){return fetch(API+u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json())}
 function jdel(u){return fetch(API+u,{method:'DELETE'}).then(r=>r.json())}
@@ -136,18 +136,27 @@ async function saveRecipe(){
   else toast('Errore salvataggio ricetta');
 }
 async function delRecipe(rid){
-  if(!confirm('Eliminare questa ricetta?'))return;
+  if(!await showConfirm('Eliminare ricetta?','Questa azione è irreversibile.',{danger:true}))return;
+  const btn=event&&event.target;if(btn){btn.disabled=true;btn.textContent='⏳...'}
   await jdel('/api/recipes/'+rid);
-  toast('Ricetta eliminata');loadRicettario();
+  toast('Ricetta eliminata ✓',{type:'success'});loadRicettario();
 }
+function deleteBIARow(bid,ctx){if(!confirm('Eliminare?'))return;jdel('/api/bia/'+bid).then(function(){ctx==='hub'?loadBIAReading():loadPatientBIA()})}
 async function applyRecipe(rid,rname){
   if(!ST.cid){toast('Apri prima un paziente');return}
-  if(!confirm(`Applicare "${rname}" al paziente corrente?`))return;
-  const day=prompt('Giorno (lun/mar/mer/...):','lun')||'lun';
-  const meal=prompt('Past (colazione/pranzo/cena/...):','pranzo')||'pranzo';
+  if(!await showConfirm('Applicare ricetta?',`Applicare "${rname}" al paziente corrente?`))return;
+  modal(`<div class=card><b>📋 Applica: ${esc(rname)}</b>
+  <div class=field-row><div><label>Giorno</label><select id=ap-day>${['lun','mar','mer','gio','ven','sab','dom'].map(d=>`<option value=${d}>${d}</option>`).join('')}</select></div>
+  <div><label>Pasto</label><select id=ap-meal>${['colazione','pranzo','cena','spuntino','spuntino2'].map(m=>`<option value=${m}>${m.charAt(0).toUpperCase()+m.slice(1)}</option>`).join('')}</select></div></div>
+  <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick="doApplyRecipe(${rid})">📋 Applica</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
+}
+async function doApplyRecipe(rid){
+  const day=$('ap-day').value;const meal=$('ap-meal').value;
+  const btn=event&&event.target;if(btn){btn.disabled=true;btn.textContent='⏳...'}
   const r=await jpost('/api/recipes/'+rid+'/apply',{patient_id:ST.cid,day,meal});
-  if(r&&r.ok)toast(`Ricetta applicata (${r.items_added} ingredienti) ✓`);
-  else toast('Errore');
+  closeModal();
+  if(r&&r.ok)toast(`Ricetta applicata (${r.items_added} ingredienti) ✓`,{type:'success'});
+  else toast('Errore applicazione',{type:'error'});
 }
 // DASHBOARD
 async function loadDashboard(){
@@ -208,7 +217,7 @@ function onSearch(q){
 // NEW PATIENT
 function showNewPatient(){
   modal(`<div class=card><b>➕ Nuovo paziente</b>
-  <div class=field-row><div><label>Nome *</label><input id=np-name></div><div><label>Sesso</label><select id=np-sex><option value=M>M</option><option value=F>F</option></select></div></div>
+  <div class=field-row><div><label>Nome *</label><input id=np-name maxlength=60></div><div><label>Sesso</label><select id=np-sex><option value=M>M</option><option value=F>F</option></select></div></div>
   <div class=field-row><div><label>Telefono</label><input id=np-phone></div><div><label>Email</label><input id=np-email type=email></div></div>
   <div class=field-row><div><label>Obiettivo</label><input id=np-goal></div><div><label>Sport</label><input id=np-sport></div></div>
   <div style=margin-top:10px;display:flex;gap:8px><button class="btn btn-primary" onclick=saveNewPatient()>💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
@@ -253,16 +262,16 @@ function returnToDashboard(){
   if(ST.cid&&confirm('Tornare alla dashboard? I dati non salvati andranno persi.')){ST.cid=null;nav('dashboard')}
 }
 async function deletePatient(cid){
-  if(!confirm('Eliminare questo paziente e tutti i suoi dati?'))return;
+  if(!await showConfirm('Eliminare paziente?','Tutti i dati associati (BIA, dieta, appuntamenti) saranno rimossi permanentemente.',{danger:true,confirmText:'Elimina'}))return;
   await jdel('/api/patients/'+cid);
-  toast('Paziente eliminato');
-  if(ST.cid===cid)nav('pazienti'); else nav('pazienti');
+  toast('Paziente eliminato',{type:'success'});
+  nav('pazienti');
 }
 async function genPortal(){
   const r=await jpost('/api/patients/'+ST.cid+'/portal-token',{});
   if(r&&r.url){
     const full=location.origin+r.url;
-    navigator.clipboard?.writeText(full).then(()=>toast('Link copiato ✓'));
+    try{navigator.clipboard.writeText(full);toast('✅ Link copiato');}catch(e){toast('Link generato',{type:'info'})}
     modal(`<div class=card><b>🔗 Portale paziente</b><div style=font-size:11px;word-break:break-all;background:var(--bg);padding:8px;border-radius:6px;margin:6px 0>${full}</div><button class="btn btn-primary" onclick="window.open('${r.url}','_blank')">🌐 Apri portale</button></div>`);
   } else toast('Errore');
 }
@@ -324,7 +333,7 @@ async function loadPatientBIA(){
   <div style=font-size:11px;color:var(--text2)>${trend[0].weight_kg} → ${trend[trend.length-1].weight_kg} kg</div></div>`:''}
   <div class=card><b>Storico</b>${bia.length?`<table><tr><th>Data</th><th>Peso</th><th>BF%</th><th>MM%</th><th>PhA</th><th>TBW</th><th>BMR</th><th></th></tr>
   ${bia.map(r=>`<tr><td>${r.date}</td><td>${r.weight_kg||'—'}</td><td>${r.bf_pct||'—'}</td><td>${r.mm_pct||'—'}</td><td>${r.pha||'—'}</td><td>${r.tbw_l||'—'}</td><td>${r.bmr_kcal||'—'}</td>
-  <td><button class="btn btn-sm btn-danger" onclick="if(confirm('Eliminare?')){jdel('/api/bia/${r.id}').then(()=>loadPatientBIA())}">✕</button></td></tr>`).join('')}</table>`:'<div class=empty>Nessuna BIA</div>'}</div>`;
+  <td><button class="btn btn-sm btn-danger" onclick="deleteBIARow(${r.id},'patient')">✕</button></td></tr>`).join('')}</table>`:'<div class=empty>🔄 Nessuna BIA ancora. Clicca "+ Nuova" per aggiungere la prima misurazione.</div>'}</div>`;
 }
 function showBIAForm(){
   modal(`<div class=card><b>➕ Nuova BIA</b><div class=field-row><div><label>Data</label><input id=bf-date type=date value=${today()}>
@@ -435,7 +444,13 @@ function showGenPlan(){
   });
 }
 async function savePlanTemplate(){
-  const name=prompt('Nome template dieta:');if(!name)return;
+  modal(`<div class=card><b>📁 Salva come template</b>
+  <div class=field-row><div><label>Nome template</label><input id=tpl-name placeholder='es. Normocalorica Mediterranea'></div></div>
+  <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick="doSavePlanTemplate()">💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
+}
+async function doSavePlanTemplate(){
+  const name=$('tpl-name').value;if(!name){toast('Inserire un nome',{type:'warn'});return}
+  const btn=event&&event.target;if(btn){btn.disabled=true;btn.textContent='⏳...'}
   const targets={kcal:parseFloat($('gp-k').value)||2000,p:parseFloat($('gp-p').value)||30,c:parseFloat($('gp-c').value)||45,f:parseFloat($('gp-f').value)||25};
   const r=await jpost('/api/diet-templates',{name,targets});
   if(r&&r.ok)toast('Template salvato ✓');else toast('Errore');
@@ -464,7 +479,7 @@ async function genPlan(){
   const targets={kcal:parseFloat($('gp-k').value),protein_pct:parseFloat($('gp-p').value),carb_pct:parseFloat($('gp-c').value),fat_pct:parseFloat($('gp-f').value)};
   const conds=Array.from(qsa('#gp-cd input:checked')).map(c=>c.value);
   const opts={meals:parseInt($('gp-fr').value),days:['lun','mar','mer','gio','ven','sab','dom'],conditions:conds,preset:pre};
-  closeModal();toast('Generazione...');
+  closeModal();$('patient-pane').innerHTML='<div class=card style=text-align:center;padding:32px><div class=spinner></div><div style=margin-top:8px;color:var(--text2);font-size:13px>🧠 Generazione piano in corso…</div></div>';toast('Generazione...');
   const pl=await jpost('/api/patients/'+ST.cid+'/plan/generate',{targets,options:opts,preset:pre});
   if(pl&&pl.days){
     // apply plan items
@@ -680,7 +695,7 @@ async function loadBIAReading(){
   <div style=display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px>${charts}</div>
   <div class=card><b>Storico</b>${bia.length?`<table><tr><th>Data</th><th>Peso</th><th>BF%</th><th>MM%</th><th>PhA</th><th>BMR</th><th></th></tr>
   ${bia.map(r=>`<tr><td>${r.date}</td><td>${r.weight_kg||'—'}</td><td>${r.bf_pct||'—'}</td><td>${r.mm_pct||'—'}</td><td>${r.pha||'—'}</td><td>${r.bmr_kcal||'—'}</td>
-  <td><button class="btn btn-sm btn-danger" onclick="if(confirm('Eliminare?')){jdel('/api/bia/${r.id}').then(()=>loadBIAReading())}">✕</button></td></tr>`).join('')}</table>`:'<div class=empty>Nessuna BIA</div>'}</div>`;
+  <td><button class="btn btn-sm btn-danger" onclick="deleteBIARow(${r.id},'hub')">✕</button></td></tr>`).join('')}</table>`:'<div class=empty>🔄 Nessuna BIA ancora. Clicca "+ Nuova" per aggiungere la prima misurazione.</div>'}</div>`;
 }
 function showBIAHubForm(){
   modal(`<div class=card><b>➕ BIA</b><div class=field-row><div><label>Data</label><input id=bfh-d type=date value=${today()}></div>
@@ -972,6 +987,10 @@ function modal(body){
   $('modal-root').innerHTML=`<div class=modal-overlay onclick="if(event.target===this)closeModal()"><div class=modal><div class=modal-head><span>NutriCoach</span><button class=btn onclick=closeModal() style=border:none;padding:2px 6px>✕</button></div><div class=modal-body>${body}</div></div></div>`;
 }
 function closeModal(){$('modal-root').innerHTML=''}
+// CONFIRM (promise-based, styled)
+function showConfirm(title,text,opt){opt=opt||{};return new Promise(function(resolve){modal('<div class=card style=text-align:center;min-width:280px><b>'+esc(title)+'</b><p style=font-size:12px;color:var(--text2);margin:6px 0>'+esc(text)+'</p><div style=display:flex;gap:8px;justify-content:center;margin-top:10px>'+
+'<button class=btn onclick="closeModal();setTimeout(function(){resolve(false)},10)">'+(opt.cancelText||'Annulla')+'</button>'+
+'<button class="'+(opt.danger?'btn btn-danger':'btn btn-primary')+'" onclick="closeModal();setTimeout(function(){resolve(true)},10)">'+(opt.confirmText||'Conferma')+'</button></div></div>')})}
 // ONBOARDING TOUR
 function startOnboarding(){
   if(localStorage.getItem('onboarding_done'))return;
@@ -1034,7 +1053,7 @@ async function showSettings(){
   const s=await jget('/api/settings?token='+t);
   modal(`<div class=card style=width:360px><b>⚙️ Impostazioni Studio</b>
     <label>Nome studio</label><input id=st-name value="${esc(s.clinic_name||'')}">
-    <label>Colore tema</label><input type=color id=st-color value="${s.theme_color||'#6366f1'}">
+    <label>Colore tema</label><input type=color id=st-color value="${s.theme_color||'#0d9488'}">
     <label>URL Logo</label><input id=st-logo value="${esc(s.logo_url||'')}" placeholder=https://...>
     <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick=saveSettings()>💾 Salva</button><button class=btn onclick=closeModal()>Chiudi</button></div></div>`);
 }
@@ -1060,7 +1079,7 @@ async function showStats(){
   if(token){
     try{const s=await jget('/api/session?token='+token);if(s&&s.username){$('login-overlay').style.display='none';setupBrand();startNotifPoll();startOnboarding();nav('dashboard');return}}catch(e){}
   }
-  $('login-overlay').style.display='flex';
+  const lo=$('login-overlay');if(lo)lo.style.display='flex';else console.warn('login-overlay not in DOM (race)');
 })();
 </script>
 <!-- LOGIN OVERLAY -->
