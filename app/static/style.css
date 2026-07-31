@@ -1,17 +1,17 @@
 /* NutriCoach v2 — Dietowin-style CSS */
-:root{--bg:#f0f4f8;--card:#fff;--primary:#0d9488;--primary-hover:#0f766e;--primary-light:#ccfbf1;--sidebar:#334155;--sidebar-hover:#475569;--sidebar-text:#f1f5f9;--sidebar-active:#fff;--text:#1e293b;--text2:#64748b;--border:#e2e8f0;--danger:#ef4444;--warn:#f59e0b;--success:#22c55e;--radius:8px;--shadow:0 1px 3px rgba(0,0,0,.08)}
+:root{--bg:#f0f4f8;--card:#fff;--primary:#0d9488;--primary-hover:#0f766e;--primary-light:#ccfbf1;--sidebar:#d5ede8;--sidebar-hover:#b8e0d8;--sidebar-text:#1e3a34;--sidebar-active:#0d9488;--text:#1e293b;--text2:#64748b;--border:#e2e8f0;--danger:#ef4444;--warn:#f59e0b;--success:#22c55e;--radius:8px;--shadow:0 1px 3px rgba(0,0,0,.08)}
 [data-theme=dark]{--bg:#0f172a;--card:#1e293b;--primary:#14b8a6;--primary-hover:#0d9488;--primary-light:#134e4a;--sidebar:#1e293b;--sidebar-hover:#334155;--sidebar-text:#f1f5f9;--sidebar-active:#fff;--text:#e2e8f0;--text2:#94a3b8;--border:#334155;--danger:#f87171;--warn:#fbbf24;--success:#4ade80;--shadow:0 1px 3px rgba(0,0,0,.4)}
 *{margin:0;padding:0;box-sizing:border-box}
 html{height:100%}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;color:var(--text);background:var(--bg);display:flex;min-height:100vh;transition:background .2s,color .2s}
 /* SIDEBAR */
 .sidebar{width:220px;background:var(--sidebar);color:var(--sidebar-text);display:flex;flex-direction:column;flex-shrink:0;position:fixed;height:100vh;z-index:100}
-.sidebar .logo{padding:18px;font-size:16px;font-weight:700;color:#fff;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:8px}
+.sidebar .logo{padding:18px;font-size:16px;font-weight:700;color:var(--sidebar-text);border-bottom:1px solid rgba(0,0,0,.08);display:flex;align-items:center;gap:8px}
 .nav-item{padding:10px 18px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:.15s;font-size:13px;border-left:3px solid transparent}
 .nav-item:hover{background:var(--sidebar-hover);color:#fff}
 .nav-item.active{background:rgba(13,148,136,.15);color:var(--sidebar-active);border-left-color:var(--primary);font-weight:600}
 .sidebar .spacer{flex:1}
-.sidebar .version{padding:12px 18px;font-size:10px;color:var(--text2);border-top:1px solid rgba(255,255,255,.08)}
+.sidebar .version{padding:12px 18px;font-size:10px;color:var(--text2);border-top:1px solid rgba(0,0,0,.08)}
 /* MAIN */
 .main{flex:1;margin-left:220px;display:flex;flex-direction:column;min-height:100vh;overflow-y:auto}
 .topbar{display:flex;align-items:center;gap:10px;padding:12px 24px;background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50}
