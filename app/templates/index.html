@@ -31,11 +31,11 @@
   <div class=nav-item data-nav=archivio onclick="nav('archivio')"><span class=ico>📁</span><span>Archivio</span></div>
   <div class=nav-item data-nav=ricettario onclick="nav('ricettario')" title="Ricettario: crea e gestisci ricette"><span class=ico>📖</span><span>Ricettario</span></div>
   <div class=spacer></div>
-  <div class=nav-item style=cursor:pointer;font-size:11px onclick=showStats() title="Statistiche studio">📊</div>
-    <div class=nav-item style=cursor:pointer;font-size:11px onclick=showSettings() title="Impostazioni studio e brand">⚙️</div>
-    <div class=nav-item style=cursor:pointer;font-size:11px;position:relative onclick=toggleNotifDropdown() title="Notifiche: messaggi e promemoria" id=bell-btn>🔔<span id=bell-badge style="display:none;background:#ef4444;color:#fff;font-size:9px;padding:0 4px;border-radius:8px;position:absolute;top:-2px;right:-4px">0</span></div>
-    <div class=nav-item style=cursor:pointer;font-size:11px onclick=doLogout() title="Esci dalla sessione">🚪</div>
-  <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn title="Cambia tema chiaro/scuro">🌙</button>
+  <div class=nav-item style=cursor:pointer;font-size:11px onclick=showStats() title="Statistiche studio">📊 <span>Statistiche</span></div>
+  <div class=nav-item style=cursor:pointer;font-size:11px onclick=showSettings() title="Impostazioni studio e brand">⚙️ <span>Impostazioni</span></div>
+  <div class=nav-item style=cursor:pointer;font-size:11px;position:relative onclick=toggleNotifDropdown() title="Notifiche: messaggi e promemoria" id=bell-btn>🔔 <span>Notifiche</span><span id=bell-badge style="display:none;background:#ef4444;color:#fff;font-size:9px;padding:0 4px;border-radius:8px;position:absolute;top:-2px;right:-4px">0</span></div>
+  <div class=nav-item style=cursor:pointer;font-size:11px onclick=doLogout() title="Esci dalla sessione">🚪 <span>Esci</span></div>
+  <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn title="Cambia tema chiaro/scuro" style="margin:0 18px 8px">🌙 Tema</button>
   <div class=version>v2.20.6 · Dietowin</div>
 </div>
 <div id=notif-dropdown style="display:none;position:fixed;top:50px;right:50px;width:320px;max-height:360px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:10px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.15);font-size:12px">
