@@ -1036,9 +1036,9 @@ function modal(body){
 }
 function closeModal(){$('modal-root').innerHTML=''}
 // CONFIRM (promise-based, styled)
-function showConfirm(title,text,opt){opt=opt||{};return new Promise(function(resolve){modal('<div class=card style=text-align:center;min-width:280px><b>'+esc(title)+'</b><p style=font-size:12px;color:var(--text2);margin:6px 0>'+esc(text)+'</p><div style=display:flex;gap:8px;justify-content:center;margin-top:10px>'+
-'<button class=btn onclick="closeModal();setTimeout(function(){resolve(false)},10)">'+(opt.cancelText||'Annulla')+'</button>'+
-'<button class="'+(opt.danger?'btn btn-danger':'btn btn-primary')+'" onclick="closeModal();setTimeout(function(){resolve(true)},10)">'+(opt.confirmText||'Conferma')+'</button></div></div>')})}
+function showConfirm(title,text,opt){opt=opt||{};return new Promise(function(resolve){window._confirmResolve=resolve;modal('<div class=card style=text-align:center;min-width:280px><b>'+esc(title)+'</b><p style=font-size:12px;color:var(--text2);margin:6px 0>'+esc(text)+'</p><div style=display:flex;gap:8px;justify-content:center;margin-top:10px>'+
+'<button class=btn onclick="closeModal();setTimeout(function(){window._confirmResolve(false)},10)">'+(opt.cancelText||'Annulla')+'</button>'+
+'<button class="'+(opt.danger?'btn btn-danger':'btn btn-primary')+'" onclick="closeModal();setTimeout(function(){window._confirmResolve(true)},10)">'+(opt.confirmText||'Conferma')+'</button></div></div>')})}
 // ONBOARDING TOUR
 function startOnboarding(){
   if(localStorage.getItem('onboarding_done'))return;
