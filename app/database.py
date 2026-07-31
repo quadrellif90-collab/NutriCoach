@@ -742,6 +742,11 @@ def seed_food_catalog():
             con.execute(f"ALTER TABLE patients ADD COLUMN {col}")
         except Exception:
             pass
+    # Migra colonne users: backup_folder
+    try:
+        con.execute("ALTER TABLE users ADD COLUMN backup_folder TEXT DEFAULT ''")
+    except Exception:
+        pass
     con.commit()
     cnt = con.execute("SELECT COUNT(*) FROM food_catalog").fetchone()[0]
     if cnt > 0:
@@ -1302,6 +1307,41 @@ def update_user_settings(uid, clinic_name=None, logo_url=None, theme_color=None)
         vals.append(uid)
         con.execute(f"UPDATE users SET {','.join(fields)} WHERE id=?", tuple(vals))
         con.commit()
+
+
+def set_backup_folder(uid, folder_path):
+    con = get_db()
+    con.execute("UPDATE users SET backup_folder=? WHERE id=?", (folder_path, uid))
+    con.commit()
+    # Also write to studio_config.json
+    config_path = os.path.join(DATA_DIR, "studio_config.json")
+    config = {}
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r") as f:
+                config = json.load(f)
+        except Exception:
+            pass
+    config["backup_folder"] = folder_path
+    with open(config_path, "w") as f:
+        json.dump(config, f, indent=2)
+
+
+def get_backup_folder(uid):
+    con = get_db()
+    row = con.execute("SELECT backup_folder FROM users WHERE id=?", (uid,)).fetchone()
+    if row and row["backup_folder"]:
+        return row["backup_folder"]
+    # Fallback: read from studio_config.json
+    config_path = os.path.join(DATA_DIR, "studio_config.json")
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r") as f:
+                config = json.load(f)
+            return config.get("backup_folder", "")
+        except Exception:
+            pass
+    return ""
 
 
 # ─── STATISTICS ──────────────────────────────────────────────────────────

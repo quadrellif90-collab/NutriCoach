@@ -814,6 +814,27 @@ async def api_save_settings(request: Request):
     return {"ok": True}
 
 
+@app.post("/api/setup-wizard")
+async def api_setup_wizard(request: Request):
+    b = await request.json()
+    token = b.get("token", "")
+    s = db.get_session(token)
+    if not s:
+        raise HTTPException(401, "Non autenticato")
+    folder = b.get("backup_folder", "")
+    db.set_backup_folder(s["user_id"], folder)
+    return {"ok": True, "backup_folder": folder}
+
+
+@app.get("/api/setup-wizard")
+def api_get_setup_wizard(token: str = ""):
+    s = db.get_session(token)
+    if not s:
+        raise HTTPException(401, "Non autenticato")
+    folder = db.get_backup_folder(s["user_id"])
+    return {"backup_folder": folder, "has_folder": bool(folder)}
+
+
 # ─── STATISTICS ──────────────────────────────────────────────────────────
 
 @app.get("/api/stats")
@@ -918,7 +939,10 @@ async def api_create_notif(request: Request):
 # ─── CATEGORIES ────────────────────────────────────────────────────────────
 
 @app.delete("/api/patients/{pid}")
-def api_delete_patient(pid: int):
+def api_delete_patient(pid: int, token: str = ""):
+    s = db.get_session(token)
+    if not s:
+        raise HTTPException(401, "Non autenticato")
     db.delete_patient(pid)
     return {"ok": True}
 

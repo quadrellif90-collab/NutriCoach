@@ -18,6 +18,20 @@
 .btn-next{background:var(--primary,#6366f1);color:#fff}.btn-next:hover{opacity:.9}
 .btn-finish{background:#22c55e;color:#fff}.btn-finish:hover{opacity:.9}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+/* SETUP WIZARD */
+#wizard-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99998;display:none;align-items:center;justify-content:center;animation:fadeIn .3s}
+.wizard-card{background:var(--card,#fff);border-radius:16px;padding:32px;max-width:440px;width:90%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.25)}
+.wizard-card h2{font-size:1.4rem;margin:0 0 8px}
+.wizard-card p{font-size:13px;color:var(--text2,#666);margin:0 0 16px;line-height:1.5}
+.wizard-card label{display:block;text-align:left;font-size:12px;font-weight:600;margin:12px 0 4px;color:var(--text2,#555)}
+.wizard-card input[type=text]{width:100%;padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:8px;font-size:13px;box-sizing:border-box}
+.wizard-presets{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 16px}
+.wizard-preset{padding:6px 12px;border:1px solid var(--border,#ddd);border-radius:8px;font-size:11px;cursor:pointer;background:var(--surface,#f8f8f8);transition:all .2s}
+.wizard-preset:hover,.wizard-preset.active{border-color:var(--primary,#6366f1);background:var(--primary,#6366f1);color:#fff}
+.wizard-btns{display:flex;gap:10px;margin-top:16px}
+.wizard-btns .btn{flex:1;padding:10px;border-radius:8px;font-size:13px;cursor:pointer;border:none}
+.wizard-btn-primary{background:var(--primary,#6366f1);color:#fff}.wizard-btn-primary:hover{opacity:.9}
+.wizard-btn-skip{background:transparent;color:var(--text2,#888);border:1px solid var(--border,#ddd)!important}.wizard-btn-skip:hover{opacity:.7}
 </style>
 </head><body>
 <div class=sidebar>
@@ -296,7 +310,8 @@ function returnToDashboard(){
 }
 async function deletePatient(cid){
   if(!await showConfirm('Eliminare paziente?','Tutti i dati associati (BIA, dieta, appuntamenti) saranno rimossi permanentemente.',{danger:true,confirmText:'Elimina'}))return;
-  await jdel('/api/patients/'+cid);
+  const t=localStorage.getItem('token');
+  await jdel('/api/patients/'+cid+'?token='+t);
   toast('Paziente eliminato',{type:'success'});
   nav('pazienti');
 }
@@ -1060,7 +1075,7 @@ async function doLogin(){
   const u=$('login-u')?.value,pw=$('login-p')?.value;
   if(!u||!pw){toast('Inserisci credenziali');return}
   const r=await jpost('/api/login',{username:u,password:pw});
-  if(r&&r.token){localStorage.setItem('token',r.token);$('login-overlay').style.display='none';setupBrand();toast('Login OK ✓');startOnboarding();nav('dashboard')}
+  if(r&&r.token){localStorage.setItem('token',r.token);$('login-overlay').style.display='none';setupBrand();toast('Login OK ✓');startOnboarding();nav('dashboard');setTimeout(showSetupWizard,500)}
   else toast('Credenziali errate');
 }
 function doLogout(){
@@ -1112,7 +1127,7 @@ async function showStats(){
   const dbVersion=localStorage.getItem('nc-db-version');
   if(dbVersion!=='2.20.6'){localStorage.clear();localStorage.setItem('nc-db-version','2.20.6');}
   if(token){
-    try{const s=await jget('/api/session?token='+token);if(s&&s.username){$('login-overlay').style.display='none';setupBrand();startNotifPoll();startOnboarding();nav('dashboard');return}}catch(e){}
+    try{const s=await jget('/api/session?token='+token);if(s&&s.username){$('login-overlay').style.display='none';setupBrand();startNotifPoll();startOnboarding();nav('dashboard');setTimeout(showSetupWizard,500);return}}catch(e){}
   }
   const lo=$('login-overlay');if(lo)lo.style.display='flex';else console.warn('login-overlay not in DOM (race)');
 })(); 
@@ -1150,9 +1165,66 @@ async function doUpdate(){
 }
 // Check on startup after login
 setTimeout(checkForUpdate,3000);
+// ─── SETUP WIZARD ──────────────────────────────────────────────────────
+function selectWizardPreset(el,path){
+  qsa('.wizard-preset').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+  $('wizard-folder').value=path;
+}
+function showSetupWizard(){
+  // Check if already done
+  if(localStorage.getItem('setup_wizard_done'))return;
+  // Check if user already has a backup folder configured
+  const t=localStorage.getItem('token');
+  if(!t)return;
+  jget('/api/setup-wizard?token='+t).then(r=>{
+    if(r&&r.has_folder){localStorage.setItem('setup_wizard_done','1');return}
+    // Show wizard
+    const defFolder='~/.nutricoach/backups';
+    $('wizard-folder').value=defFolder;
+    $('wizard-overlay').style.display='flex';
+  });
+}
+async function saveSetupWizard(){
+  const folder=$('wizard-folder').value.trim();
+  if(!folder){toast('Inserisci un percorso cartella',{type:'warn'});return}
+  const t=localStorage.getItem('token');
+  const r=await jpost('/api/setup-wizard',{token:t,backup_folder:folder});
+  if(r&&r.ok){
+    localStorage.setItem('setup_wizard_done','1');
+    $('wizard-overlay').style.display='none';
+    toast('Cartella backup configurata ✓',{type:'success'});
+  }else{
+    toast('Errore salvataggio',{type:'error'});
+  }
+}
+function skipSetupWizard(){
+  localStorage.setItem('setup_wizard_done','1');
+  $('wizard-overlay').style.display='none';
+}
 </script>
 <!-- LOGIN OVERLAY -->
 <div id=login-overlay style="display:flex;position:fixed;inset:0;background:var(--bg);z-index:9999;align-items:center;justify-content:center;flex-direction:column">
   <div class=card style=width:320px><b>🔐 NutriCoach v2</b><br><span style=font-size:11px;color:var(--text2)>Accedi</span>
   <input id=login-u placeholder=Username style=margin-top:12px><input id=login-p type=password placeholder=Password><div style=margin-top:8px><button class="btn btn-primary" onclick=doLogin()>Accedi</button></div></div>
-</div></body></html>
+</div>
+<!-- SETUP WIZARD -->
+<div id=wizard-overlay>
+  <div class=wizard-card>
+    <h2>👋 Benvenuto in NutriCoach!</h2>
+    <p>Configura la cartella di backup/sincronizzazione per i tuoi dati. Puoi puntare a una cartella condivisa (Google Drive, Dropbox, OneDrive) per sincronizzare tra più PC.</p>
+    <label>Cartella backup</label>
+    <input type=text id=wizard-folder value="" placeholder="es. C:\Users\...\Google Drive\NutriCoach">
+    <div class=wizard-presets>
+      <div class=wizard-preset onclick="selectWizardPreset(this,'~/.nutricoach/backups')">📁 Predefinita</div>
+      <div class=wizard-preset onclick="selectWizardPreset(this,'Google Drive/NutriCoach')">☁️ Google Drive</div>
+      <div class=wizard-preset onclick="selectWizardPreset(this,'Dropbox/NutriCoach')">📦 Dropbox</div>
+      <div class=wizard-preset onclick="selectWizardPreset(this,'OneDrive/NutriCoach')">☁️ OneDrive</div>
+    </div>
+    <div class=wizard-btns>
+      <button class=wizard-btn-skip onclick="skipSetupWizard()">Salta</button>
+      <button class=wizard-btn-primary onclick="saveSetupWizard()">Salva e continua</button>
+    </div>
+  </div>
+</div>
+</body></html>
