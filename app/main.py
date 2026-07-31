@@ -1173,6 +1173,149 @@ def api_version():
     _, V = os.path.dirname(__file__), "2.20.6"
     return {"version": V, "platform": sys.platform}
 
+# ─── UPDATE CHECK (GitHub Releases) ──────────────────────────────────────
+_GITHUB_REPO = "quadrellif90-collab/NutriCoach"
+_GITHUB_RELEASES_URL = f"https://api.github.com/repos/{_GITHUB_REPO}/releases/latest"
+_UPDATE_CACHE_TTL_S = 6 * 3600  # 6 hours
+_UPDATE_CACHE_PATH = os.path.join(db.DATA_DIR, "update_cache.json")
+
+def _read_update_cache():
+    try:
+        return json.loads(open(_UPDATE_CACHE_PATH, encoding="utf-8").read())
+    except Exception:
+        return None
+
+def _write_update_cache(data):
+    try:
+        with open(_UPDATE_CACHE_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except Exception:
+        pass
+
+def _cache_fresh(cache):
+    if not cache:
+        return False
+    if cache.get("current") != "2.20.6":
+        return False
+    try:
+        from datetime import datetime, timezone
+        ts = datetime.strptime(cache["checked_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - ts).total_seconds() < _UPDATE_CACHE_TTL_S
+    except Exception:
+        return False
+
+@app.get("/api/update/check")
+def api_update_check(force: int = 0):
+    """Check GitHub releases for updates. Returns {current, latest, update_available, ...}"""
+    import sys as _sys
+    from datetime import datetime, timezone
+
+    plat = _sys.platform
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    cache = _read_update_cache()
+
+    if not force and _cache_fresh(cache):
+        cache["cached"] = True
+        cache["current"] = "2.20.6"
+        cache["update_available"] = cache.get("latest", "0") > "2.20.6"
+        return cache
+
+    try:
+        import urllib.request
+        req = urllib.request.Request(_GITHUB_RELEASES_URL, headers={"User-Agent": "NutriCoach"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            rel = json.loads(resp.read().decode())
+
+        tag = (rel.get("tag_name") or "").lstrip("v").strip()
+        if not tag:
+            raise RuntimeError("release missing tag_name")
+
+        # Select platform asset
+        download_url, asset_name = None, None
+        for asset in (rel.get("assets") or []):
+            name = (asset.get("name") or "").lower()
+            if plat == "win32" and name.endswith(".exe"):
+                download_url = asset.get("browser_download_url")
+                asset_name = asset.get("name")
+                break
+            elif plat == "darwin" and name.endswith(".dmg"):
+                download_url = asset.get("browser_download_url")
+                asset_name = asset.get("name")
+                break
+
+        payload = {
+            "current": "2.20.6",
+            "latest": tag,
+            "update_available": "2.20.6" < tag,
+            "release_url": rel.get("html_url", ""),
+            "download_url": download_url,
+            "asset_name": asset_name,
+            "platform": plat,
+            "checked_at": now,
+            "cached": False,
+            "error": None,
+            "release_body": (rel.get("body") or "")[:2000],
+        }
+        _write_update_cache(payload)
+        return payload
+
+    except Exception as e:
+        if cache:
+            cache["cached"] = True
+            cache["error"] = str(e)
+            cache["current"] = "2.20.6"
+            cache["update_available"] = cache.get("latest", "0") > "2.20.6"
+            return cache
+        return {"current": "2.20.6", "latest": None, "update_available": False,
+                "release_url": None, "download_url": None, "asset_name": None,
+                "platform": plat, "checked_at": now, "cached": False,
+                "error": str(e), "release_body": None}
+
+@app.get("/api/update/download")
+def api_update_download():
+    """Download the latest release and restart the app."""
+    import urllib.request, subprocess, sys as _sys, time
+
+    cache = _read_update_cache()
+    if not cache or not cache.get("download_url"):
+        return {"ok": False, "error": "Nessun aggiornamento disponibile. Fai prima un /api/update/check"}
+
+    url = cache["download_url"]
+    asset = cache.get("asset_name", "NutriCoach-Setup.exe")
+    dest = os.path.join(db.DATA_DIR, asset)
+
+    try:
+        # Download
+        req = urllib.request.Request(url, headers={"User-Agent": "NutriCoach"})
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            with open(dest, "wb") as f:
+                while True:
+                    chunk = resp.read(8192)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+
+        print(f"[NutriCoach Update] Download completato: {dest}")
+
+        # Launch installer and restart app
+        if _sys.platform == "win32":
+            # Start installer silently, then restart
+            subprocess.Popen([dest, "/S"], shell=False)
+            # Give installer time to start, then exit
+            time.sleep(2)
+            # Restart: launch new exe and exit current
+            exe_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "NutriCoach.exe")
+            if os.path.exists(exe_path):
+                subprocess.Popen([exe_path])
+            os._exit(0)
+        else:
+            return {"ok": True, "downloaded": dest, "action": "manual_install"}
+
+        return {"ok": True, "downloaded": dest}
+
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
 # ─── INIT ─────────────────────────────────────────────────────────────────
 
 @app.on_event("startup")

@@ -2,7 +2,7 @@
 <meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>NutriCoach v2.20.6</title>
-<link rel=stylesheet href=/static/style.css>
+<link rel=stylesheet href=/static/style.css?v=2.20.6>
 <style>
 /* ONBOARDING TOUR */
 #onboarding-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;animation:fadeIn .3s}
@@ -51,6 +51,20 @@
 </div>
 <div id=modal-root></div>
 <div id=toast></div>
+<div id=update-banner style="display:none;position:fixed;bottom:20px;right:20px;max-width:380px;background:var(--card);border:2px solid var(--primary);border-radius:12px;padding:16px 20px;box-shadow:0 8px 24px rgba(0,0,0,.2);z-index:99999;font-size:13px">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+    <span style="font-size:24px">🔄</span>
+    <div>
+      <b style="color:var(--primary)">Aggiornamento disponibile!</b>
+      <div id=update-version style="font-size:11px;color:var(--text2);margin-top:2px"></div>
+    </div>
+  </div>
+  <div id=update-notes style="font-size:11px;color:var(--text2);max-height:80px;overflow-y:auto;margin-bottom:10px"></div>
+  <div style="display:flex;gap:8px">
+    <button class="btn btn-sm" id=update-btn onclick="doUpdate()" style="flex:1">⬇️ Aggiorna e riavvia</button>
+    <button class="btn btn-sm btn-outline" onclick="dismissUpdate()">Dopo</button>
+  </div>
+</div>
 <script>
 const API=''; let ST={nav:'dashboard',clients:[],cid:null,cats:[],name:null,weight:null};
 function $(id){return document.getElementById(id)}
@@ -1101,7 +1115,41 @@ async function showStats(){
     try{const s=await jget('/api/session?token='+token);if(s&&s.username){$('login-overlay').style.display='none';setupBrand();startNotifPoll();startOnboarding();nav('dashboard');return}}catch(e){}
   }
   const lo=$('login-overlay');if(lo)lo.style.display='flex';else console.warn('login-overlay not in DOM (race)');
-})();
+})(); 
+// ─── UPDATE CHECK ──────────────────────────────────────────────────────
+async function checkForUpdate(){
+  try{
+    const r=await jget('/api/update/check?force=1');
+    if(r&&r.update_available){
+      $('update-version').textContent=`Versione attuale: v${r.current} → Nuova: v${r.latest}`;
+      $('update-notes').textContent=r.release_body||'';
+      $('update-banner').style.display='block';
+      toast('Aggiornamento disponibile: v'+r.latest,{type:'info',duration:8000});
+    }
+  }catch(e){}
+}
+function dismissUpdate(){$('update-banner').style.display='none'}
+async function doUpdate(){
+  const btn=$('update-btn');
+  btn.textContent='⏳ Download in corso...';btn.disabled=true;
+  toast('Download aggiornamento in corso...',{type:'info',duration:15000});
+  try{
+    const r=await jget('/api/update/download');
+    if(r&&r.ok){
+      toast('Download completato! Riavvio...',{type:'success'});
+      // App will restart via server-side os._exit(0)
+      setTimeout(()=>{toast('Riavvio in corso...',{type:'info',duration:10000})},2000);
+    }else{
+      toast('Errore download: '+(r.error||'sconosciuto'),{type:'error'});
+      btn.textContent='⬇️ Aggiorna e riavvia';btn.disabled=false;
+    }
+  }catch(e){
+    toast('Errore: '+e.message,{type:'error'});
+    btn.textContent='⬇️ Aggiorna e riavvia';btn.disabled=false;
+  }
+}
+// Check on startup after login
+setTimeout(checkForUpdate,3000);
 </script>
 <!-- LOGIN OVERLAY -->
 <div id=login-overlay style="display:flex;position:fixed;inset:0;background:var(--bg);z-index:9999;align-items:center;justify-content:center;flex-direction:column">
