@@ -777,6 +777,18 @@ async def api_login(request: Request):
                                                   "logo_url": user["logo_url"], "theme_color": user["theme_color"]}}
 
 
+@app.get("/api/auto-login")
+def api_auto_login():
+    """Auto-login with default admin user — no credentials needed."""
+    user = db.get_user("admin")
+    if not user:
+        raise HTTPException(500, "Admin user not found")
+    token = db.create_session(user["id"])
+    return {"ok": True, "token": token, "user": {"id": user["id"], "username": user["username"],
+                                                  "role": user["role"], "clinic_name": user["clinic_name"],
+                                                  "logo_url": user["logo_url"], "theme_color": user["theme_color"]}}
+
+
 @app.post("/api/logout")
 async def api_logout(request: Request):
     b = await request.json()
