@@ -19,7 +19,7 @@ except Exception:
 import fitz  # PyMuPDF
 
 
-def ocr_pdf(path, dpi=200, lang="ita+eng"):
+def ocr_pdf(path, dpi=200):
     """Renderizza un PDF in immagini base64.
 
     Non esegue OCR — restituisce solo le immagini delle pagine.

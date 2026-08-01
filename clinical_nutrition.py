@@ -2636,3 +2636,67 @@ def suggest_next_reintroduction(client_phases, symptoms):
     return {"ready": False,
             "reason": "Nessuna fase dieta FODMAP registrata e pochi sintomi: non e' indicata la reintroduzione.",
             "next_step": None}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# INCOMPATIBILITÀ PRESET / CONDIZIONI CLINICHE
+# Mappa condizioni -> lista di preset incompatibili.
+# Non è un blocco duro: il nutrizionista può sovrascrivere, ma la UI mostra
+# un avviso chiaro prima di procedere.
+# ─────────────────────────────────────────────────────────────────────────────
+
+INCOMPATIBLE_PRESETS = {
+    # SIBO: fibre fermentabili alimentano la sovraccrescita batterica
+    "sibo": ["vegano"],  # alto contenuto fibre/legumi
+    "sibo_hydrogen": ["vegano"],
+    "sibo_methane": ["vegano"],
+    # Calcoli renali: proteine in eccesso acidificano le urine
+    "kidney_stones": ["altoproteico", "ckd"],
+    # Celiachia: keto è troppo restrittiva → rischio carenze (ferro, B12, folati)
+    "celiac": ["keto", "ckd"],
+    # IBD: diete chetogeniche/vegane troppo restrittive o con troppa fibra
+    "ibd": ["vegano", "ckd"],
+    # GERD: cibi molto grassi (keto) peggiorano il reflusso
+    "gerd": ["keto"],
+    # IBS: diete molto ricche di fibre crude possono peggiorare i sintomi
+    "ibs": ["vegano"],
+    # Disbiosis: alto contenuto fibre legumi può essere problematico
+    "dysbiosis": ["vegano"],
+    # Intolleranza lattosio: keto può basarsi molto sui latticini
+    "lactose_intolerance": ["keto"],
+    # NCGS: stessa restrizione della celiachia
+    "ncgs": ["keto", "ckd"],
+    # EoE: diete molto restrittive complicano la gestione 4FED
+    "eoe": ["vegano"],
+    # Osteoporosi: diete chetogeniche possono compromettere l'assorbimento di calcio
+    "osteoporosis": ["keto", "ckd"],
+}
+
+
+def check_preset_compatibility(conditions, preset_key):
+    """
+    Verifica se un preset è incompatibile con le condizioni cliniche del paziente.
+
+    Args:
+        conditions: lista di stringhe (es. ['sibo', 'ibs'])
+        preset_key: chiave del preset (es. 'vegano')
+
+    Returns:
+        dict con 'incompatible' (bool), 'reasons' (lista di dict con condition/reason)
+    """
+    if not conditions or not preset_key:
+        return {"incompatible": False, "reasons": []}
+
+    reasons = []
+    for cond in conditions:
+        incompatible_list = INCOMPATIBLE_PRESETS.get(cond, [])
+        if preset_key in incompatible_list:
+            cond_name = CLINICAL_CONDITIONS.get(cond, {}).get("name", cond)
+            reasons.append({
+                "condition": cond,
+                "condition_name": cond_name,
+                "preset": preset_key,
+                "reason": f"Il regime '{preset_key}' è sconsigliato per {cond_name}"
+            })
+
+    return {"incompatible": len(reasons) > 0, "reasons": reasons}

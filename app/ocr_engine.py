@@ -1,11 +1,13 @@
 """
 Motore OCR integrato per NutriCoach v2.
-Usa Windows.Media.Ocr (built-in Windows 10/11) come primario,
-Tesseract come fallback per sistemi senza winsdk.
+Usa Windows.Media.Ocr (built-in Windows 10/11) come primario.
 
 Windows OCR restituisce coordinate XY di ogni parola → permette
 estrazione intelligente da tabelle (es. AKERN BODYGRAM dove i
 valori del paziente sono nella colonna a x≈1410, i riferimenti a x≥2150).
+
+Tesseract è stato rimosso — crashava su Windows. Il frontend ora usa
+servizi OCR basati su browser (es. zai.qwen.ai).
 """
 
 import os, re, logging, io
@@ -27,7 +29,7 @@ class OcrWord:
 class OcrResult:
     lines: list  # [(y_center, [OcrWord, ...])]
     raw_text: str
-    source: str = "windows_ocr"  # o "tesseract"
+    source: str = "windows_ocr"  # o "none" se Windows OCR non disponibile
 
 # ── Windows OCR engine ──────────────────────────────────────
 _HAVE_WINSDK = False
@@ -84,30 +86,6 @@ async def _run_windows_ocr(image_path: str) -> OcrResult:
 def _run_windows_ocr_sync(image_path: str) -> OcrResult:
     """Wrapper sincrono per Windows OCR."""
     return asyncio.run(_run_windows_ocr(image_path))
-
-# ── Tesseract fallback ──────────────────────────────────────
-_HAVE_TESSERACT = False
-try:
-    import pytesseract
-    _HAVE_TESSERACT = True
-except ImportError:
-    try:
-        from app import ocr_pdf as tess_fallback
-        _HAVE_TESSERACT = True
-    except ImportError:
-        pass
-
-def _run_tesseract_ocr(image_path: str) -> OcrResult:
-    """OCR via Tesseract (fallback senza coordinate)."""
-    try:
-        import pytesseract
-        text = pytesseract.image_to_string(image_path, lang="ita+eng")
-    except Exception:
-        text = ""
-    # Tesseract non dà coordinate → lines simulate
-    lines = [(i*50, [OcrWord(text=ln.strip(), x=0, y=i*50, w=0, h=0)])
-             for i, ln in enumerate(text.split("\n")) if ln.strip()]
-    return OcrResult(lines=lines, raw_text=text, source="tesseract")
 
 # ── PDF rendering ───────────────────────────────────────────
 def _render_pdf_to_images(pdf_bytes: bytes, dpi: int = 200) -> list:
@@ -280,8 +258,9 @@ def _cleanup_tmpdir(paths: list):
 # ── API pubblica ────────────────────────────────────────────
 def ocr_pdf(pdf_bytes: bytes) -> OcrResult:
     """
-    Esegue OCR su un PDF usando Windows OCR (primario) o Tesseract (fallback).
+    Esegue OCR su un PDF usando Windows.Media.Ocr.
     Restituisce un OcrResult con linee, parole e coordinate XY.
+    Se Windows OCR non è disponibile, restituisce un OcrResult vuoto.
     """
     paths = _render_pdf_to_images(pdf_bytes, dpi=200)
 
@@ -299,27 +278,10 @@ def ocr_pdf(pdf_bytes: bytes) -> OcrResult:
         _cleanup_tmpdir(paths)
         return result
 
-    # Fallback Tesseract
-    log.info("OCR engine: Tesseract fallback")
-    if _HAVE_TESSERACT:
-        try:
-            from app.ocr_pdf import ocr_pdf_text
-            text = ocr_pdf_text(pdf_bytes)
-        except Exception as e:
-            log.warning("Tesseract fallback failed: %s", e)
-            text = ""
-    else:
-        text = ""
-
-    for p in paths:
-        try:
-            os.unlink(p)
-        except OSError:
-            pass
-
-    lines = [(i*50, [OcrWord(text=ln.strip(), x=0, y=i*50, w=0, h=0)])
-             for i, ln in enumerate(text.split("\n")) if ln.strip()]
-    return OcrResult(lines=lines, raw_text=text, source="tesseract")
+    # No Windows OCR available — return empty result
+    log.warning("OCR engine not available (Windows OCR not found). Returning empty result.")
+    _cleanup_tmpdir(paths)
+    return OcrResult(lines=[], raw_text="", source="none")
 
 
 def parse_bia_ocr(ocr_result: OcrResult) -> dict:

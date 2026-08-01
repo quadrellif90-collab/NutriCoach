@@ -428,15 +428,26 @@ def get_patient(pid):
     r = con.execute("SELECT * FROM patients WHERE id=?", (pid,)).fetchone()
     return row_to_dict(r)
 
-def list_patients(category_id=None):
+def list_patients(category_id=None, limit=50, offset=0):
     con = get_db()
     q = "SELECT * FROM patients"
     p = []
     if category_id:
         q += " WHERE category_id=?"
         p = [category_id]
-    q += " ORDER BY name"
+    q += " ORDER BY name LIMIT ? OFFSET ?"
+    p += [limit, offset]
     return rows_to_list(con.execute(q, p).fetchall())
+
+def count_patients(category_id=None):
+    con = get_db()
+    q = "SELECT COUNT(*) FROM patients"
+    p = []
+    if category_id:
+        q += " WHERE category_id=?"
+        p = [category_id]
+    row = con.execute(q, p).fetchone()
+    return row[0] if row else 0
 
 def delete_patient(pid):
     con = get_db()
@@ -508,8 +519,12 @@ def add_diet_plan(pid, title, preset, conditions, kcal, p, c, f, plan_json):
     con.commit()
     return con.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-def list_diet_plans(pid):
-    return rows_to_list(get_db().execute("SELECT id,title,date,preset,kcal_target FROM diet_plans WHERE patient_id=? ORDER BY date DESC", (pid,)).fetchall())
+def list_diet_plans(pid, limit=20, offset=0):
+    return rows_to_list(get_db().execute("SELECT id,title,date,preset,kcal_target FROM diet_plans WHERE patient_id=? ORDER BY date DESC LIMIT ? OFFSET ?", (pid, limit, offset)).fetchall())
+
+def count_diet_plans(pid):
+    row = get_db().execute("SELECT COUNT(*) FROM diet_plans WHERE patient_id=?", (pid,)).fetchone()
+    return row[0] if row else 0
 
 
 def get_latest_diet_plan(pid):
@@ -547,7 +562,7 @@ def add_appointment(pid, title, appt_date, appt_time="", status="open", follow_u
     con.commit()
     return con.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-def list_appointments(pid=None, date_from=None):
+def list_appointments(pid=None, date_from=None, limit=50, offset=0):
     con = get_db()
     q = "SELECT a.*, p.name as patient_name FROM appointments a JOIN patients p ON a.patient_id=p.id"
     params = []
@@ -558,8 +573,23 @@ def list_appointments(pid=None, date_from=None):
         wheres.append("a.appt_date>=?"); params.append(date_from)
     if wheres:
         q += " WHERE " + " AND ".join(wheres)
-    q += " ORDER BY a.appt_date DESC"
+    q += " ORDER BY a.appt_date DESC LIMIT ? OFFSET ?"
+    params += [limit, offset]
     return rows_to_list(con.execute(q, params).fetchall())
+
+def count_appointments(pid=None, date_from=None):
+    con = get_db()
+    q = "SELECT COUNT(*) FROM appointments a"
+    params = []
+    wheres = []
+    if pid:
+        wheres.append("a.patient_id=?"); params.append(pid)
+    if date_from:
+        wheres.append("a.appt_date>=?"); params.append(date_from)
+    if wheres:
+        q += " WHERE " + " AND ".join(wheres)
+    row = con.execute(q, params).fetchone()
+    return row[0] if row else 0
 
 # ─── NOTIFICATIONS ────────────────────────────────────────────────────────
 
@@ -596,11 +626,19 @@ def add_document(pid, title, doc_type, file_path):
     con.commit()
     return con.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-def list_documents(pid=None):
+def list_documents(pid=None, limit=50, offset=0):
     con = get_db()
     if pid:
-        return rows_to_list(con.execute("SELECT * FROM documents WHERE patient_id=? ORDER BY date DESC", (pid,)).fetchall())
-    return rows_to_list(con.execute("SELECT d.*, p.name as patient_name FROM documents d JOIN patients p ON d.patient_id=p.id ORDER BY d.date DESC").fetchall())
+        return rows_to_list(con.execute("SELECT * FROM documents WHERE patient_id=? ORDER BY date DESC LIMIT ? OFFSET ?", (pid, limit, offset)).fetchall())
+    return rows_to_list(con.execute("SELECT d.*, p.name as patient_name FROM documents d JOIN patients p ON d.patient_id=p.id ORDER BY d.date DESC LIMIT ? OFFSET ?", (limit, offset)).fetchall())
+
+def count_documents(pid=None):
+    con = get_db()
+    if pid:
+        row = con.execute("SELECT COUNT(*) FROM documents WHERE patient_id=?", (pid,)).fetchone()
+    else:
+        row = con.execute("SELECT COUNT(*) FROM documents").fetchone()
+    return row[0] if row else 0
 
 # ─── SYMPTOMS ─────────────────────────────────────────────────────────────
 
@@ -737,7 +775,7 @@ def seed_food_catalog():
         FOREIGN KEY (user_id) REFERENCES users(id)
     )""")
     # Migra colonne patients
-    for col in ["portal_token TEXT DEFAULT NULL", "birth_date TEXT DEFAULT NULL", "language TEXT DEFAULT 'it'", "user_id INTEGER DEFAULT 1"]:
+    for col in ["portal_token TEXT DEFAULT NULL", "birth_date TEXT DEFAULT NULL", "language TEXT DEFAULT 'it'", "user_id INTEGER DEFAULT 1", "meals_per_day INTEGER DEFAULT 5"]:
         try:
             con.execute(f"ALTER TABLE patients ADD COLUMN {col}")
         except Exception:
@@ -937,18 +975,18 @@ def get_recipe(rid):
     return d
 
 
-def list_recipes(category="", q=""):
+def list_recipes(category="", q="", limit=50, offset=0):
     import json
     con = get_db()
     q = f"%{q}%"
     if category:
         rows = con.execute(
-            "SELECT * FROM recipes WHERE category=? AND (name LIKE ? OR instructions LIKE ?) ORDER BY name",
-            (category, q, q)).fetchall()
+            "SELECT * FROM recipes WHERE category=? AND (name LIKE ? OR instructions LIKE ?) ORDER BY name LIMIT ? OFFSET ?",
+            (category, q, q, limit, offset)).fetchall()
     else:
         rows = con.execute(
-            "SELECT * FROM recipes WHERE name LIKE ? OR instructions LIKE ? ORDER BY name",
-            (q, q)).fetchall()
+            "SELECT * FROM recipes WHERE name LIKE ? OR instructions LIKE ? ORDER BY name LIMIT ? OFFSET ?",
+            (q, q, limit, offset)).fetchall()
     out = []
     for r in rows:
         d = dict(r)
@@ -959,6 +997,15 @@ def list_recipes(category="", q=""):
         except: d["macros"] = {}
         out.append(d)
     return out
+
+def count_recipes(category="", q=""):
+    con = get_db()
+    q = f"%{q}%"
+    if category:
+        row = con.execute("SELECT COUNT(*) FROM recipes WHERE category=? AND (name LIKE ? OR instructions LIKE ?)", (category, q, q)).fetchone()
+    else:
+        row = con.execute("SELECT COUNT(*) FROM recipes WHERE name LIKE ? OR instructions LIKE ?", (q, q)).fetchone()
+    return row[0] if row else 0
 
 
 def _resolve_recipe_ingredients(ingredients, con):

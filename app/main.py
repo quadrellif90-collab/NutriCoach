@@ -6,22 +6,13 @@ from fastapi import FastAPI, UploadFile, File, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-# Tesseract OCR per BIA: imposta TESSDATA_PREFIX se non gia' in env
-if not os.environ.get("TESSDATA_PREFIX"):
-    for p in [r"C:\Program Files\Tesseract-OCR\tessdata",
-              r"C:\Program Files\Tesseract-OCR\tessdata",
-              "/usr/share/tesseract-ocr/4.00/tessdata",
-              "/usr/local/share/tessdata"]:
-        if os.path.isdir(p):
-            os.environ["TESSDATA_PREFIX"] = p
-            break
-
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
-from app import ocr_engine  # OCR integrato: Windows OCR + fallback Tesseract
 
 app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.20.6")
+
+MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 
 # Global exception handler — converts unhandled errors to clean JSON responses
 @app.exception_handler(Exception)
@@ -92,6 +83,17 @@ def api_presets():
 async def api_preset_targets(request: Request):
     b = await request.json()
     return diet_presets.preset_targets(b.get("key","personalizzato"), float(b.get("kcal",2000) or 2000), b.get("weight_kg"))
+
+
+@app.post("/api/presets/check-compatibility")
+async def api_check_preset_compatibility(request: Request):
+    """Verifica se un preset è incompatibile con le condizioni cliniche del paziente."""
+    b = await request.json()
+    conditions = b.get("conditions", [])
+    preset_key = b.get("preset", "")
+    result = clinical_nutrition.check_preset_compatibility(conditions, preset_key)
+    return result
+
 
 # ─── PIANO ALIMENTARE ─────────────────────────────────────────────────────
 
@@ -258,8 +260,10 @@ def api_adherence(pid: int, days_back: int = 7):
 # ─── RECIPES API ─────────────────────────────────────────────────────────
 
 @app.get("/api/recipes")
-def api_list_recipes(category: str = "", q: str = ""):
-    return {"recipes": db.list_recipes(category=category, q=q)}
+def api_list_recipes(category: str = "", q: str = "", limit: int = 20, offset: int = 0):
+    items = db.list_recipes(category=category, q=q, limit=limit, offset=offset)
+    total = db.count_recipes(category=category, q=q)
+    return {"recipes": items, "total": total, "limit": limit, "offset": offset}
 
 
 @app.get("/api/recipes/{rid}")
@@ -344,7 +348,7 @@ def api_diet_pdf(pid: int):
                                            days_data.get(d, {}).get("spuntino2", []) +
                                            days_data.get(d, {}).get("cena", []))
     # Targets dall'ultimo piano
-    plans = db.list_diet_plans(pid)
+    plans = db.list_diet_plans(pid, limit=100)
     targets = {"kcal": 2000, "protein_pct": 30, "carb_pct": 45, "fat_pct": 25}
     if plans:
         p0 = plans[0]
@@ -497,7 +501,7 @@ def api_portal_pdf(token: str):
     for d in ["lun","mar","mer","gio","ven","sab","dom"]:
         ms = days_data.get(d, {})
         macros[d] = db.compute_meal_macros(sum(ms.values(), []))
-    plans = db.list_diet_plans(pid)
+    plans = db.list_diet_plans(pid, limit=100)
     targets = {"kcal":2000,"protein_pct":30,"carb_pct":45,"fat_pct":25,"preset":""}
     if plans:
         p0 = plans[0]
@@ -647,7 +651,7 @@ def api_backup_auto():
 def api_export_patients():
     """Export CSV di tutti i pazienti."""
     import csv, io
-    patients = db.list_patients()
+    patients = db.list_patients(limit=10000, offset=0)
     out = io.StringIO()
     if patients:
         w = csv.DictWriter(out, fieldnames=list(patients[0].keys()))
@@ -680,8 +684,10 @@ async def api_import_patient(request: Request):
 # ─── PATIENTS CRUD ────────────────────────────────────────────────────────
 
 @app.get("/api/patients")
-def api_list_patients(cat_id: int = None):
-    return db.list_patients(cat_id)
+def api_list_patients(cat_id: int = None, limit: int = 20, offset: int = 0):
+    items = db.list_patients(cat_id, limit=limit, offset=offset)
+    total = db.count_patients(cat_id)
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
 @app.get("/api/patients/compare")
@@ -714,12 +720,15 @@ async def api_create_patient(request: Request):
     lang = b.get("language")
     if lang:
         db.update_patient(pid, language=lang)
+    # meals_per_day can be updated separately
+    mpd = b.get("meals_per_day")
+    if mpd is not None:
+        db.update_patient(pid, meals_per_day=int(mpd))
     return {"ok": True, "id": pid}
-
 @app.put("/api/patients/{pid}")
 async def api_update_patient(pid: int, request: Request):
     b = await request.json()
-    allowed = {"name","sex","phone","email","goal","sport","notes","allergies","category_id","birth_date","language"}
+    allowed = {"name","sex","phone","email","goal","sport","notes","allergies","category_id","birth_date","language","meals_per_day"}
     kw = {k: v for k, v in b.items() if k in allowed}
     if kw:
         db.update_patient(pid, **kw)
@@ -1037,23 +1046,31 @@ async def api_add_bia(pid: int, request: Request):
 
 @app.post("/api/patients/{pid}/bia/upload")
 async def api_bia_upload(pid: int, file: UploadFile = File(...)):
+    # --- Size limit check (10 MB) ---
+    total_size = 0
+    chunk_size = 1024 * 1024  # 1 MB chunks
+    content_chunks = []
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        total_size += len(chunk)
+        if total_size > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail="File troppo grande (max 10 MB)")
+        content_chunks.append(chunk)
+
+    file_bytes = b"".join(content_chunks)
+
+    # Store the file on disk
     path = os.path.join(UPLOAD_DIR, f"bia_{pid}_{_timestamp()}_{file.filename}")
     with open(path, "wb") as f:
-        import shutil
-        shutil.copyfileobj(file.file, f)
+        f.write(file_bytes)
 
-    # OCR Engine: Windows OCR primario, Tesseract fallback
-    with open(path, "rb") as f:
-        pdf_bytes = f.read()
-    fields = await asyncio.to_thread(ocr_engine.parse_bia_pdf, pdf_bytes)
-
-    if not fields:
-        return {"ok": False, "error": "Nessun dato BIA estratto dal PDF"}
-
-    # Mappa campi -> colonne DB (ocr_engine già produce bf_kg, ffm_kg, etc.)
-    bid = db.add_bia(pid, fields, source=file.filename)
-    return {"ok": True, "bia_id": bid, "fields": fields,
-            "note": "OCR engine: Windows.Media.Ocr"}
+    # No server-side OCR — just store the file.
+    # The frontend will display the PDF/image so the user can enter BIA values manually
+    # (or use a browser-based OCR service like zai.qwen.ai).
+    return {"ok": True, "path": path,
+            "note": "File caricato. Inserire i valori BIA manualmente."}
 
 @app.delete("/api/bia/{bid}")
 def api_delete_bia(bid: int):
@@ -1075,8 +1092,10 @@ async def api_add_measurement(pid: int, request: Request):
 # ─── DIET ──────────────────────────────────────────────────────────────────
 
 @app.get("/api/patients/{pid}/diet-plans")
-def api_list_diet_plans(pid: int):
-    return db.list_diet_plans(pid)
+def api_list_diet_plans(pid: int, limit: int = 10, offset: int = 0):
+    items = db.list_diet_plans(pid, limit=limit, offset=offset)
+    total = db.count_diet_plans(pid)
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 @app.get("/api/patients/{pid}/diet-items")
 def api_list_diet_items(pid: int, day: str = None):
@@ -1101,8 +1120,10 @@ def api_clear_diet(pid: int):
 # ─── APPOINTMENTS ─────────────────────────────────────────────────────────
 
 @app.get("/api/appointments")
-def api_list_appointments(pid: int = None, from_date: str = None):
-    return db.list_appointments(pid, from_date)
+def api_list_appointments(pid: int = None, from_date: str = None, limit: int = 50, offset: int = 0):
+    items = db.list_appointments(pid, from_date, limit=limit, offset=offset)
+    total = db.count_appointments(pid, from_date)
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 @app.post("/api/appointments")
 async def api_create_appointment(request: Request):
@@ -1136,8 +1157,10 @@ def api_mark_sent(nid: int):
 # ─── DOCUMENTS ────────────────────────────────────────────────────────────
 
 @app.get("/api/documents")
-def api_list_documents(pid: int = None):
-    return db.list_documents(pid)
+def api_list_documents(pid: int = None, limit: int = 50, offset: int = 0):
+    items = db.list_documents(pid, limit=limit, offset=offset)
+    total = db.count_documents(pid)
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 @app.post("/api/documents")
 async def api_create_document(request: Request):
