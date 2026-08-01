@@ -305,13 +305,15 @@ PHASE_FOODS = {
 # ─────────────────────────────────────────────────────────────────────────────
 # PASTI STANDARD e loro quota dei target
 # ─────────────────────────────────────────────────────────────────────────────
-MEALS = [
-    ("colazione", 0.20),
-    ("spuntino", 0.10),
-    ("pranzo", 0.35),
-    ("spuntino2", 0.10),
-    ("cena", 0.25),
-]
+MEAL_DISTRIBUTIONS = {
+    3: [("colazione", 0.25), ("pranzo", 0.40), ("cena", 0.35)],
+    4: [("colazione", 0.25), ("spuntino", 0.10), ("pranzo", 0.35), ("cena", 0.30)],
+    5: [("colazione", 0.20), ("spuntino", 0.10), ("pranzo", 0.35), ("spuntino2", 0.10), ("cena", 0.25)],
+    6: [("colazione", 0.18), ("spuntino", 0.08), ("pranzo", 0.30), ("spuntino2", 0.08), ("merenda", 0.08), ("cena", 0.28)],
+    7: [("colazione", 0.17), ("spuntino", 0.07), ("spuntino2", 0.07), ("pranzo", 0.28), ("merenda", 0.07), ("spuntino3", 0.07), ("cena", 0.27)],
+}
+# Default to 5 meals for backward compatibility
+MEALS = MEAL_DISTRIBUTIONS[5]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -620,6 +622,8 @@ def generate_plan(targets, options=None):
     min_hours = int(options.get("min_hours_between_meals", 2))
     breakfast_time = options.get("breakfast_time", "08:00")
     fodmap_threshold = float(options.get("fodmap_threshold", _FODMAP_DAY_THRESHOLD))
+    num_meals = int(options.get("meals", 5))
+    meals = MEAL_DISTRIBUTIONS.get(num_meals, MEAL_DISTRIBUTIONS[5])
 
     # SIBO: forza 3h tra pasti
     if "sibo" in conditions:
@@ -670,7 +674,7 @@ def generate_plan(targets, options=None):
     high_fodmap_warnings = []
 
     # ── meal times ──
-    meal_names = [m[0] for m in MEALS]
+    meal_names = [m[0] for m in meals]
     meal_times = {}
     if min_hours > 0:
         try:
@@ -711,7 +715,7 @@ def generate_plan(targets, options=None):
         day_items_all = []
         day_fodmap = 0.0
 
-        for meal, share in MEALS:
+        for meal, share in meals:
             # seleziona alimenti con sostituzioni cliniche
             protein = rnd.choice(proteins)
             # nei giorni cheto (keto / CKD fase keto) i carb sono praticamente nulli:
@@ -722,7 +726,7 @@ def generate_plan(targets, options=None):
             veg = rnd.choice(vegs)
             fat = rnd.choice(fats)
             # la frutta porta carb: solo nei giorni non cheto
-            fruit = rnd.choice(fruits) if (meal in ("colazione", "spuntino", "spuntino2") and not very_low_carb) else None
+            fruit = rnd.choice(fruits) if (meal in ("colazione", "spuntino", "spuntino2", "merenda", "spuntino3") and not very_low_carb) else None
 
             # applica sostituzioni per condizione
             protein = _apply_substitution(protein, conditions)

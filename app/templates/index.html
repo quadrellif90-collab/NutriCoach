@@ -293,7 +293,7 @@ function showNewPatient(){
   <div class=field-row><div><label>Nome *</label><input id=np-name maxlength=60></div><div><label>Sesso</label><select id=np-sex><option value=M>M</option><option value=F>F</option></select></div></div>
   <div class=field-row><div><label>Telefono</label><input id=np-phone></div><div><label>Email</label><input id=np-email type=email></div></div>
   <div class=field-row><div><label>Obiettivo</label><input id=np-goal></div><div><label>Sport</label><input id=np-sport></div></div>
-  <div class=field-row><div><label>Pasti al giorno</label><select id=np-mpd><option value=3>3 pasti (Colazione, Pranzo, Cena)</option><option value=4>4 pasti (+ Spuntino)</option><option value=5 selected>5 pasti (+ 2 Spuntini)</option><option value=6>6 pasti (+ Merenda)</option></select></div></div>
+  <div class=field-row><div><label>Pasti al giorno</label><select id=np-mpd><option value=3>3 pasti (Colazione, Pranzo, Cena)</option><option value=4>4 pasti (+ Spuntino)</option><option value=5 selected>5 pasti (+ 2 Spuntini)</option><option value=6>6 pasti (+ Merenda)</option><option value=7>7 pasti (+ Spuntino 3)</option></select></div></div>
   <div style=margin-top:10px;display:flex;gap:8px><button class="btn btn-primary" onclick=saveNewPatient()>💾 Salva</button><button class="btn onclick=closeModal()>Annulla</button></div></div>`);
 }
 async function saveNewPatient(){
@@ -317,6 +317,7 @@ async function openPatient(cid){
     <button class="tab-btn active" onclick=switchTab(this,'anamnesi')>Anamnesi</button>
     <button class=tab-btn onclick=switchTab(this,'bia')>BIA</button>
     <button class=tab-btn onclick=switchTab(this,'misure')>Misure</button>
+    <button class=tab-btn onclick=switchTab(this,'antropometria')>📐 Antropometria</button>
     <button class=tab-btn onclick=switchTab(this,'dieta')>Dieta</button>
     <button class=tab-btn onclick=switchTab(this,'referti')>Referti</button>
     <button class=tab-btn onclick=switchTab(this,'appuntamenti')>Appuntamenti</button>
@@ -358,6 +359,7 @@ function switchTab(el,tab){
   if(tab==='anamnesi')loadAnamnesi();
   else if(tab==='bia')loadPatientBIA();
   else if(tab==='misure')loadMisure();
+  else if(tab==='antropometria')loadAntropometria();
   else if(tab==='dieta')loadPatientDieta();
   else if(tab==='referti')loadReferti();
   else if(tab==='appuntamenti')loadAppuntamenti();
@@ -411,16 +413,59 @@ async function loadPatientBIA(){
   <td><button class="btn btn-sm btn-danger" onclick="deleteBIARow(${r.id},'patient')">✕</button></td></tr>`).join('')}</table>`:'<div class=empty>🔄 Nessuna BIA ancora. Clicca "+ Nuova" per aggiungere la prima misurazione.</div>'}</div>`;
 }
 function showBIAForm(){
-  modal(`<div class=card><b>➕ Nuova BIA</b><div class=field-row><div><label>Data</label><input id=bf-date type=date value=${today()}>
-  </div><div><label>Peso (kg)</label><input id=bf-w type=number step=0.1></div><div><label>BF%</label><input id=bf-bf type=number step=0.1></div></div>
-  <div class=field-row><div><label>MM%</label><input id=bf-mm type=number step=0.1></div><div><label>PhA</label><input id=bf-pha type=number step=0.1></div>
-  <div><label>TBW (L)</label><input id=bf-tbw type=number step=0.1></div><div><label>BMR</label><input id=bf-bmr type=number></div></div>
+  modal(`<div class=card style=min-width:460px><b>➕ Nuova BIA</b>
+  <div style=font-size:11px;font-weight:700;color:var(--text2);margin:6px 0 2px>DATI PRINCIPALI</div>
+  <div class=field-row><div><label>Data</label><input id=bf-date type=date value=${today()}>
+  </div><div><label>Peso (kg)</label><input id=bf-w type=number step=0.1></div><div><label>Altezza (cm)</label><input id=bf-h type=number step=0.1></div></div>
+  <div class=field-row><div><label>BF%</label><input id=bf-bf type=number step=0.1></div><div><label>MM%</label><input id=bf-mm type=number step=0.1></div>
+  <div><label>PhA</label><input id=bf-pha type=number step=0.1></div></div>
+  <div class=field-row><div><label>TBW (L)</label><input id=bf-tbw type=number step=0.1></div><div><label>BMR (kcal)</label><input id=bf-bmr type=number></div>
+  <div><label>BMI</label><input id=bf-bmi type=number step=0.1></div></div>
+  <div style=font-size:11px;font-weight:700;color:var(--text2);margin:6px 0 2px>DETTAGLI (opzionali)</div>
+  <div class=field-row><div><label>ECW (L)</label><input id=bf-ecw type=number step=0.1></div><div><label>ICW (L)</label><input id=bf-icw type=number step=0.1></div>
+  <div><label>FFM (kg)</label><input id=bf-ffm type=number step=0.1></div></div>
+  <div class=field-row><div><label>BF (kg)</label><input id=bf-bfkg type=number step=0.1></div><div><label>MM (kg)</label><input id=bf-mmkg type=number step=0.1></div>
+  <div><label>SMM (kg)</label><input id=bf-smm type=number step=0.1></div></div>
+  <div class=field-row><div><label>ASMM (kg)</label><input id=bf-asmm type=number step=0.1></div><div><label>BCM (kg)</label><input id=bf-bcm type=number step=0.1></div></div>
   <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick=saveBIA()>💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
 }
 async function saveBIA(){
-  const fields={weight_kg:parseFloat($('bf-w').value),bf_pct:parseFloat($('bf-bf').value),mm_pct:parseFloat($('bf-mm').value),pha:parseFloat($('bf-pha').value),tbw_l:parseFloat($('bf-tbw').value),bmr_kcal:parseFloat($('bf-bmr').value),date:$('bf-date').value};
+  const n=id=>{const v=parseFloat($(id).value);return isNaN(v)?null:v};
+  const fields={weight_kg:n('bf-w'),height_cm:n('bf-h'),bf_pct:n('bf-bf'),mm_pct:n('bf-mm'),pha:n('bf-pha'),tbw_l:n('bf-tbw'),bmr_kcal:n('bf-bmr'),bmi:n('bf-bmi'),ecw_l:n('bf-ecw'),icw_l:n('bf-icw'),ffm_kg:n('bf-ffm'),bf_kg:n('bf-bfkg'),mm_kg:n('bf-mmkg'),smm_kg:n('bf-smm'),asmm_kg:n('bf-asmm'),bcm_kg:n('bf-bcm'),date:$('bf-date').value};
   const r=await jpost('/api/patients/'+ST.cid+'/bia',fields);
   if(r&&r.ok){toast('BIA salvata ✓');closeModal();loadPatientBIA()}else toast('Errore');
+}
+// PATIENT ANTHROPOMETRY
+async function loadAntropometria(){
+  let data=[]; try{data=await jget('/api/patients/'+ST.cid+'/anthropometry')}catch(e){}
+  $('patient-pane').innerHTML=`<div class=row style=margin-bottom:8px><b>📐 Antropometria</b><button class="btn btn-sm" onclick=showAntropometriaForm()>➕ Nuova</button></div>
+  <div class=card>${data.length?`<table><tr><th>Data</th><th>Peso</th><th>Altezza</th><th>BMI</th><th>Vita</th><th>Fianchi</th><th>WHR</th><th>%Grasso</th><th></th></tr>
+  ${data.map(r=>`<tr><td>${r.date}</td><td>${r.weight_kg||'—'}</td><td>${r.height_cm||'—'}</td><td>${r.bmi||'—'}</td><td>${r.waist_cm||'—'}</td><td>${r.hip_cm||'—'}</td><td>${r.whr||'—'}</td><td>${r.fat_pct_durnin!=null?r.fat_pct_durnin+'%':'—'}</td>
+  <td><button class="btn btn-sm btn-danger" onclick="deleteAnthroRow(${r.id})">✕</button></td></tr>`).join('')}</table>`:'<div class=empty>🔄 Nessuna misura antropometrica. Clicca "+ Nuova" per aggiungere.</div>'}</div>`;
+}
+function showAntropometriaForm(){
+  modal(`<div class=card style=min-width:480px><b>➕ Nuova misura antropometrica</b>
+  <div style=font-size:11px;font-weight:700;color:var(--text2);margin:6px 0 2px>CIRCONFERENZE E PESO</div>
+  <div class=field-row><div><label>Data</label><input id=an-date type=date value=${today()}>
+  </div><div><label>Peso (kg)</label><input id=an-w type=number step=0.1></div><div><label>Altezza (cm)</label><input id=an-h type=number step=0.1></div></div>
+  <div class=field-row><div><label>Vita (cm)</label><input id=an-waist type=number step=0.1></div><div><label>Fianchi (cm)</label><input id=an-hip type=number step=0.1></div>
+  <div><label>Braccio (cm)</label><input id=an-arm type=number step=0.1></div></div>
+  <div class=field-row><div><label>Cosci</label><input id=an-thigh type=number step=0.1></div></div>
+  <div style=font-size:11px;font-weight:700;color:var(--text2);margin:6px 0 2px>PLICHE (mm)</div>
+  <div class=field-row><div><label>Tricipitale</label><input id=an-sk1 type=number step=0.1></div><div><label>Bicipitale</label><input id=an-sk2 type=number step=0.1></div></div>
+  <div class=field-row><div><label>Sottoscapolare</label><input id=an-sk3 type=number step=0.1></div><div><label>Sovrailiaca</label><input id=an-sk4 type=number step=0.1></div></div>
+  <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick=saveAntropometria()>💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
+}
+async function saveAntropometria(){
+  const n=id=>{const v=parseFloat($(id).value);return isNaN(v)?null:v};
+  const fields={weight_kg:n('an-w'),height_cm:n('an-h'),waist_cm:n('an-waist'),hip_cm:n('an-hip'),arm_cm:n('an-arm'),thigh_cm:n('an-thigh'),skinfold_tricipite:n('an-sk1'),skinfold_bicipite:n('an-sk2'),skinfold_sottoscapolare:n('an-sk3'),skinfold_sovrailiaca:n('an-sk4'),date:$('an-date').value};
+  const r=await jpost('/api/patients/'+ST.cid+'/anthropometry',fields);
+  if(r&&r.ok){toast('Misura salvata ✓');closeModal();loadAntropometria()}else toast('Errore');
+}
+async function deleteAnthroRow(aid){
+  if(!await showConfirm('Eliminare misura?','',{danger:true,confirmText:'Elimina'}))return;
+  await jdel('/api/patients/'+ST.cid+'/anthropometry/'+aid);
+  toast('Eliminata');loadAntropometria();
 }
 // PATIENT DIET
 async function loadPatientDieta(){
@@ -437,11 +482,12 @@ async function loadPatientDieta(){
     3: ['colazione','pranzo','cena'],
     4: ['colazione','spuntino','pranzo','cena'],
     5: ['colazione','spuntino','pranzo','spuntino2','cena'],
-    6: ['colazione','spuntino','pranzo','spuntino2','merenda','cena']
+    6: ['colazione','spuntino','pranzo','spuntino2','merenda','cena'],
+    7: ['colazione','spuntino','spuntino2','pranzo','merenda','spuntino3','cena']
   };
   const mealLabels = {
     colazione:'Colazione', spuntino:'Spuntino', pranzo:'Pranzo',
-    spuntino2:'Spuntino 2', cena:'Cena', merenda:'Merenda'
+    spuntino2:'Spuntino 2', cena:'Cena', merenda:'Merenda', spuntino3:'Spuntino 3'
   };
   const meals = mealMap[mealsPerDay] || mealMap[5];
   const days=['lun','mar','mer','gio','ven','sab','dom'];
@@ -536,7 +582,8 @@ function showGenPlan(){
       {v:3,l:'3 pasti (Colazione, Pranzo, Cena)'},
       {v:4,l:'4 pasti (+ Spuntino)'},
       {v:5,l:'5 pasti (+ 2 Spuntini)'},
-      {v:6,l:'6 pasti (+ Merenda)'}
+      {v:6,l:'6 pasti (+ Merenda)'},
+      {v:7,l:'7 pasti (+ Spuntino 3)'}
     ];
     const mpdHtml=mpdOpts.map(o=>`<option value=${o.v} ${o.v===mpd?'selected':''}>${o.l}</option>`).join('');
     modal(`<div class=card><b>✨ Genera piano</b>

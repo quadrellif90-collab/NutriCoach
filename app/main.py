@@ -1077,6 +1077,66 @@ def api_delete_bia(bid: int):
     db.delete_bia(bid)
     return {"ok": True}
 
+
+# ─── ANTHROPOMETRY ────────────────────────────────────────────────────────
+
+@app.get("/api/patients/{pid}/anthropometry")
+def api_list_anthropometry(pid: int):
+    return db.list_anthropometry(pid)
+
+
+@app.post("/api/patients/{pid}/anthropometry")
+async def api_add_anthropometry(pid: int, request: Request):
+    b = await request.json()
+    # Auto-calculate BMI, WHR, fat% if provided
+    weight = b.get("weight_kg")
+    height = b.get("height_cm")
+    waist = b.get("waist_cm")
+    hip = b.get("hip_cm")
+    if weight and height:
+        h = height / 100.0
+        b["bmi"] = round(weight / (h * h), 1)
+    if waist and hip:
+        b["whr"] = round(waist / hip, 2)
+    skinfolds = {}
+    for k in ("tricipite", "bicipite", "sottoscapolare", "sovrailiaca"):
+        sk_key = f"skinfold_{k}"
+        # DB column is skinfold_sovraiaca (historical typo); map UI key to it
+        if b.get(sk_key) is not None:
+            skinfolds[k] = b[sk_key]
+            if k == "sovrailiaca" and not b.get("skinfold_sovraiaca"):
+                b["skinfold_sovraiaca"] = b[sk_key]
+        elif b.get("skinfold_sovraiaca") is not None and k == "sovrailiaca":
+            skinfolds[k] = b["skinfold_sovraiaca"]
+    if len(skinfolds) == 4:
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+            from anthropometry import fat_percent_durnin
+            # Get patient sex and age for Durnin calculation
+            p = db.get_patient(pid)
+            sex = p.get("sex", "M") if p else "M"
+            age = 35  # default
+            if p and p.get("birth_date"):
+                try:
+                    from datetime import date as _d
+                    bd = _d.fromisoformat(p["birth_date"])
+                    age = (_d.today() - bd).days // 365
+                except Exception:
+                    pass
+            _, fat_pct = fat_percent_durnin(skinfolds, age, sex)
+            if fat_pct is not None:
+                b["fat_pct_durnin"] = fat_pct
+        except Exception:
+            pass
+    aid = db.add_anthropometry(pid, b, b.get("date"))
+    return {"ok": True, "id": aid}
+
+
+@app.delete("/api/patients/{pid}/anthropometry/{aid}")
+def api_delete_anthropometry(pid: int, aid: int):
+    db.delete_anthropometry(aid)
+    return {"ok": True}
+
 # ─── MISURE ───────────────────────────────────────────────────────────────
 
 @app.get("/api/patients/{pid}/measurements")

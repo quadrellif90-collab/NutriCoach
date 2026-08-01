@@ -29,7 +29,7 @@ def init_db():
         cur.execute(f"DROP TABLE IF EXISTS {old}")
     # Per le tabelle condivise, verifica colonna patient_id; se manca droppa
     v2_tables = ["bia_readings","measurements","diet_plans","diet_items",
-                 "appointments","notifications","documents","symptoms","progress_notes"]
+                 "appointments","notifications","documents","symptoms","progress_notes","anthropometry"]
     for tbl in v2_tables:
         try:
             cur.execute(f"SELECT patient_id FROM {tbl} LIMIT 1")
@@ -214,7 +214,7 @@ def init_db():
         # Disable foreign keys for clean drop
         cur.execute("PRAGMA foreign_keys=OFF")
         # Drop all data tables for fresh start
-        for tbl in ['patient_groups','bia_readings','measurements','diet_plans','diet_items','diet_templates','appointments','notifications','documents','symptoms','progress_notes','recipes','meal_diary','messages','app_documents','quiz_questions','quiz_answers','medications','user_settings','scale_measurements','wearable_data','fitness_imports','food_catalog','food_category','categories','groups_t','patients']:
+        for tbl in ['patient_groups','bia_readings','measurements','diet_plans','diet_items','diet_templates','appointments','notifications','documents','symptoms','progress_notes','recipes','meal_diary','messages','app_documents','quiz_questions','quiz_answers','medications','user_settings','scale_measurements','wearable_data','fitness_imports','food_catalog','food_category','categories','groups_t','anthropometry','patients']:
             cur.execute(f'DROP TABLE IF EXISTS {tbl}')
         cur.execute("PRAGMA foreign_keys=ON")
         # Recreate all tables
@@ -387,6 +387,19 @@ def init_db():
                 sugar_g REAL DEFAULT 0,
                 salt_g REAL DEFAULT 0
             );
+            CREATE TABLE IF NOT EXISTS anthropometry (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id INTEGER NOT NULL,
+                date TEXT NOT NULL DEFAULT (date('now')),
+                weight_kg REAL, height_cm REAL,
+                waist_cm REAL, hip_cm REAL,
+                arm_cm REAL, thigh_cm REAL,
+                skinfold_tricipite REAL, skinfold_bicipite REAL,
+                skinfold_sottoscapolare REAL, skinfold_sovraiaca REAL,
+                bmi REAL, whr REAL, fat_pct_durnin REAL,
+                notes TEXT DEFAULT '',
+                FOREIGN KEY (patient_id) REFERENCES patients(id)
+            );
         """)
         cur.execute("INSERT OR REPLACE INTO _app_version (version) VALUES ('2.20.6')")
     else:
@@ -454,7 +467,7 @@ def delete_patient(pid):
     for t in ["diet_items","diet_plans","bia_readings","measurements","appointments",
               "notifications","documents","symptoms","progress_notes","patient_groups",
               "meal_diary","messages","app_notifications","scale_measurements",
-              "wearable_data","fitness_imports","questionnaire_results"]:
+              "wearable_data","fitness_imports","questionnaire_results","anthropometry"]:
         try:
             con.execute(f"DELETE FROM {t} WHERE patient_id=?", (pid,))
         except Exception:
@@ -509,6 +522,37 @@ def bia_trend(pid, field="weight_kg", days=365):
     con = get_db()
     return rows_to_list(con.execute(
         f"SELECT date,{field} FROM bia_readings WHERE patient_id=? AND date>=date('now','-{days} days') ORDER BY date", (pid,)).fetchall())
+
+# ─── ANTHROPOMETRY ─────────────────────────────────────────────────────────
+
+def add_anthropometry(pid, fields, date=None):
+    """Inserisce una misurazione antropometrica."""
+    con = get_db()
+    date = date or dt.date.today().isoformat()
+    cols = ["patient_id", "date"]
+    vals = [pid, date]
+    for k in ("weight_kg", "height_cm", "waist_cm", "hip_cm", "arm_cm", "thigh_cm",
+              "skinfold_tricipite", "skinfold_bicipite", "skinfold_sottoscapolare",
+              "skinfold_sovraiaca", "bmi", "whr", "fat_pct_durnin", "notes"):
+        if k in fields:
+            cols.append(k)
+            vals.append(fields[k])
+    ph = ",".join("?" for _ in vals)
+    con.execute(f"INSERT INTO anthropometry ({','.join(cols)}) VALUES ({ph})", vals)
+    con.commit()
+    return con.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+
+def list_anthropometry(pid, limit=50):
+    """Lista misurazioni antropometriche per un paziente."""
+    return rows_to_list(get_db().execute(
+        "SELECT * FROM anthropometry WHERE patient_id=? ORDER BY date DESC LIMIT ?",
+        (pid, limit)).fetchall())
+
+
+def delete_anthropometry(aid):
+    """Elimina una misurazione antropometrica."""
+    get_db().execute("DELETE FROM anthropometry WHERE id=?", (aid,)).connection.commit()
 
 # ─── DIET ─────────────────────────────────────────────────────────────────
 
@@ -747,6 +791,27 @@ def seed_food_catalog():
         effect TEXT DEFAULT '',
         recommendation TEXT DEFAULT '',
         severity TEXT DEFAULT 'media'
+    )""")
+    # Crea anthropometry table
+    con.execute("""CREATE TABLE IF NOT EXISTS anthropometry (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        patient_id INTEGER NOT NULL,
+        date TEXT NOT NULL DEFAULT (date('now')),
+        weight_kg REAL,
+        height_cm REAL,
+        waist_cm REAL,
+        hip_cm REAL,
+        arm_cm REAL,
+        thigh_cm REAL,
+        skinfold_tricipite REAL,
+        skinfold_bicipite REAL,
+        skinfold_sottoscapolare REAL,
+        skinfold_sovraiaca REAL,
+        bmi REAL,
+        whr REAL,
+        fat_pct_durnin REAL,
+        notes TEXT DEFAULT '',
+        FOREIGN KEY (patient_id) REFERENCES patients(id)
     )""")
     con.execute("""CREATE TABLE IF NOT EXISTS questionnaire_results (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
