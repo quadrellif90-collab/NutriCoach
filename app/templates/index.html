@@ -91,11 +91,23 @@ function clr(){const c=['#6366f1','#0d9488','#f59e0b','#ef4444','#8b5cf6','#ec48
 /* === ENHANCED TOAST with 4 types + auto-dismiss === */
 function toast(m,opt){opt=opt||{};const t=$('toast');t.textContent='';const ic={success:'✅',error:'❌',warn:'⚠️',info:'ℹ️'};t.className='';if(opt.type)t.classList.add('toast-'+opt.type);t.innerHTML=(ic[opt.type]||'')+' '+esc(m);t.classList.add('show');const dur=opt.duration||(opt.type==='error'?5000:opt.type==='warn'?3500:opt.type==='info'?2500:2400);if(dur)setTimeout(()=>t.classList.remove('show'),dur)}
 
-/* === ENHANCED API HELPERS with error handling + 401 interceptor === */
-async function jget(u){try{const r=await fetch(API+u);if(r.status===401){localStorage.removeItem('token');clr();$('login-overlay')&&($('login-overlay').style.display='flex');toast('Sessione scaduta, effettua di nuovo il login',{type:'warn'});return null}if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore caricamento: '+e.message,{type:'error'});return null}}
-async function jpost(u,b){try{const r=await fetch(API+u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});if(r.status===401){localStorage.removeItem('token');clr();$('login-overlay')&&($('login-overlay').style.display='flex');toast('Sessione scaduta, effettua di nuovo il login',{type:'warn'});return null}if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore salvataggio: '+e.message,{type:'error'});return null}}
-async function jdel(u){try{let r=await fetch(API+u,{method:'DELETE'});if(r.status===401){await refreshToken();r=await fetch(API+u,{method:'DELETE'})}if(r.status===401){toast('Sessione scaduta',{type:'warn'});return null}if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore eliminazione: '+e.message,{type:'error'});return null}}
-async function jpatch(u,b){try{const r=await fetch(API+u,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});if(r.status===401){localStorage.removeItem('token');clr();$('login-overlay')&&($('login-overlay').style.display='flex');toast('Sessione scaduta, effettua di nuovo il login',{type:'warn'});return null}if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore aggiornamento: '+e.message,{type:'error'});return null}}
+/* === ENHANCED API HELPERS with error handling + 401 auto-refresh === */
+async function _authedFetch(method,u,b){
+  let r=await fetch(API+u,{method,headers:{'Content-Type':'application/json'},body:b!==undefined?JSON.stringify(b):undefined});
+  if(r.status===401){
+    const t=await refreshToken();
+    if(!t)return null;
+    u=u.replace(/([?&])token=[^&]*/,'$1token='+t);
+    if(b&&typeof b==='object')b.token=t;
+    r=await fetch(API+u,{method,headers:{'Content-Type':'application/json'},body:b!==undefined?JSON.stringify(b):undefined});
+    if(r.status===401)return null;
+  }
+  return r;
+}
+async function jget(u){try{const r=await _authedFetch('GET',u);if(!r)return null;if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore caricamento: '+e.message,{type:'error'});return null}}
+async function jpost(u,b){try{const r=await _authedFetch('POST',u,b);if(!r)return null;if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore salvataggio: '+e.message,{type:'error'});return null}}
+async function jdel(u){try{const r=await _authedFetch('DELETE',u);if(!r)return null;if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore eliminazione: '+e.message,{type:'error'});return null}}
+async function jpatch(u,b){try{const r=await _authedFetch('PATCH',u,b);if(!r)return null;if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore aggiornamento: '+e.message,{type:'error'});return null}}
 
 /* === LOADING STATE HELPER for buttons === */
 function setLoading(el,loading,label){if(!el)return;if(loading){el._origText=el.innerHTML;el._origDisabled=el.disabled;el.disabled=true;el.classList.add('btn-loading');if(label)el.innerHTML=label}else{el.disabled=el._origDisabled||false;el.classList.remove('btn-loading');if(el._origText)el.innerHTML=el._origText;delete el._origText;delete el._origDisabled}}
