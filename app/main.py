@@ -961,9 +961,8 @@ async def api_create_notif(request: Request):
 
 @app.delete("/api/patients/{pid}")
 def api_delete_patient(pid: int, token: str = ""):
-    s = db.get_session(token)
-    if not s:
-        raise HTTPException(401, "Non autenticato")
+    # App single-user ad auto-login: nessuna autenticazione richiesta.
+    # Il token è accettato per compatibilità ma non è obbligatorio.
     db.delete_patient(pid)
     return {"ok": True}
 

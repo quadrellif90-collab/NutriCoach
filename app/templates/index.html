@@ -94,7 +94,7 @@ function toast(m,opt){opt=opt||{};const t=$('toast');t.textContent='';const ic={
 /* === ENHANCED API HELPERS with error handling + 401 interceptor === */
 async function jget(u){try{const r=await fetch(API+u);if(r.status===401){localStorage.removeItem('token');clr();$('login-overlay')&&($('login-overlay').style.display='flex');toast('Sessione scaduta, effettua di nuovo il login',{type:'warn'});return null}if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore caricamento: '+e.message,{type:'error'});return null}}
 async function jpost(u,b){try{const r=await fetch(API+u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});if(r.status===401){localStorage.removeItem('token');clr();$('login-overlay')&&($('login-overlay').style.display='flex');toast('Sessione scaduta, effettua di nuovo il login',{type:'warn'});return null}if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore salvataggio: '+e.message,{type:'error'});return null}}
-async function jdel(u){try{const r=await fetch(API+u,{method:'DELETE'});if(r.status===401){localStorage.removeItem('token');clr();$('login-overlay')&&($('login-overlay').style.display='flex');toast('Sessione scaduta, effettua di nuovo il login',{type:'warn'});return null}if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore eliminazione: '+e.message,{type:'error'});return null}}
+async function jdel(u){try{let r=await fetch(API+u,{method:'DELETE'});if(r.status===401){await refreshToken();r=await fetch(API+u,{method:'DELETE'})}if(r.status===401){toast('Sessione scaduta',{type:'warn'});return null}if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore eliminazione: '+e.message,{type:'error'});return null}}
 async function jpatch(u,b){try{const r=await fetch(API+u,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});if(r.status===401){localStorage.removeItem('token');clr();$('login-overlay')&&($('login-overlay').style.display='flex');toast('Sessione scaduta, effettua di nuovo il login',{type:'warn'});return null}if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore aggiornamento: '+e.message,{type:'error'});return null}}
 
 /* === LOADING STATE HELPER for buttons === */
@@ -336,12 +336,18 @@ async function openPatient(cid){
 function returnToDashboard(){
   if(ST.cid&&confirm('Tornare alla dashboard? I dati non salvati andranno persi.')){ST.cid=null;nav('dashboard')}
 }
+async function refreshToken(){
+  try{
+    const r=await fetch(API+'/api/auto-login');
+    if(r.ok){const d=await r.json();if(d&&d.token){localStorage.setItem('token',d.token);return d.token}}
+  }catch(e){}
+  return null;
+}
 async function deletePatient(cid){
   if(!await showConfirm('Eliminare paziente?','Tutti i dati associati (BIA, dieta, appuntamenti) saranno rimossi permanentemente.',{danger:true,confirmText:'Elimina'}))return;
   const t=localStorage.getItem('token');
-  await jdel('/api/patients/'+cid+'?token='+t);
-  toast('Paziente eliminato',{type:'success'});
-  nav('pazienti');
+  const r=await jdel('/api/patients/'+cid+'?token='+t);
+  if(r&&r.ok){toast('Paziente eliminato',{type:'success'});nav('pazienti');}
 }
 async function genPortal(){
   const r=await jpost('/api/patients/'+ST.cid+'/portal-token',{});
