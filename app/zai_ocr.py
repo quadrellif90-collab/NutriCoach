@@ -107,21 +107,35 @@ def _run_webview(url, titolo):
         pass
 
 
+def _avvia_browser_child(url, titolo=None, token_file=None):
+    """Lancia run_v2.py --zai-browser in processo separato via subprocess.
+
+    IMPORTANTE: in PyInstaller onefile sys.executable == l'EXE, quindi
+    `subprocess.Popen([sys.executable, "--zai-browser", ...])` riavvia l'EXE,
+    che entra nel ramo --zai-browser di run_v2.py e apre SOLO la finestra
+    browser (non avvia uvicorn). Uso subprocess invece di multiprocessing.spawn
+    per evitare il bug "il pulsante OCR riapre una nuova sessione NutriCoach".
+    """
+    import subprocess
+    cmd = [sys.executable, "--zai-browser", "--url", url]
+    if titolo:
+        cmd += ["--titolo", titolo]
+    if token_file:
+        cmd += ["--token-file", token_file]
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    try:
+        kw = {"creationflags": creationflags} if os.name == "nt" else {}
+        subprocess.Popen(cmd, shell=False, **kw)
+        return True
+    except Exception:
+        return False
+
+
 def apri_browser_ocr(url=None, titolo="OCR z.ai — Estrai testo"):
     """Apre ocr.z.ai nel browser interno. Ritorna True se avviato."""
     if not browser_interno_ok():
         return False
-    try:
-        import multiprocessing
-        try:
-            ctx = multiprocessing.get_context("spawn")
-        except (ValueError, RuntimeError):
-            ctx = multiprocessing
-        proc = ctx.Process(target=_run_webview, args=(url or OCR_SITE, titolo), daemon=True)
-        proc.start()
-        return True
-    except Exception:
-        return False
+    return _avvia_browser_child(url or OCR_SITE, titolo=titolo)
 
 
 # JS eseguito periodicamente nella pagina: legge il token dallo storage del sito.
@@ -202,7 +216,6 @@ def login_e_cattura_token(timeout=330):
         return False, "Componente 'pywebview' non installato."
 
     import tempfile
-    import multiprocessing
 
     fd, token_file = tempfile.mkstemp(prefix="zai_token_", suffix=".json")
     os.close(fd)
@@ -211,19 +224,12 @@ def login_e_cattura_token(timeout=330):
     except OSError:
         pass
 
-    try:
-        ctx = multiprocessing.get_context("spawn")
-    except (ValueError, RuntimeError):
-        ctx = multiprocessing
-
-    try:
-        proc = ctx.Process(target=_run_login_webview, args=(OCR_SITE, token_file), daemon=True)
-        proc.start()
-    except Exception:
-        return None
+    if not _avvia_browser_child(OCR_SITE, titolo="Login z.ai — Accedi per abilitare l'OCR automatico",
+                                token_file=token_file):
+        return False, "Impossibile avviare il browser interno."
 
     inizio = time.time()
-    while proc.is_alive() and time.time() - inizio < timeout:
+    while time.time() - inizio < timeout:
         if os.path.exists(token_file):
             break
         time.sleep(0.5)
@@ -238,11 +244,6 @@ def login_e_cattura_token(timeout=330):
             except Exception:
                 time.sleep(0.2)
 
-    try:
-        if proc.is_alive():
-            proc.terminate()
-    except Exception:
-        pass
     try:
         if os.path.exists(token_file):
             os.remove(token_file)
@@ -265,7 +266,7 @@ def login_e_cattura_token(timeout=330):
 def _headers(extra=None):
     h = {
         "Accept": "application/json",
-        "User-Agent": "NutriCoach/2.20.7",
+        "User-Agent": "NutriCoach/2.20.8",
     }
     tok = get_token()
     if tok:
