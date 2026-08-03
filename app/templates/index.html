@@ -423,7 +423,7 @@ async function saveAnamnesi(){
 async function loadPatientBIA(){
   const bia=await jget('/api/patients/'+ST.cid+'/bia');
   const trend=await jget('/api/patients/'+ST.cid+'/bia-trend?field=weight_kg&days=365');
-  $('patient-pane').innerHTML=`<div class=row style=margin-bottom:8px><b>📊 Misurazioni BIA</b><button class="btn btn-sm" onclick=showBIAForm()>➕ Nuova</button></div>
+  $('patient-pane').innerHTML=`<div class=row style=margin-bottom:8px><b>📊 Misurazioni BIA</b><button class="btn btn-sm" onclick=showBIAForm()>➕ Nuova</button> <button class="btn btn-sm btn-outline" onclick="showImportModal('bia')">📥 Import</button></div>
   ${trend.length>1?`<div class=card>${trendSVG(trend.map(t=>({v:t.weight_kg,d:t.date})))}
   <div style=font-size:11px;color:var(--text2)>${trend[0].weight_kg} → ${trend[trend.length-1].weight_kg} kg</div></div>`:''}
   <div class=card><b>Storico</b>${bia.length?`<table><tr><th>Data</th><th>Peso</th><th>BF%</th><th>MM%</th><th>PhA</th><th>TBW</th><th>BMR</th><th></th></tr>
@@ -453,10 +453,48 @@ async function saveBIA(){
   const r=await jpost('/api/patients/'+ST.cid+'/bia',fields);
   if(r&&r.ok){toast('BIA salvata ✓');closeModal();loadPatientBIA()}else toast('Errore');
 }
+// SMART IMPORT — incolla JSON/Markdown/testo e rileva il tipo
+function showImportModal(kind){
+  const t=kind==='bia'?'BIA':'Antropometria';
+  modal(`<div class=card style=min-width:520px><b>📥 Import ${t}</b>
+  <div style=font-size:11px;color:var(--text2);margin:4px 0>Incolla JSON strutturato, testo con etichette (es. "Peso: 70", "BF%: 18") o Markdown. Il sistema riconosce automaticamente i campi.</div>
+  <textarea id=imp-text rows=6 style=width:100%;box-sizing:border-box;font-family:monospace;font-size:12px placeholder='{"weight_kg":70.5,"bf_pct":18.2,"pha":6.4}'></textarea>
+  <div id=imp-preview style="font-size:12px;margin-top:6px"></div>
+  <div style=margin-top:8px;display:flex;gap:8px;justify-content:space-between>
+    <div style=display:flex;gap:8px><button class="btn btn-outline" onclick="previewImport()">🔍 Analizza</button>
+    <button class="btn btn-primary" onclick="confirmImport()" disabled id=imp-save>💾 Importa</button></div>
+    <button class=btn onclick=closeModal()>Annulla</button></div></div>`);
+  $('imp-text').oninput=function(){debounceImport()};
+}
+let _impDeb=null;
+function debounceImport(){clearTimeout(_impDeb);_impDeb=setTimeout(previewImport,600)}
+let _impData=null;
+async function previewImport(){
+  const txt=$('imp-text').value.trim();
+  if(!txt){$('imp-preview').textContent='';$('imp-save').disabled=true;return}
+  const r=await jpost('/api/patients/'+ST.cid+'/import',{text:txt});
+  if(!r)return;
+  if(r.needs_review){
+    $('imp-preview').innerHTML='<div style=color:var(--warn)><b>⚠️ Non riconosciuto.</b> '+esc(r.suggestion||'')+'</div>';
+    $('imp-save').disabled=true;return;
+  }
+  _impData={type:r.detected_type,fields:r.mapped_fields};
+  const labs=r.field_labels||{};
+  const rows=Object.entries(r.mapped_fields).map(([k,v])=>`<div style=display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding:2px 0><span>${esc(labs[k]||k)}</span><b>${v}</b></div>`).join('');
+  $('imp-preview').innerHTML=`<div style=background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px>
+    <div><b>✅ Rilevato: ${r.detected_type==='bia'?'📊 BIA':'📐 Antropometria'}</b> <span style=color:var(--text2)>(confidenza ${Math.round(r.confidence*100)}%)</span></div>${rows||''}</div>`;
+  $('imp-save').disabled=false;
+}
+async function confirmImport(){
+  if(!_impData)return;
+  const r=await jpost('/api/patients/'+ST.cid+'/import/confirm',{type:_impData.type,fields:_impData.fields});
+  if(r&&r.ok){toast(r.message||'Importato ✓');closeModal();if(_impData.type==='bia')loadPatientBIA();else loadAntropometria()}
+  else toast('Errore import',{type:'error'});
+}
 // PATIENT ANTHROPOMETRY
 async function loadAntropometria(){
   let data=[]; try{data=await jget('/api/patients/'+ST.cid+'/anthropometry')}catch(e){}
-  $('patient-pane').innerHTML=`<div class=row style=margin-bottom:8px><b>📐 Antropometria</b><button class="btn btn-sm" onclick=showAntropometriaForm()>➕ Nuova</button></div>
+  $('patient-pane').innerHTML=`<div class=row style=margin-bottom:8px><b>📐 Antropometria</b><button class="btn btn-sm" onclick=showAntropometriaForm()>➕ Nuova</button> <button class="btn btn-sm btn-outline" onclick="showImportModal('anthro')">📥 Import</button></div>
   <div class=card>${data.length?`<table><tr><th>Data</th><th>Peso</th><th>Altezza</th><th>BMI</th><th>Vita</th><th>Fianchi</th><th>WHR</th><th>%Grasso</th><th></th></tr>
   ${data.map(r=>`<tr><td>${r.date}</td><td>${r.weight_kg||'—'}</td><td>${r.height_cm||'—'}</td><td>${r.bmi||'—'}</td><td>${r.waist_cm||'—'}</td><td>${r.hip_cm||'—'}</td><td>${r.whr||'—'}</td><td>${r.fat_pct_durnin!=null?r.fat_pct_durnin+'%':'—'}</td>
   <td><button class="btn btn-sm btn-danger" onclick="deleteAnthroRow(${r.id})">✕</button></td></tr>`).join('')}</table>`:'<div class=empty>🔄 Nessuna misura antropometrica. Clicca "+ Nuova" per aggiungere.</div>'}</div>`;

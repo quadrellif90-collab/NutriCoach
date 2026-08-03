@@ -1,7 +1,7 @@
 """
 NutriCoach v2 — App principale FastAPI (modulare, Dietowin-style).
 """
-import os, sys, json, asyncio, datetime as dt, hashlib
+import os, sys, json, asyncio, re, datetime as dt, hashlib
 from fastapi import FastAPI, UploadFile, File, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -146,6 +146,168 @@ async def api_generate_plan(pid: int, request: Request):
     did = db.add_diet_plan(pid, title, preset or "", conditions, int(kcal), int(p), int(c), int(f), plan)
     plan["diet_id"] = did
     return plan
+
+
+# ─── SMART IMPORT ───────────────────────────────────────────────────
+
+def _parse_import_text(text: str) -> dict:
+    """Rileva il tipo di contenuto incollato e restituisce {type, data, confidence}.
+    Tipi supportati: 'bia', 'anthropometry', 'diet_plan', 'foods', 'json', 'unknown'.
+    """
+    text = text.strip()
+    if not text:
+        return {"type": "unknown", "data": {}, "confidence": 0.0}
+
+    # 1. Prova JSON
+    try:
+        j = json.loads(text)
+        if isinstance(j, dict):
+            # Heuristica per tipo
+            keys = set(j.keys())
+            if any(k in keys for k in ("weight_kg", "bf_pct", "tbw_l", "ecw_l", "icw_l", "pha", "bf_kg", "mm_kg", "smm_kg", "bcm_kg")):
+                return {"type": "bia", "data": j, "confidence": 0.9}
+            if any(k in keys for k in ("skinfold_tricipite", "skinfold_bicipite", "skinfold_sottoscapolare", "skinfold_sovrailiaca", "waist_cm", "hip_cm")):
+                return {"type": "anthropometry", "data": j, "confidence": 0.9}
+            if any(k in keys for k in ("targets", "options", "preset", "meals_per_day")):
+                return {"type": "diet_plan", "data": j, "confidence": 0.8}
+            if any(k in keys for k in ("foods", "items", "catalog")) and isinstance(j.get("foods") or j.get("items"), list):
+                return {"type": "foods", "data": j, "confidence": 0.7}
+            return {"type": "json", "data": j, "confidence": 0.5}
+        elif isinstance(j, list):
+            return {"type": "json", "data": {"items": j}, "confidence": 0.4}
+    except Exception:
+        pass
+
+    # 2. Markdown / YAML frontmatter
+    if text.startswith("---"):
+        # YAML frontmatter semplice
+        parts = text.split("---", 2)
+        if len(parts) >= 3:
+            try:
+                import yaml
+                fm = yaml.safe_load(parts[1])
+                if isinstance(fm, dict):
+                    return {"type": "json", "data": fm, "confidence": 0.6, "body": parts[2].strip()}
+            except Exception:
+                pass
+
+    # 3. Testo strutturato - pattern comuni BIA
+    bia_patterns = [
+        (r"(?:peso|weight)[\s:]*(\d+[.,]?\d*)", "weight_kg"),
+        (r"(?:altezza|height)[\s:]*(\d+[.,]?\d*)", "height_cm"),
+        (r"(?:bf%|bf\s*%|body\s*fat|grasso)[\s:]*(\d+[.,]?\d*)", "bf_pct"),
+        (r"(?:mm%|muscle|massa\s*muscolare)[\s:]*(\d+[.,]?\d*)", "mm_pct"),
+        (r"(?:pha|phase\s*angle)[\s:]*(\d+[.,]?\d*)", "pha"),
+        (r"(?:tbw|total\s*body\s*water)[\s:]*(\d+[.,]?\d*)", "tbw_l"),
+        (r"(?:ecw|extracellular)[\s:]*(\d+[.,]?\d*)", "ecw_l"),
+        (r"(?:icw|intracellular)[\s:]*(\d+[.,]?\d*)", "icw_l"),
+        (r"(?:bmr|basal)[\s:]*(\d+[.,]?\d*)", "bmr_kcal"),
+        (r"(?:ffm|fat\s*free\s*mass)[\s:]*(\d+[.,]?\d*)", "ffm_kg"),
+        (r"(?:smm|skeletal\s*muscle)[\s:]*(\d+[.,]?\d*)", "smm_kg"),
+        (r"(?:asmm|appendicular)[\s:]*(\d+[.,]?\d*)", "asmm_kg"),
+        (r"(?:bcm|body\s*cell\s*mass)[\s:]*(\d+[.,]?\d*)", "bcm_kg"),
+    ]
+    anthro_patterns = [
+        (r"(?:vita|waist)[\s:]*(\d+[.,]?\d*)", "waist_cm"),
+        (r"(?:fianchi|hip)[\s:]*(\d+[.,]?\d*)", "hip_cm"),
+        (r"(?:braccio|arm)[\s:]*(\d+[.,]?\d*)", "arm_cm"),
+        (r"(?:coscia|thigh)[\s:]*(\d+[.,]?\d*)", "thigh_cm"),
+        (r"(?:tricipite|triceps)[\s:]*(\d+[.,]?\d*)", "skinfold_tricipite"),
+        (r"(?:bicipite|biceps)[\s:]*(\d+[.,]?\d*)", "skinfold_bicipite"),
+        (r"(?:sottoscapolare|subscapular)[\s:]*(\d+[.,]?\d*)", "skinfold_sottoscapolare"),
+        (r"(?:sovrailiaca|suprailiac)[\s:]*(\d+[.,]?\d*)", "skinfold_sovrailiaca"),
+    ]
+
+    def extract(patterns, text):
+        out = {}
+        for pat, key in patterns:
+            m = re.search(pat, text, re.IGNORECASE)
+            if m:
+                try:
+                    out[key] = float(m.group(1).replace(",", "."))
+                except Exception:
+                    pass
+        return out
+
+    bia_data = extract(bia_patterns, text)
+    anthro_data = extract(anthro_patterns, text)
+
+    if bia_data and len(bia_data) >= 2:
+        return {"type": "bia", "data": bia_data, "confidence": min(0.85, 0.4 + len(bia_data) * 0.08)}
+    if anthro_data and len(anthro_data) >= 2:
+        return {"type": "anthropometry", "data": anthro_data, "confidence": min(0.85, 0.4 + len(anthro_data) * 0.08)}
+
+    return {"type": "unknown", "data": {"raw": text}, "confidence": 0.1}
+
+
+@app.post("/api/patients/{pid}/import")
+async def api_smart_import(pid: int, request: Request):
+    """Import intelligente: accetta JSON, Markdown, o testo libero.
+    Rileva automaticamente il tipo (BIA, Antropometria, Dieta, Alimenti) e restituisce
+    l'anteprima mappata per conferma utente.
+    """
+    b = await request.json()
+    text = b.get("text", "")
+    if not text or not text.strip():
+        raise HTTPException(400, "Testo vuoto")
+
+    parsed = _parse_import_text(text)
+
+    # Se bassa confidenza o unknown, restituisci per review manuale
+    if parsed["type"] in ("unknown", "json") and parsed.get("confidence", 0) < 0.6:
+        return {
+            "ok": True,
+            "needs_review": True,
+            "detected_type": parsed["type"],
+            "confidence": parsed.get("confidence", 0),
+            "raw_text": text[:500],
+            "suggestion": "Incolla JSON strutturato o testo con etichette esplicite (es. 'Peso: 70', 'BF%: 18')"
+        }
+
+    # Mappa campi noti per conferma
+    field_labels = {
+        "bia": {
+            "weight_kg": "Peso (kg)", "height_cm": "Altezza (cm)", "bf_pct": "BF%", "mm_pct": "MM%",
+            "pha": "PhA", "tbw_l": "TBW (L)", "ecw_l": "ECW (L)", "icw_l": "ICW (L)",
+            "bmr_kcal": "BMR (kcal)", "bf_kg": "BF (kg)", "mm_kg": "MM (kg)",
+            "ffm_kg": "FFM (kg)", "smm_kg": "SMM (kg)", "asmm_kg": "ASMM (kg)", "bcm_kg": "BCM (kg)"
+        },
+        "anthropometry": {
+            "weight_kg": "Peso (kg)", "height_cm": "Altezza (cm)", "waist_cm": "Vita (cm)",
+            "hip_cm": "Fianchi (cm)", "arm_cm": "Braccio (cm)", "thigh_cm": "Coscia (cm)",
+            "skinfold_tricipite": "Tricipitale (mm)", "skinfold_bicipite": "Bicipitale (mm)",
+            "skinfold_sottoscapolare": "Sottoscapolare (mm)", "skinfold_sovrailiaca": "Sovrailiaca (mm)"
+        }
+    }
+
+    return {
+        "ok": True,
+        "needs_review": False,
+        "detected_type": parsed["type"],
+        "confidence": parsed.get("confidence", 0),
+        "mapped_fields": parsed["data"],
+        "field_labels": field_labels.get(parsed["type"], {}),
+        "suggested_endpoint": f"/api/patients/{pid}/bia" if parsed["type"] == "bia" else f"/api/patients/{pid}/anthropometry"
+    }
+
+
+@app.post("/api/patients/{pid}/import/confirm")
+async def api_smart_import_confirm(pid: int, request: Request):
+    """Conferma e salva i dati importati (dopo anteprima)."""
+    b = await request.json()
+    itype = b.get("type")
+    fields = b.get("fields", {})
+    date = b.get("date") or dt.date.today().isoformat()
+
+    if itype == "bia":
+        bid = db.add_bia(pid, fields, date, source="import")
+        return {"ok": True, "id": bid, "message": "BIA importata ✓"}
+    elif itype == "anthropometry":
+        fields["date"] = date
+        aid = db.add_anthropometry(pid, fields)
+        return {"ok": True, "id": aid, "message": "Antropometria importata ✓"}
+    else:
+        raise HTTPException(400, f"Tipo non supportato per conferma: {itype}")
 
 
 # ─── FOOD CATALOG ──────────────────────────────────────────────────
