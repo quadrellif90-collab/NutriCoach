@@ -306,6 +306,63 @@ async def api_smart_import_confirm(pid: int, request: Request):
         fields["date"] = date
         aid = db.add_anthropometry(pid, fields)
         return {"ok": True, "id": aid, "message": "Antropometria importata ✓"}
+    elif itype == "diet_plan":
+        # Genera il piano dai target importati e lo salva
+        targets = fields.get("targets") or {}
+        options = fields.get("options") or {}
+        preset = fields.get("preset") or options.get("preset") or ""
+        client = db.get_patient(pid) or {}
+        parsed = clinical_nutrition.parse_pathologies(client.get("pathologies"))
+        conditions = list(parsed["conditions"])
+        for c in (options.get("conditions") or []):
+            if c and c not in conditions:
+                conditions.append(c)
+        allergies = client.get("allergies", "")
+        if parsed["allergies"]:
+            allergies = (allergies + "," + ",".join(parsed["allergies"])).strip(",")
+        excl = meal_planner.excluded_foods(conditions, allergies)
+        excl.update(options.get("exclude_foods") or [])
+        options["exclude_foods"] = sorted(excl)
+        if not targets.get("kcal"):
+            bia = db.list_bia(pid, limit=1)
+            if bia and bia[0].get("weight_kg"):
+                w = float(bia[0]["weight_kg"])
+                h = float(bia[0].get("height_cm") or 170)
+                age = 35
+                targets["kcal"] = int(24 * w * (1.3 if not client.get("sex") == "F" else 1.2))
+        # Normalizza days: int -> lista nomi giorni
+        all_days = ["lun", "mar", "mer", "gio", "ven", "sab", "dom"]
+        raw_days = options.get("days", all_days)
+        if isinstance(raw_days, int):
+            options["days"] = all_days[:raw_days]
+        elif not isinstance(raw_days, list):
+            options["days"] = all_days
+        # Normalizza targets: percentuali -> grammi (come fa api_generate_plan)
+        kcal = int(targets.get("kcal") or 2000)
+        gp = float(targets.get("protein_pct") or targets.get("p_pct") or 0)
+        gc = float(targets.get("carb_pct") or targets.get("c_pct") or 0)
+        gf = float(targets.get("fat_pct") or targets.get("f_pct") or 0)
+        if gp and gc and gf and not targets.get("p"):
+            p_grams = round(kcal * gp / 100 / 4, 1)
+            c_grams = round(kcal * gc / 100 / 4, 1)
+            f_grams = round(kcal * gf / 100 / 9, 1)
+        else:
+            p_grams = float(targets.get("p") or targets.get("protein") or 0)
+            c_grams = float(targets.get("c") or targets.get("carbs") or 0)
+            f_grams = float(targets.get("f") or targets.get("fat") or 0)
+        if not p_grams: p_grams = round(kcal * 0.30 / 4, 1)
+        if not c_grams: c_grams = round(kcal * 0.45 / 4, 1)
+        if not f_grams: f_grams = round(kcal * 0.25 / 9, 1)
+        gen_targets = {"kcal": kcal, "p": p_grams, "c": c_grams, "f": f_grams}
+        plan = meal_planner.generate_plan(gen_targets, options)
+        p = int(round(p_grams * 4 / kcal * 100)) if kcal else 30
+        c = int(round(c_grams * 4 / kcal * 100)) if kcal else 45
+        f = int(round(f_grams * 9 / kcal * 100)) if kcal else 25
+        title = f"Piano importato {client.get('name','')} {_today()}"
+        if preset:
+            title += f" [{diet_presets.PRESETS.get(preset,{}).get('label', preset)}]"
+        did = db.add_diet_plan(pid, title, preset, conditions, kcal, p, c, f, plan)
+        return {"ok": True, "id": did, "message": "Piano alimentare importato ✓"}
     else:
         raise HTTPException(400, f"Tipo non supportato per conferma: {itype}")
 

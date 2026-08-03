@@ -455,7 +455,8 @@ async function saveBIA(){
 }
 // SMART IMPORT — incolla JSON/Markdown/testo e rileva il tipo
 function showImportModal(kind){
-  const t=kind==='bia'?'BIA':'Antropometria';
+  const t=kind==='bia'?'BIA':kind==='dieta'?'Piano alimentare':'Antropometria';
+  const ph=kind==='dieta'?'{"targets":{"kcal":2000,"protein_pct":30,"carb_pct":45,"fat_pct":25},"options":{"meals":5,"days":7},"preset":"mediterranea"}':'{"weight_kg":70.5,"bf_pct":18.2,"pha":6.4}';
   modal(`<div class=card style=min-width:520px><b>📥 Import ${t}</b>
   <div style=font-size:11px;color:var(--text2);margin:4px 0>Incolla JSON strutturato, testo con etichette (es. "Peso: 70", "BF%: 18") o Markdown. Il sistema riconosce automaticamente i campi.</div>
   <textarea id=imp-text rows=6 style=width:100%;box-sizing:border-box;font-family:monospace;font-size:12px placeholder='{"weight_kg":70.5,"bf_pct":18.2,"pha":6.4}'></textarea>
@@ -479,6 +480,18 @@ async function previewImport(){
     $('imp-save').disabled=true;return;
   }
   _impData={type:r.detected_type,fields:r.mapped_fields};
+  if(r.detected_type==='diet_plan'){
+    const f=r.mapped_fields;const t=f.targets||{};const o=f.options||{};
+    const rows=`<div style=display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding:2px 0><span>Calorie</span><b>${t.kcal||'—'} kcal</b></div>
+    <div style=display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding:2px 0><span>Proteine</span><b>${t.protein_pct||'—'}%</b></div>
+    <div style=display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding:2px 0><span>Carboidrati</span><b>${t.carb_pct||'—'}%</b></div>
+    <div style=display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding:2px 0><span>Grassi</span><b>${t.fat_pct||'—'}%</b></div>
+    <div style=display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding:2px 0><span>Pasti/giorno</span><b>${o.meals||5}</b></div>
+    <div style=display:flex;justify-content:space-between;padding:2px 0><span>Preset</span><b>${esc(f.preset||'personalizzato')}</b></div>`;
+    $('imp-preview').innerHTML=`<div style=background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px>
+      <div><b>✅ Rilevato: 🍽️ Piano alimentare</b> <span style=color:var(--text2)>(confidenza ${Math.round(r.confidence*100)}%)</span></div>${rows}</div>`;
+    $('imp-save').disabled=false;return;
+  }
   const labs=r.field_labels||{};
   const rows=Object.entries(r.mapped_fields).map(([k,v])=>`<div style=display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding:2px 0><span>${esc(labs[k]||k)}</span><b>${v}</b></div>`).join('');
   $('imp-preview').innerHTML=`<div style=background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px>
@@ -488,7 +501,7 @@ async function previewImport(){
 async function confirmImport(){
   if(!_impData)return;
   const r=await jpost('/api/patients/'+ST.cid+'/import/confirm',{type:_impData.type,fields:_impData.fields});
-  if(r&&r.ok){toast(r.message||'Importato ✓');closeModal();if(_impData.type==='bia')loadPatientBIA();else loadAntropometria()}
+  if(r&&r.ok){toast(r.message||'Importato ✓');closeModal();if(_impData.type==='bia')loadPatientBIA();else if(_impData.type==='antropometria')loadAntropometria();else if(_impData.type==='diet_plan')loadPatientDieta()}
   else toast('Errore import',{type:'error'});
 }
 // PATIENT ANTHROPOMETRY
@@ -561,7 +574,7 @@ async function loadPatientDieta(){
     <button class="btn btn-sm" onclick="switchTab(qsa('#ptabs .tab-btn')[1],'bia')" style="white-space:nowrap">➕ Aggiungi BIA</button>
   </div>` : '';
   $('patient-pane').innerHTML=`<div class=row style=margin-bottom:8px><b>🍽️ Diario alimentare</b>
-  <button class="btn btn-sm" onclick=showGenPlan()>⚡ Genera piano</button>
+  <button class="btn btn-sm" onclick=showGenPlan()>⚡ Genera piano</button> <button class="btn btn-sm btn-outline" onclick="showImportModal('dieta')">📥 Import piano</button>
   <button class="btn btn-sm btn-outline" onclick=showAddFood()>➕ Alimento</button>
   <button class="btn btn-sm btn-outline" onclick="window.open('/api/patients/'+ST.cid+'/diet/pdf','_blank')">📄 Export PDF</button>
   <button class="btn btn-sm btn-outline" onclick="window.open('/api/patients/'+ST.cid+'/shopping-list/pdf','_blank')">🛒 Lista spesa</button>
