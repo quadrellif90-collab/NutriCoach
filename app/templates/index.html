@@ -462,9 +462,11 @@ function showImportModal(kind){
   <textarea id=imp-text rows=6 style=width:100%;box-sizing:border-box;font-family:monospace;font-size:12px placeholder='{"weight_kg":70.5,"bf_pct":18.2,"pha":6.4}'></textarea>
   <div id=imp-preview style="font-size:12px;margin-top:6px"></div>
   <div style=margin-top:8px;display:flex;gap:8px;justify-content:space-between>
-    <div style=display:flex;gap:8px><button class="btn btn-outline" onclick="previewImport()">🔍 Analizza</button>
+    <div style=display:flex;gap:8px><button class="btn btn-outline" onclick="openZaiOCR()">🖼️ OCR z.ai</button>
+    <button class="btn btn-outline" onclick="previewImport()">🔍 Analizza</button>
     <button class="btn btn-primary" onclick="confirmImport()" disabled id=imp-save>💾 Importa</button></div>
     <button class=btn onclick=closeModal()>Annulla</button></div></div>`);
+  setTimeout(loadZaiStatus,300);
   $('imp-text').oninput=function(){debounceImport()};
 }
 let _impDeb=null;
@@ -503,6 +505,49 @@ async function confirmImport(){
   const r=await jpost('/api/patients/'+ST.cid+'/import/confirm',{type:_impData.type,fields:_impData.fields});
   if(r&&r.ok){toast(r.message||'Importato ✓');closeModal();if(_impData.type==='bia')loadPatientBIA();else if(_impData.type==='antropometria')loadAntropometria();else if(_impData.type==='diet_plan')loadPatientDieta()}
   else toast('Errore import',{type:'error'});
+}
+// OCR z.ai — browser integrato
+async function loadZaiStatus(){
+  try{
+    const r=await jget('/api/ocr/zai/status');
+    if(r&&r.ok){
+      const stEl=$('zai-status');
+      if(stEl){
+        stEl.innerHTML=r.logged_in?'<span style=color:var(--success)>✓ Logged in — OCR automatico attivo</span>':'<span style=color:var(--text2)>Non ancora loggato</span>';
+      }
+    }
+  }catch(e){}
+}
+async function openZaiOCR(){
+  const r=await jpost('/api/ocr/zai/open',{});
+  if(r&&r.ok){toast(r.message||'Browser OCR aperto ✓')}
+  else{toast('Browser non disponibile — apri manualmente ocr.z.ai',{type:'warn'});window.open('https://ocr.z.ai/','_blank')}
+}
+async function openZaiLogin(){
+  const r=await jpost('/api/ocr/zai/login',{});
+  if(r){toast(r.message||'Login avviato',{type:'info'});loadZaiStatus()}
+}
+async function zaiLogout(){
+  const r=await jpost('/api/ocr/zai/logout',{});
+  if(r&&r.ok)toast('Token rimosso');loadZaiStatus();
+}
+async function zaiOCRSubmit(file){
+  const fd=new FormData();fd.append('file',file);
+  try{
+    const res=await fetch(API+'/api/ocr/zai/process?pid='+ST.cid,{method:'POST',body:fd});
+    const r=await res.json();
+    if(!r.ok){toast(r.error||'Errore OCR',{type:'error'});if(r.needs_login)openZaiLogin();return}
+    // Incolla markdown/tabelle nella textarea di import
+    let txt=r.markdown||'';
+    if(r.tables&&r.tables.length)txt+='\n\n'+r.tables.join('\n');
+    const ta=$('imp-text');if(ta){ta.value=txt;previewImport()}
+    toast('OCR completato ✓ — Anteprima generata',{type:'success'});
+  }catch(e){toast('Errore OCR: '+e.message,{type:'error'})}
+}
+function pickZaiFile(){
+  const inp=document.createElement('input');inp.type='file';inp.accept='image/*,application/pdf';
+  inp.onchange=function(){if(inp.files[0])zaiOCRSubmit(inp.files[0])};
+  inp.click();
 }
 // PATIENT ANTHROPOMETRY
 async function loadAntropometria(){

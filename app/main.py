@@ -1,7 +1,7 @@
 """
 NutriCoach v2 — App principale FastAPI (modulare, Dietowin-style).
 """
-import os, sys, json, asyncio, re, datetime as dt, hashlib
+import os, sys, json, asyncio, re, html as htmlmod, datetime as dt, hashlib
 from fastapi import FastAPI, UploadFile, File, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -191,6 +191,105 @@ def _parse_import_text(text: str) -> dict:
             except Exception:
                 pass
 
+    # 2b. HTML / tabelle (formato export z.ai OCR)
+    if "<table" in text.lower() or "<td" in text.lower() or "<tr" in text.lower():
+        try:
+            import io as _io
+            from html.parser import HTMLParser as _HP
+
+            class _TabParser(_HP):
+                def __init__(self):
+                    super().__init__()
+                    self.rows = []
+                    self.cur = None
+                    self.cell = None
+                def handle_starttag(self, tag, attrs):
+                    if tag == "tr":
+                        self.cur = []
+                    elif tag in ("td", "th") and self.cur is not None:
+                        self.cell = []
+                def handle_data(self, data):
+                    if self.cell is not None:
+                        self.cell.append(data)
+                def handle_endtag(self, tag):
+                    if tag in ("td", "th") and self.cell is not None:
+                        self.cur.append("".join(self.cell).strip())
+                        self.cell = None
+                    elif tag == "tr" and self.cur is not None:
+                        if any(self.cur):
+                            self.rows.append(self.cur)
+                        self.cur = None
+
+            p = _TabParser()
+            p.feed(text)
+            if p.rows:
+                # UN HEADER orizzontale o layout verticale (chiave -> valore)?
+                header = p.rows[0]
+                data = {}
+                anthro = {}
+
+                def norm(s):
+                    return str(s or "").lower().strip()
+
+                def num(v):
+                    if v is None:
+                        return None
+                    s = norm(v).replace(",", ".")
+                    m = re.search(r"(\d+[.,]?\d*)", s)
+                    try:
+                        return float(m.group(1)) if m else None
+                    except Exception:
+                        return None
+
+                def regola(chiave, target, pre_checked):
+                    """Cerca 'chiave' nella prima colonna di ogni riga (layout verticale)."""
+                    for row in p.rows:
+                        if len(row) >= 2 and norm(row[0]) == chiave:
+                            data[target] = num(row[1])
+                            return
+
+                # Layout verticale: ogni riga "Parametro | Valore"
+                vend = [
+                    (("peso", "weight", "kg", "massa corporea"), "weight_kg"),
+                    (("bf", "grasso", "fat", "body fat", "masse grasse"), "bf_pct"),
+                    (("muscolo", "muscle", "massa muscolare", "mm"), "mm_pct"),
+                    (("phase angle", "angolo di fase", "pha"), "pha"),
+                    (("tbw", "acqua corporea", "total body water", "acqua totale"), "tbw_l"),
+                    (("ecw", "extracellulare"), "ecw_l"),
+                    (("icw", "intracellulare"), "icw_l"),
+                    (("bmr", "metab", "metabolismo basale"), "bmr_kcal"),
+                    (("ffm", "fat free mass", "massa magra", "lean"), "ffm_kg"),
+                    (("smm", "massa muscolare scheletrica"), "smm_kg"),
+                    (("bcm", "massa cellulare"), "bcm_kg"),
+                ]
+                v_anthro = [
+                    (("vita", "waist", "circ. vita"), "waist_cm"),
+                    (("fianchi", "hip", "circ. fianchi"), "hip_cm"),
+                    (("braccio", "arm"), "arm_cm"),
+                    (("coscia", "thigh"), "thigh_cm"),
+                    (("tricip", "triceps"), "skinfold_tricipite"),
+                    (("bicip", "biceps"), "skinfold_bicipite"),
+                    (("sottoscap", "subscapular"), "skinfold_sottoscapolare"),
+                    (("sovrailiaca", "suprailiac", "sovrailiaca"), "skinfold_sovrailiaca"),
+                ]
+                for keys, target in vend:
+                    for row in p.rows:
+                        if len(row) >= 2 and norm(row[0]) in keys:
+                            data[target] = num(row[1])
+                            break
+                for keys, target in v_anthro:
+                    for row in p.rows:
+                        if len(row) >= 2 and norm(row[0]) in keys:
+                            anthro[target] = num(row[1])
+                            break
+
+                if len(data) >= 2:
+                    return {"type": "bia", "data": data, "confidence": 0.88}
+                if len(anthro) >= 2:
+                    return {"type": "anthropometry", "data": anthro, "confidence": 0.88}
+        except Exception:
+            pass
+
     # 3. Testo strutturato - pattern comuni BIA
     bia_patterns = [
         (r"(?:peso|weight)[\s:]*(\d+[.,]?\d*)", "weight_kg"),
@@ -236,6 +335,30 @@ def _parse_import_text(text: str) -> dict:
         return {"type": "bia", "data": bia_data, "confidence": min(0.85, 0.4 + len(bia_data) * 0.08)}
     if anthro_data and len(anthro_data) >= 2:
         return {"type": "anthropometry", "data": anthro_data, "confidence": min(0.85, 0.4 + len(anthro_data) * 0.08)}
+
+        # 3b. Piano alimentare da testo libero (es. export z.ai markdown)
+    diet_patterns = [
+        (r"(?:kcal|calor(?:ie|iche)|energy)[\s:]*([\d.,]+)", "kcal"),
+        (r"(?:proteine?|protein)\s*[:%]?\s*(\d+[.,]?\d*)", "protein"),
+        (r"(?:carboidrati|carbs?|carb)\s*[:%]?\s*(\d+[.,]?\d*)", "carbs"),
+        (r"(?:grassi?|fat)\s*[:%]?\s*(\d+[.,]?\d*)", "fat"),
+        (r"(?:pasti|meals?)\s*[:]?\s*(\d+)", "meals"),
+    ]
+    diet_data = {}
+    for pat, key in diet_patterns:
+        m = re.search(pat, text, re.IGNORECASE)
+        if m:
+            try:
+                diet_data[key] = float(m.group(1).replace(",", "."))
+            except Exception:
+                pass
+    if "kcal" in diet_data and ("carbs" in diet_data or "protein" in diet_data or "fat" in diet_data):
+        targets = {"kcal": diet_data.get("kcal")}
+        for k, t in (("protein", "protein_pct"), ("carbs", "carb_pct"), ("fat", "fat_pct")):
+            if k in diet_data:
+                targets[t] = diet_data[k]
+        fields = {"targets": targets, "options": {"meals": int(diet_data.get("meals", 5)), "days": 7}}
+        return {"type": "diet_plan", "data": fields, "confidence": 0.7}
 
     return {"type": "unknown", "data": {"raw": text}, "confidence": 0.1}
 
@@ -365,6 +488,83 @@ async def api_smart_import_confirm(pid: int, request: Request):
         return {"ok": True, "id": did, "message": "Piano alimentare importato ✓"}
     else:
         raise HTTPException(400, f"Tipo non supportato per conferma: {itype}")
+
+
+# ─── OCR z.ai (browser integrato + client) ──────────────────────────────
+
+@app.get("/api/ocr/zai/status")
+def api_zai_status():
+    """Stato token z.ai: True se il login OCR è già stato fatto."""
+    try:
+        from app import zai_ocr
+        return {"ok": True, "logged_in": zai_ocr.token_presente(),
+                "browser_available": zai_ocr.browser_interno_ok()}
+    except Exception as e:
+        return {"ok": False, "logged_in": False, "error": str(e)}
+
+
+@app.post("/api/ocr/zai/open")
+async def api_zai_open():
+    """Apre ocr.z.ai nel browser integrato (pywebview, processo separato)."""
+    try:
+        from app import zai_ocr
+        ok = zai_ocr.apri_browser_ocr()
+        return {"ok": ok, "message": "Browser OCR aperto ✓" if ok else "Browser non disponibile (pywebview mancante)"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@app.post("/api/ocr/zai/login")
+async def api_zai_login():
+    """Apre il login z.ai e cattura il token per l'OCR automatico."""
+    try:
+        from app import zai_ocr
+        ok, msg = zai_ocr.login_e_cattura_token()
+        return {"ok": bool(ok), "message": msg}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@app.post("/api/ocr/zai/logout")
+async def api_zai_logout():
+    """Rimuove il token z.ai salvato."""
+    try:
+        from app import zai_ocr
+        zai_ocr.cancella_token()
+        return {"ok": True, "message": "Token rimosso"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@app.post("/api/ocr/zai/process")
+async def api_zai_process(pid: int, file: UploadFile = File(...)):
+    """Carica un file (immagine/PDF) su z.ai, esegue l'OCR e restituisce il
+    testo (Markdown) e le tabelle (HTML) estratti per l'anteprima di import."""
+    try:
+        from app import zai_ocr
+        if not zai_ocr.token_presente():
+            return {"ok": False, "error": "Login z.ai non effettuato. Aprilo dal bottone OCR e accedi.", "needs_login": True}
+        # Salva il file temporaneo
+        fname = f"zai_{_timestamp()}_{file.filename or 'upload'}"
+        path = os.path.join(UPLOAD_DIR, fname)
+        total = 0
+        with open(path, "wb") as out:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > MAX_UPLOAD_SIZE:
+                    raise HTTPException(413, "File troppo grande (max 10 MB)")
+                out.write(chunk)
+        dati = zai_ocr.carica_e_estrai(path)
+        md, tables = zai_ocr.estrai_testo_e_tabelle(dati)
+        return {"ok": True, "markdown": (md or "")[:20000], "tables": tables[:5],
+                "note": "Copia il testo/tabelle e incollalo nel modale di import, oppure usa 'Importa direttamente'."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 # ─── FOOD CATALOG ──────────────────────────────────────────────────

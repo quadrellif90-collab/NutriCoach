@@ -1456,6 +1456,29 @@ def get_backup_folder(uid):
     return ""
 
 
+def load_studio_config():
+    """Legge l'intero studio_config.json (o {} se assente/corrotto)."""
+    config_path = os.path.join(DATA_DIR, "studio_config.json")
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                return json.load(f) or {}
+        except Exception:
+            return {}
+    return {}
+
+
+def save_studio_config(config):
+    """Salva l'intero studio_config.json (crea il file se serve)."""
+    config_path = os.path.join(DATA_DIR, "studio_config.json")
+    try:
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(config or {}, f, indent=2)
+        return True
+    except Exception:
+        return False
+
+
 # ─── STATISTICS ──────────────────────────────────────────────────────────
 
 def get_studio_stats():
