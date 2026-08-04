@@ -141,19 +141,13 @@ textarea{resize:vertical;min-height:50px}
   .topbar input{width:100%}
   .diet-grid{grid-template-columns:repeat(2,1fr)}
   .cmp-table{font-size:11px}
-  .modal{width:96%;max-width:none}
 }
 @media (max-width:768px){
   .sidebar{width:64px;overflow:hidden}
   .sidebar .logo span,.nav-item span:not(.ico),.sidebar .version,.sidebar .spacer{display:none}
-  .zoom-ctrl{flex-direction:column}
-  .zoom-ctrl span{min-width:auto}
   .nav-item{justify-content:center;padding:10px}
   .main{margin-left:64px;width:100%}
   .diet-grid{grid-template-columns:1fr}
-  .modal{width:100vw;height:100vh;max-width:none;max-height:100vh;border-radius:0}
-  .modal-head{padding:14px 16px;font-size:15px}
-  .modal-body{padding:16px;max-height:none;font-size:14px}
   #view{padding:14px}
   .card{padding:14px}
   .row{gap:6px}
@@ -161,9 +155,17 @@ textarea{resize:vertical;min-height:50px}
   .tab-bar{flex-wrap:nowrap}
   .topbar h1{font-size:15px}
 }
-/* MODAL ridimensionabile da cornice (drag handle in basso a destra) */
-.modal{resize:both;overflow:auto;min-width:280px;min-height:200px}
-.modal::-webkit-resizer{background:var(--primary);border-radius:0 0 6px 0;width:14px;height:14px}
+/* MODAL — auto-dimensionata in base al testo, wrap per testi lunghi */
+.modal{background:var(--card);border-radius:var(--radius);width:fit-content;min-width:min(420px,92vw);max-width:min(94vw,640px);max-height:85vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.15)}
+.modal-body{padding:16px;max-height:70vh;overflow-y:auto;word-wrap:break-word;overflow-wrap:anywhere}
+.modal-body .card{min-width:0}
+/* Annulla i min-width inline dei template quando la finestra e' piccola */
+@media (max-width:768px){
+  .modal{width:100vw;height:100vh;max-width:none;max-height:100vh;border-radius:0;min-width:0}
+  .modal-head{padding:14px 16px;font-size:15px}
+  .modal-body{padding:16px;max-height:none;font-size:14px}
+  .modal-body [style*="min-width"]{min-width:0!important}
+}
 /* SIDE PANEL — paziente corrente sempre visibile */
 #main-body{flex:1;display:flex;min-height:0;overflow:hidden}
 #view{flex:1;overflow-y:auto;max-height:none}
