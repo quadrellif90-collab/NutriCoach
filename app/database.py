@@ -210,7 +210,7 @@ def init_db():
     cur.execute("CREATE TABLE IF NOT EXISTS _app_version (version TEXT PRIMARY KEY, created TEXT DEFAULT (datetime('now')))")
     cur.execute("SELECT version FROM _app_version LIMIT 1")
     row = cur.fetchone()
-    if not row or row[0] != '2.20.13':
+    if not row or row[0] != '2.20.14':
         # Disable foreign keys for clean drop
         cur.execute("PRAGMA foreign_keys=OFF")
         # Drop all data tables for fresh start
@@ -401,9 +401,9 @@ def init_db():
                 FOREIGN KEY (patient_id) REFERENCES patients(id)
             );
         """)
-        cur.execute("INSERT OR REPLACE INTO _app_version (version) VALUES ('2.20.13')")
+        cur.execute("INSERT OR REPLACE INTO _app_version (version) VALUES ('2.20.14')")
     else:
-        cur.execute("INSERT OR IGNORE INTO _app_version (version) VALUES ('2.20.13')")
+        cur.execute("INSERT OR IGNORE INTO _app_version (version) VALUES ('2.20.14')")
     con.commit()
     seed_food_catalog()
     return con

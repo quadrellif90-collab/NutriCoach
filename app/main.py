@@ -2,15 +2,17 @@
 NutriCoach v2 — App principale FastAPI (modulare, Dietowin-style).
 """
 import os, sys, json, asyncio, re, html as htmlmod, datetime as dt, hashlib
+import asyncio
 from fastapi import FastAPI, UploadFile, File, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import app.database as db
+from app import energy_calc
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr, bia_analysis
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.20.13")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.20.14")
 
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 
@@ -273,8 +275,8 @@ def _parse_import_text(text: str, _depth: int = 0) -> dict:
                     (("massa muscolare", "muscle mass"), "mm_mixed"),
                     (("angolo di fase", "phase angle", "pha"), "pha"),
                     (("acqua totale", "total body water", "tbw"), "tbw_l"),
-                    (("acqua extracellulare", "extracellular water", "extracellulare", "ecw"), "ecw_l"),
-                    (("acqua intracellulare", "intracellular water", "intracellulare", "icw"), "icw_l"),
+                    (("acqua extra cellulare", "acqua extracellulare", "extracellular water", "extracellulare", "ecw"), "ecw_l"),
+                    (("acqua intra cellulare", "acqua intracellulare", "intracellular water", "intracellulare", "icw"), "icw_l"),
                     (("metabolismo basale", "basal metabolism", "basal metabolic", "bmr"), "bmr_kcal"),
                     (("massa magra", "fat free mass", "lean body", "ffm"), "ffm_kg"),
                     (("massa cellulare", "body cell mass", "bcm"), "bcm_kg"),
@@ -311,6 +313,10 @@ def _parse_import_text(text: str, _depth: int = 0) -> dict:
                                 u = _unita(row[1])
                                 _salva("bf_pct" if u == "pct" else "bf_kg" if u == "kg" else "bf_pct", v)
                             elif target == "mm_mixed":
+                                # Escludi righe SMM/ASMM (Massa Muscolare Appendicolare/Scheletrica)
+                                _r0 = norm(row[0])
+                                if any(x in _r0 for x in ("appendicol", "scheletric", "smm", "asmm", "skeletal")):
+                                    continue
                                 u = _unita(row[1])
                                 _salva("mm_pct" if u == "pct" else "mm_kg" if u == "kg" else "mm_pct", v)
                             else:
@@ -326,6 +332,20 @@ def _parse_import_text(text: str, _depth: int = 0) -> dict:
                 bia_specific = {"bf_pct", "bf_kg", "mm_pct", "mm_kg", "pha", "tbw_l",
                                 "ecw_l", "icw_l", "bmr_kcal", "ffm_kg", "smm_kg", "asmm_kg", "bcm_kg"}
                 if len(data) >= 2 and (set(data) & bia_specific):
+                    # Il testo fuori tabella (peso, altezza, BMI, data esame) non e'
+                    # nelle righe HTML: unisci il parsing testuale (branch 3) per
+                    # raccogliere TUTTI i campi (markdown + tabella).
+                    try:
+                        import html as _html_mod
+                        _plain = re.sub(r"<[^>]+>", " ", text)
+                        _plain = re.sub(r"@url:`[^`]*`", " ", _plain)
+                        _plain = _html_mod.unescape(_plain)
+                        _rows_txt = "\n".join(f"{r[0]}: {r[1]}" for r in p.rows if len(r) >= 2)
+                        sub = _parse_import_text(_plain + "\n" + _rows_txt, _depth + 1)
+                        if sub["type"] == "bia" and len(sub.get("data", {})) >= len(data):
+                            return sub
+                    except Exception:
+                        pass
                     return {"type": "bia", "data": data, "confidence": 0.88}
                 if len(anthro) >= 2:
                     return {"type": "anthropometry", "data": anthro, "confidence": 0.88}
@@ -427,25 +447,26 @@ def _parse_import_text(text: str, _depth: int = 0) -> dict:
 
     # 3. Testo strutturato - pattern comuni BIA
     # Separatore permissivo tra etichetta e valore (attraversa " (FM): " ecc.)
-    SEP = r"[\s:=]*?(?:\(?[^)\d]*\)?)?\s*[:=]?\s*"
+    SEP = r"[\s:=]*(?:\([^)\d]*\)[\s:=]*)?(?:[A-Za-zÀ-ÿ°]+[\s:=]*){0,1}"
     bia_patterns = [
         (r"(?:peso|weight|massa corporea)" + SEP + r"(\d+[.,]?\d*)", "weight_kg"),
         (r"(?:altezza|height|stature)" + SEP + r"(\d+[.,]?\d*)", "height_cm"),
+        (r"(?:bmi|indice di massa corporea|body mass index)" + SEP + r"(\d+[.,]?\d*)", "bmi"),
         (r"(?:massa grassa|body fat|grasso corporeo|masse grasse|fat mass)" + SEP + r"(\d+[.,]?\d*)\s*%", "bf_pct"),
         (r"(?:massa grassa|body fat|grasso corporeo|masse grasse|fat mass)" + SEP + r"(\d+[.,]?\d*)\s*kg\b", "bf_kg"),
-        (r"bf\s*%\s*[:=]?\s*(\d+[.,]?\d*)", "bf_pct"),
-        (r"(?:massa muscolare|muscle mass)" + SEP + r"(\d+[.,]?\d*)\s*%", "mm_pct"),
-        (r"(?:massa muscolare|muscle mass)" + SEP + r"(\d+[.,]?\d*)\s*kg\b", "mm_kg"),
-        (r"mm\s*%\s*[:=]?\s*(\d+[.,]?\d*)", "mm_pct"),
-        (r"(?:angolo di fase|phase angle|pha)" + SEP + r"(\d+[.,]?\d*)", "pha"),
-        (r"(?:acqua totale|total body water|tbw)" + SEP + r"(\d+[.,]?\d*)", "tbw_l"),
-        (r"(?:acqua extracellulare|extracellular water|ecw)" + SEP + r"(\d+[.,]?\d*)", "ecw_l"),
-        (r"(?:acqua intracellulare|intracellular water|icw)" + SEP + r"(\d+[.,]?\d*)", "icw_l"),
-        (r"(?:metabolismo basale|basal metastasis|basal metabolic rate|bmr)" + SEP + r"(\d+[.,]?\d*)", "bmr_kcal"),
-        (r"(?:massa magra|fat free mass|ffm)" + SEP + r"(\d+[.,]?\d*)", "ffm_kg"),
-        (r"(?:massa muscolare scheletrica|massa muscolo-scheletrica|skeletal muscle|smm)" + SEP + r"(\d+[.,]?\d*)", "smm_kg"),
-        (r"(?:massa muscolare appendicolare|appendicular skeletal|asmm)" + SEP + r"(\d+[.,]?\d*)", "asmm_kg"),
-        (r"(?:massa cellulare|body cell mass|bcm)" + SEP + r"(\d+[.,]?\d*)", "bcm_kg"),
+        (r"\bbf\s*[:%]?\s*(?:%|percento)?\s*[:=]?\s*(\d+[.,]?\d*)", "bf_pct"),
+        (r"(?:massa muscolare(?!\s*(?:appendicolare|scheletrica|scheletrico))|muscle mass(?!\s*(?:appendicular|skeletal)))" + SEP + r"(\d+[.,]?\d*)\s*%", "mm_pct"),
+        (r"(?:massa muscolare(?!\s*(?:appendicolare|scheletrica|scheletrico))|muscle mass(?!\s*(?:appendicular|skeletal)))" + SEP + r"(\d+[.,]?\d*)\s*kg\b", "mm_kg"),
+        (r"\bmm\s*[:%]?\s*(?:%|percento)?\s*[:=]?\s*(\d+[.,]?\d*)", "mm_pct"),
+        (r"(?:angolo di fase|phase angle|\bpha\b)" + SEP + r"(\d+[.,]?\d*)", "pha"),
+        (r"(?:acqua totale|total body water|\btbw\b)" + SEP + r"(\d+[.,]?\d*)", "tbw_l"),
+        (r"(?:acqua extra cellulare|acqua extracellulare|extracellular water|\becw\b)" + SEP + r"(\d+[.,]?\d*)", "ecw_l"),
+        (r"(?:acqua intra cellulare|acqua intracellulare|intracellular water|\bicw\b)" + SEP + r"(\d+[.,]?\d*)", "icw_l"),
+        (r"(?:metabolismo basale|basal metastasis|basal metabolic rate|\bbmr\b)" + SEP + r"(\d+[.,]?\d*)", "bmr_kcal"),
+        (r"(?:massa magra|fat free mass|\bffm\b)" + SEP + r"(\d+[.,]?\d*)", "ffm_kg"),
+        (r"(?:massa muscolare appendicolare|appendicular skeletal mass|\basmm\b)" + SEP + r"(\d+[.,]?\d*)", "asmm_kg"),
+        (r"(?:massa muscolare scheletrica|massa muscolo-scheletrica|skeletal muscle mass|\bsmm\b)" + SEP + r"(\d+[.,]?\d*)", "smm_kg"),
+        (r"(?:massa cellulare|body cell mass|\bbcm\b)" + SEP + r"(\d+[.,]?\d*)", "bcm_kg"),
     ]
     anthro_patterns = [
         (r"(?:vita|waist)[\s:]*(\d+[.,]?\d*)", "waist_cm"),
@@ -470,6 +491,19 @@ def _parse_import_text(text: str, _depth: int = 0) -> dict:
         return out
 
     bia_data = extract(bia_patterns, text)
+    # Derivazioni: bmi da peso+altezza, bf_pct da bf_kg, tbw da ecw+icw
+    if "bmi" not in bia_data and "weight_kg" in bia_data and "height_cm" in bia_data:
+        try:
+            bia_data["bmi"] = round(bia_data["weight_kg"] / ((bia_data["height_cm"] / 100) ** 2), 1)
+        except Exception:
+            pass
+    if "bf_pct" not in bia_data and "bf_kg" in bia_data and "weight_kg" in bia_data:
+        try:
+            bia_data["bf_pct"] = round(bia_data["bf_kg"] / bia_data["weight_kg"] * 100, 1)
+        except Exception:
+            pass
+    if "tbw_l" not in bia_data and "ecw_l" in bia_data and "icw_l" in bia_data:
+        bia_data["tbw_l"] = round(bia_data["ecw_l"] + bia_data["icw_l"], 1)
     anthro_data = extract(anthro_patterns, text)
 
     if bia_data and len(bia_data) >= 2:
@@ -544,6 +578,24 @@ async def api_smart_import(pid: int, request: Request):
         }
     }
 
+    # Campi BIA consigliati (per la finestra "dati mancanti" dopo l'import)
+    missing_fields = []
+    derived_fields = {}
+    if parsed["type"] == "bia":
+        rec = ["bmr_kcal", "mm_pct", "bf_pct", "tbw_l", "pha", "ffm_kg", "smm_kg"]
+        for k in rec:
+            if k not in parsed["data"]:
+                missing_fields.append(k)
+        # Deriva BMR con Mifflin-St Jeor dal paziente (se peso+altezza presenti)
+        if "bmr_kcal" not in parsed["data"] and "weight_kg" in parsed["data"] and "height_cm" in parsed["data"]:
+            try:
+                pat = db.get_patient(pid) or {}
+                age = energy_calc.age_from_birth(pat.get("birth_date")) or 30
+                w = float(parsed["data"]["weight_kg"]); h = float(parsed["data"]["height_cm"])
+                derived_fields["bmr_kcal"] = energy_calc.bmr_mifflin(w, h, age, str(pat.get("sex") or "M"))
+            except Exception:
+                pass
+
     return {
         "ok": True,
         "needs_review": False,
@@ -551,6 +603,8 @@ async def api_smart_import(pid: int, request: Request):
         "confidence": parsed.get("confidence", 0),
         "mapped_fields": parsed["data"],
         "field_labels": field_labels.get(parsed["type"], {}),
+        "missing_fields": missing_fields,
+        "derived_fields": derived_fields,
         "suggested_endpoint": f"/api/patients/{pid}/bia" if parsed["type"] == "bia" else f"/api/patients/{pid}/anthropometry"
     }
 
@@ -702,6 +756,51 @@ async def api_zai_process(pid: int, file: UploadFile = File(...)):
         md, tables = zai_ocr.estrai_testo_e_tabelle(dati)
         return {"ok": True, "markdown": (md or "")[:20000], "tables": tables[:5],
                 "note": "Copia il testo/tabelle e incollalo nel modale di import, oppure usa 'Importa direttamente'."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@app.post("/api/ocr/local/process")
+async def api_ocr_local_process(pid: int, file: UploadFile = File(...)):
+    """OCR locale (nessun servizio esterno): rasterizza PDF/immagine e
+    estrae i campi BIA con Windows OCR / Tesseract (gia' bundled).
+
+    Ritorna i campi mappati (stesso formato di /api/import) per
+    l'anteprima di conferma. Se il file ha gia' testo estraibile
+    (PDF nativo), usa direttamente quello.
+    """
+    try:
+        from app.ocr_engine import parse_bia_pdf
+        fname = f"local_{_timestamp()}_{file.filename or 'upload'}"
+        path = os.path.join(UPLOAD_DIR, fname)
+        total = 0
+        with open(path, "wb") as out:
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > MAX_UPLOAD_SIZE:
+                    raise HTTPException(413, "File troppo grande (max 10 MB)")
+                out.write(chunk)
+        with open(path, "rb") as f:
+            _pre_bytes = f.read()
+        # Windows OCR usa asyncio.run(): esegui in un thread fuori dall'event loop
+        data = await asyncio.to_thread(parse_bia_pdf, _pre_bytes)
+        if not data:
+            return {"ok": False, "error": "Nessun dato BIA riconosciuto dal file. Riprova con un'immagine piu' nitida."}
+        # Mappa per compatibilita' con l'anteprima import
+        compat = {"phase_angle": "pha", "weight_kg": "weight_kg", "height_cm": "height_cm",
+                  "fat_mass_kg": "bf_kg", "fat_free_mass_kg": "ffm_kg", "fat_mass_pct": "bf_pct"}
+        out = {}
+        for k, v in data.items():
+            key = compat.get(k, k)
+            if isinstance(v, (int, float)):
+                out[key] = v
+        return {"ok": True, "detected_type": "bia", "mapped_fields": out,
+                "confidence": 0.8, "note": "OCR locale completato — verifica i valori in anteprima"}
     except HTTPException:
         raise
     except Exception as e:
@@ -1865,7 +1964,7 @@ def api_delete_progress(nid: int):
 
 @app.get("/api/version")
 def api_version():
-    _, V = os.path.dirname(__file__), "2.20.13"
+    _, V = os.path.dirname(__file__), "2.20.14"
     return {"version": V, "platform": sys.platform}
 
 # ─── UPDATE CHECK (GitHub Releases) ──────────────────────────────────────
@@ -1890,7 +1989,7 @@ def _write_update_cache(data):
 def _cache_fresh(cache):
     if not cache:
         return False
-    if cache.get("current") != "2.20.13":
+    if cache.get("current") != "2.20.14":
         return False
     try:
         from datetime import datetime, timezone
@@ -1911,8 +2010,8 @@ def api_update_check(force: int = 0):
 
     if not force and _cache_fresh(cache):
         cache["cached"] = True
-        cache["current"] = "2.20.13"
-        cache["update_available"] = cache.get("latest", "0") > "2.20.13"
+        cache["current"] = "2.20.14"
+        cache["update_available"] = cache.get("latest", "0") > "2.20.14"
         return cache
 
     try:
@@ -1939,9 +2038,9 @@ def api_update_check(force: int = 0):
                 break
 
         payload = {
-            "current": "2.20.13",
+            "current": "2.20.14",
             "latest": tag,
-            "update_available": "2.20.13" < tag,
+            "update_available": "2.20.14" < tag,
             "release_url": rel.get("html_url", ""),
             "download_url": download_url,
             "asset_name": asset_name,
@@ -1958,10 +2057,10 @@ def api_update_check(force: int = 0):
         if cache:
             cache["cached"] = True
             cache["error"] = str(e)
-            cache["current"] = "2.20.13"
-            cache["update_available"] = cache.get("latest", "0") > "2.20.13"
+            cache["current"] = "2.20.14"
+            cache["update_available"] = cache.get("latest", "0") > "2.20.14"
             return cache
-        return {"current": "2.20.13", "latest": None, "update_available": False,
+        return {"current": "2.20.14", "latest": None, "update_available": False,
                 "release_url": None, "download_url": None, "asset_name": None,
                 "platform": plat, "checked_at": now, "cached": False,
                 "error": str(e), "release_body": None}

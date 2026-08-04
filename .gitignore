@@ -29,3 +29,4 @@ nul
 *.log
 temp_scripts/
 rel_nutricoach.exe
+.hermes/desktop-attachments/

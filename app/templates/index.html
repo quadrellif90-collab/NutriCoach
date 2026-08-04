@@ -1,8 +1,8 @@
 <!DOCTYPE html><html lang=it><head>
 <meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
-<title>NutriCoach v2.20.13</title>
-<link rel=stylesheet href=/static/style.css?v=2.20.13>
+<title>NutriCoach v2.20.14</title>
+<link rel=stylesheet href=/static/style.css?v=2.20.14>
 <style>
 /* ONBOARDING TOUR */
 #onboarding-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;animation:fadeIn .3s}
@@ -49,7 +49,7 @@
   <div class=nav-item style=cursor:pointer;font-size:11px onclick=showSettings() title="Impostazioni studio e brand">⚙️ <span>Impostazioni</span></div>
   <div class=nav-item style=cursor:pointer;font-size:11px;position:relative onclick=toggleNotifDropdown() title="Notifiche: messaggi e promemoria" id=bell-btn>🔔 <span>Notifiche</span><span id=bell-badge style="display:none;background:#ef4444;color:#fff;font-size:9px;padding:0 4px;border-radius:8px;position:absolute;top:-2px;right:-4px">0</span></div>
   <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn title="Cambia tema chiaro/scuro" style="margin:0 18px 8px">🌙 Tema</button>
-  <div class=version>v2.20.13 · Dietowin</div>
+  <div class=version>v2.20.14 · Dietowin</div>
 </div>
 <div id=notif-dropdown style="display:none;position:fixed;top:50px;right:50px;width:320px;max-height:360px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:10px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.15);font-size:12px">
   <div style=display:flex;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border)><b>🔔 Notifiche</b><button class="btn btn-sm" onclick="closeNotifDropdown();markAllNotifRead()">✔️ Tutte lette</button></div>
@@ -474,6 +474,7 @@ function showImportModal(kind){
   <div id=imp-preview style="font-size:12px;margin-top:6px"></div>
   <div style=margin-top:8px;display:flex;gap:8px;justify-content:space-between>
     <div style=display:flex;gap:8px><button class="btn btn-outline" onclick="openZaiOCR()">🖼️ OCR z.ai</button>
+    <button class="btn btn-outline" onclick="pickLocalFile()">📄 PDF/immagine (locale)</button>
     <button class="btn btn-outline" onclick="previewImport()">🔍 Analizza</button>
     <button class="btn btn-primary" onclick="confirmImport()" disabled id=imp-save>💾 Importa</button></div>
     <button class=btn onclick=closeModal()>Annulla</button></div></div>`);
@@ -483,6 +484,7 @@ function showImportModal(kind){
 let _impDeb=null;
 function debounceImport(){clearTimeout(_impDeb);_impDeb=setTimeout(previewImport,600)}
 let _impData=null;
+let _impMissing=[];let _impDerived={};
 async function previewImport(){
   const txt=$('imp-text').value.trim();
   if(!txt){$('imp-preview').textContent='';$('imp-save').disabled=true;return}
@@ -493,6 +495,7 @@ async function previewImport(){
     $('imp-save').disabled=true;return;
   }
   _impData={type:r.detected_type,fields:r.mapped_fields};
+  _impMissing=r.missing_fields||[];_impDerived=r.derived_fields||{};
   if(r.detected_type==='diet_plan'){
     const f=r.mapped_fields;const t=f.targets||{};const o=f.options||{};
     const rows=`<div style=display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding:2px 0><span>Calorie</span><b>${t.kcal||'—'} kcal</b></div>
@@ -507,15 +510,71 @@ async function previewImport(){
   }
   const labs=r.field_labels||{};
   const rows=Object.entries(r.mapped_fields).map(([k,v])=>`<div style=display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding:2px 0><span>${esc(labs[k]||k)}</span><b>${v}</b></div>`).join('');
+  let warnHtml='';
+  if(r.detected_type==='bia'&&_impMissing.length){
+    const wl=_impMissing.map(k=>labs[k]||k).join(', ');
+    warnHtml=`<div style=background:#fff8e6;border:1px solid #e6c200;border-radius:6px;padding:6px;margin-top:6px;color:#7a5c00>
+      <b>⚠️ Dati mancanti:</b> ${esc(wl)}<br><span style=font-size:11px>Verrai invitato a inserirli dopo la conferma.</span></div>`;
+  }
   $('imp-preview').innerHTML=`<div style=background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px>
-    <div><b>✅ Rilevato: ${r.detected_type==='bia'?'📊 BIA':'📐 Antropometria'}</b> <span style=color:var(--text2)>(confidenza ${Math.round(r.confidence*100)}%)</span></div>${rows||''}</div>`;
+    <div><b>✅ Rilevato: ${r.detected_type==='bia'?'📊 BIA':'📐 Antropometria'}</b> <span style=color:var(--text2)>(confidenza ${Math.round(r.confidence*100)}%)</span></div>${rows||''}${warnHtml}</div>`;
   $('imp-save').disabled=false;
 }
+const _BIA_MISSING_LABELS={'bmr_kcal':'Metabolismo basale (kcal)','mm_pct':'Massa muscolare (%)','bf_pct':'Massa grassa (%)','tbw_l':'Acqua totale (L)','pha':'Angolo di fase','ffm_kg':'Massa magra (kg)','smm_kg':'Massa muscolo-scheletrica (kg)'};
 async function confirmImport(){
   if(!_impData)return;
+  // Se ci sono campi BIA mancanti e NON ancora integrati -> finestra di inserimento
+  if(_impData.type==='bia'&&_impMissing.length&&!_impData._missingDone){
+    const labs=_BIA_MISSING_LABELS;
+    const inputs=_impMissing.map(k=>{
+      const dv=_impDerived[k];
+      return `<div style=display:flex;justify-content:space-between;align-items:center;gap:8px;margin:4px 0>
+        <span style=font-size:12px>${labs[k]||k}</span>
+        <input id=mi-${k} type=number step=0.1 style=width:120px value="${dv!==undefined?dv:''}" placeholder="—"></div>`;
+    }).join('');
+    modal(`<div class=card style=min-width:440px><b>⚠️ Inserisci i dati mancanti</b>
+    <div style=font-size:12px;color:var(--text2);margin:4px 0>Il report importato non contiene questi campi. Inseriscili ora o salta (restano vuoti).</div>
+    ${inputs}
+    <div style=margin-top:10px;display:flex;gap:8px;justify-content:space-between>
+      <button class="btn btn-outline" onclick="skipMissingImport()">⏭️ Salta</button>
+      <div style=display:flex;gap:8px><button class=btn onclick=closeModal()>Annulla</button>
+      <button class="btn btn-primary" onclick="applyMissingImport()">💾 Salva e importa</button></div></div></div>`);
+    return;
+  }
   const r=await jpost('/api/patients/'+ST.cid+'/import/confirm',{type:_impData.type,fields:_impData.fields});
-  if(r&&r.ok){toast(r.message||'Importato ✓');closeModal();if(_impData.type==='bia')loadPatientBIA();else if(_impData.type==='antropometria')loadAntropometria();else if(_impData.type==='diet_plan')loadPatientDieta()}
+  if(r&&r.ok){toast(r.message||'Importato ✓');closeModal();if(_impData.type==='bia')loadPatientBIA();else if(_impData.type==='anthropometry'||_impData.type==='antropometria')loadAntropometria();else if(_impData.type==='diet_plan')loadPatientDieta()}
   else toast('Errore import',{type:'error'});
+}
+function applyMissingImport(){
+  if(!_impData)return;
+  const vals={};
+  _impMissing.forEach(k=>{const el=document.getElementById('mi-'+k);if(el){const v=parseFloat(el.value);if(!isNaN(v))vals[k]=v}});
+  Object.assign(_impData.fields,vals);
+  _impData._missingDone=true;
+  confirmImport();
+}
+function skipMissingImport(){
+  if(!_impData)return;
+  _impData._missingDone=true;
+  confirmImport();
+}
+async function localOCRSubmit(file){
+  const fd=new FormData();fd.append('file',file);
+  try{
+    const res=await fetch(API+'/api/ocr/local/process?pid='+ST.cid,{method:'POST',body:fd});
+    const r=await res.json();
+    if(!r.ok){toast(r.error||'Errore OCR locale',{type:'error'});return}
+    // Costruisce testo chiave: valore per l'anteprima di import
+    const labs={'weight_kg':'Peso','height_cm':'Altezza','bf_kg':'Massa Grassa (FM)','bf_pct':'Massa Grassa','fat_mass_kg':'Massa Grassa (FM)','fat_mass_pct':'Massa Grassa','phase_angle':'Angolo di Fase (PhA)','mm_pct':'Massa Muscolare','pha':'Angolo di Fase (PhA)','tbw_l':'Acqua Totale (TBW)','ecw_l':'Acqua Extra Cellulare (ECW)','icw_l':'Acqua Intra Cellulare (ICW)','bmr_kcal':'Metabolismo Basale','ffm_kg':'Massa Magra (FFM)','fat_free_mass_kg':'Massa Magra (FFM)','smm_kg':'Massa Muscolo-Scheletrica (SMM)','asmm_kg':'Massa Muscolare Appendicolare (ASMM)','bcm_kg':'Massa Cellulare (BCM)','bmi':'BMI'};
+    const txt=Object.entries(r.mapped_fields||{}).map(([k,v])=>`${labs[k]||k}: ${v}`).join('\n');
+    const ta=$('imp-text');if(ta){ta.value=txt;previewImport()}
+    toast('OCR locale completato ✓ — Anteprima generata',{type:'success'});
+  }catch(e){toast('Errore OCR locale: '+e.message,{type:'error'})}
+}
+function pickLocalFile(){
+  const inp=document.createElement('input');inp.type='file';inp.accept='application/pdf,image/*';
+  inp.onchange=()=>{const f=inp.files[0];if(f)localOCRSubmit(f)};
+  inp.click();
 }
 // OCR z.ai — browser integrato
 async function loadZaiStatus(){
@@ -1442,7 +1501,7 @@ async function showStats(){
 // BOOT
 (async function(){
   const dbVersion=localStorage.getItem('nc-db-version');
-  if(dbVersion!=='2.20.13'){localStorage.clear();localStorage.setItem('nc-db-version','2.20.13');}
+  if(dbVersion!=='2.20.14'){localStorage.clear();localStorage.setItem('nc-db-version','2.20.14');}
   // Auto-login: skip login overlay, go straight to dashboard
   try{
     const r=await fetch(API+'/api/auto-login');
