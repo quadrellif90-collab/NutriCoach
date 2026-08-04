@@ -1,8 +1,8 @@
 <!DOCTYPE html><html lang=it><head>
 <meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
-<title>NutriCoach v2.20.15</title>
-<link rel=stylesheet href=/static/style.css?v=2.20.15>
+<title>NutriCoach v2.20.16</title>
+<link rel=stylesheet href=/static/style.css?v=2.20.16>
 <style>
 /* ONBOARDING TOUR */
 #onboarding-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;animation:fadeIn .3s}
@@ -32,9 +32,6 @@
 .wizard-btns .btn{flex:1;padding:10px;border-radius:8px;font-size:13px;cursor:pointer;border:none}
 .wizard-btn-primary{background:var(--primary,#6366f1);color:#fff}.wizard-btn-primary:hover{opacity:.9}
 .wizard-btn-skip{background:transparent;color:var(--text2,#888);border:1px solid var(--border,#ddd)!important}.wizard-btn-skip:hover{opacity:.7}
-.zoom-ctrl{display:flex;align-items:center;gap:4px;margin:0 12px 8px;justify-content:center}
-.zoom-ctrl span{font-size:11px;color:var(--text2);min-width:40px;text-align:center;font-weight:600}
-.zoom-ctrl .btn{padding:2px 8px;font-size:11px}
 #sidebar-resizer{position:fixed;left:220px;top:0;bottom:0;width:6px;cursor:col-resize;z-index:101;background:transparent}
 #sidebar-resizer:hover,#sidebar-resizer.dragging{background:var(--primary);opacity:.4}
 @media(max-width:768px){#sidebar-resizer{display:none}}
@@ -54,9 +51,8 @@
   <div class=nav-item style=cursor:pointer;font-size:11px onclick=showStats() title="Statistiche studio">📊 <span>Statistiche</span></div>
   <div class=nav-item style=cursor:pointer;font-size:11px onclick=showSettings() title="Impostazioni studio e brand">⚙️ <span>Impostazioni</span></div>
   <div class=nav-item style=cursor:pointer;font-size:11px;position:relative onclick=toggleNotifDropdown() title="Notifiche: messaggi e promemoria" id=bell-btn>🔔 <span>Notifiche</span><span id=bell-badge style="display:none;background:#ef4444;color:#fff;font-size:9px;padding:0 4px;border-radius:8px;position:absolute;top:-2px;right:-4px">0</span></div>
-  <div class="zoom-ctrl" title="Zoom caratteri/schema"><button class="btn btn-sm" onclick="ncZoom(-.1)">A−</button><span id=zoom-val>100%</span><button class="btn btn-sm" onclick="ncZoom(.1)">A+</button><button class="btn btn-sm" onclick="ncZoomReset()">100%</button></div>
   <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn title="Cambia tema chiaro/scuro" style="margin:0 18px 8px">🌙 Tema</button>
-  <div class=version>v2.20.15 · Dietowin</div>
+  <div class=version>v2.20.16 · Dietowin</div>
 </div>
 <div id="sidebar-resizer"></div>
 <div id=notif-dropdown style="display:none;position:fixed;top:50px;right:50px;width:320px;max-height:360px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:10px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.15);font-size:12px">
@@ -470,7 +466,7 @@ async function loadPatientBIA(){
   <td><button class="btn btn-sm btn-danger" onclick="deleteBIARow(${r.id},'patient')">✕</button></td></tr>`).join('')}</table>`:'<div class="empty">🔄 Nessuna BIA ancora. Clicca "+ Nuova" per aggiungere la prima misurazione.</div>'}</div></div>`;
 }
 function showBIAForm(){
-  modal(`<div class=card style=min-width:460px><b>➕ Nuova BIA</b>
+  modal(`<div class=card style="min-width:min(460px,90%);max-width:100%"><b>➕ Nuova BIA</b>
   <div style=font-size:11px;font-weight:700;color:var(--text2);margin:6px 0 2px>DATI PRINCIPALI</div>
   <div class=field-row><div><label>Data</label><input id=bf-date type=date value=${today()}>
   </div><div><label>Peso (kg)</label><input id=bf-w type=number step=0.1></div><div><label>Altezza (cm)</label><input id=bf-h type=number step=0.1></div></div>
@@ -496,7 +492,7 @@ async function saveBIA(){
 function showImportModal(kind){
   const t=kind==='bia'?'BIA':kind==='dieta'?'Piano alimentare':'Antropometria';
   const ph=kind==='dieta'?'{"targets":{"kcal":2000,"protein_pct":30,"carb_pct":45,"fat_pct":25},"options":{"meals":5,"days":7},"preset":"mediterranea"}':'{"weight_kg":70.5,"bf_pct":18.2,"pha":6.4}';
-  modal(`<div class=card style=min-width:520px><b>📥 Import ${t}</b>
+  modal(`<div class=card style="min-width:min(520px,90%);max-width:100%"><b>📥 Import ${t}</b>
   <div style=font-size:11px;color:var(--text2);margin:4px 0>Incolla JSON strutturato, testo con etichette (es. "Peso: 70", "BF%: 18") o Markdown. Il sistema riconosce automaticamente i campi.</div>
   <textarea id=imp-text rows=6 style=width:100%;box-sizing:border-box;font-family:monospace;font-size:12px placeholder='{"weight_kg":70.5,"bf_pct":18.2,"pha":6.4}'></textarea>
   <div id=imp-preview style="font-size:12px;margin-top:6px"></div>
@@ -560,7 +556,7 @@ async function confirmImport(){
         <span style=font-size:12px>${labs[k]||k}</span>
         <input id=mi-${k} type=number step=0.1 style=width:120px value="${dv!==undefined?dv:''}" placeholder="—"></div>`;
     }).join('');
-    modal(`<div class=card style=min-width:440px><b>⚠️ Inserisci i dati mancanti</b>
+    modal(`<div class=card style="min-width:min(440px,90%);max-width:100%"><b>⚠️ Inserisci i dati mancanti</b>
     <div style=font-size:12px;color:var(--text2);margin:4px 0>Il report importato non contiene questi campi. Inseriscili ora o salta (restano vuoti).</div>
     ${inputs}
     <div style=margin-top:10px;display:flex;gap:8px;justify-content:space-between>
@@ -592,11 +588,21 @@ async function localOCRSubmit(file){
     const res=await fetch(API+'/api/ocr/local/process?pid='+ST.cid,{method:'POST',body:fd});
     const r=await res.json();
     if(!r.ok){toast(r.error||'Errore OCR locale',{type:'error'});return}
-    // Costruisce testo chiave: valore per l'anteprima di import
-    const labs={'weight_kg':'Peso','height_cm':'Altezza','bf_kg':'Massa Grassa (FM)','bf_pct':'Massa Grassa','fat_mass_kg':'Massa Grassa (FM)','fat_mass_pct':'Massa Grassa','phase_angle':'Angolo di Fase (PhA)','mm_pct':'Massa Muscolare','pha':'Angolo di Fase (PhA)','tbw_l':'Acqua Totale (TBW)','ecw_l':'Acqua Extra Cellulare (ECW)','icw_l':'Acqua Intra Cellulare (ICW)','bmr_kcal':'Metabolismo Basale','ffm_kg':'Massa Magra (FFM)','fat_free_mass_kg':'Massa Magra (FFM)','smm_kg':'Massa Muscolo-Scheletrica (SMM)','asmm_kg':'Massa Muscolare Appendicolare (ASMM)','bcm_kg':'Massa Cellulare (BCM)','bmi':'BMI'};
-    const txt=Object.entries(r.mapped_fields||{}).map(([k,v])=>`${labs[k]||k}: ${v}`).join('\n');
-    const ta=$('imp-text');if(ta){ta.value=txt;previewImport()}
-    toast('OCR locale completato ✓ — Anteprima generata',{type:'success'});
+    const mf=r.mapped_fields||{};
+    // Vai direttamente all'anteprima senza passare dal testo → import
+    const labs={'weight_kg':'Peso','height_cm':'Altezza','bmi':'BMI','phase_angle':'Angolo di Fase (PhA)','pha':'Angolo di Fase (PhA)','tbw_l':'Acqua Totale (TBW)','ecw_l':'Acqua Extra Cellulare (ECW)','icw_l':'Acqua Intra Cellulare (ICW)','fat_mass_kg':'Massa Grassa (FM)','bf_kg':'Massa Grassa (FM)','fat_mass_pct':'Massa Grassa (%)','bf_pct':'Massa Grassa (%)','fat_free_mass_kg':'Massa Magra (FFM)','ffm_kg':'Massa Magra (FFM)','smm_kg':'Massa Muscolo-Scheletrica (SMM)','asmm_kg':'Massa Muscolare Appendicolare (ASMM)','bcm_kg':'Massa Cellulare (BCM)','hydration_pct':'Idratazione tissutale (%)','chi_value':'Indice nutrizionale (CHI)','bmr_kcal':'Metabolismo Basale (kcal)'};
+    _impData={type:'bia',fields:{}};
+    // Passa tutti i campi OCR, deduplicando
+    const seen=new Set();
+    Object.entries(mf).forEach(([k,v])=>{
+      if(seen.has(k))return;
+      _impData.fields[k]=v; seen.add(k);
+    });
+    // Mostra anteprima direttamente
+    const rows=Object.entries(_impData.fields).map(([k,v])=>`<div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding:2px 0"><span>${esc(labs[k]||k)}</span><b>${v}</b></div>`).join('');
+    $('imp-preview').innerHTML=`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px"><div><b>✅ Rilevato: 📊 BIA (OCR locale)</b> <span style=color:var(--text2)>(${Object.keys(mf).length} campi)</span></div>${rows}</div>`;
+    $('imp-save').disabled=false;
+    toast('OCR locale completato ✓',{type:'success'});
   }catch(e){toast('Errore OCR locale: '+e.message,{type:'error'})}
 }
 function pickLocalFile(){
@@ -656,7 +662,7 @@ async function loadAntropometria(){
   <td><button class="btn btn-sm btn-danger" onclick="deleteAnthroRow(${r.id})">✕</button></td></tr>`).join('')}</table>`:'<div class=empty>🔄 Nessuna misura antropometrica. Clicca "+ Nuova" per aggiungere.</div>'}</div>`;
 }
 function showAntropometriaForm(){
-  modal(`<div class=card style=min-width:480px><b>➕ Nuova misura antropometrica</b>
+  modal(`<div class=card style="min-width:min(480px,90%);max-width:100%"><b>➕ Nuova misura antropometrica</b>
   <div style=font-size:11px;font-weight:700;color:var(--text2);margin:6px 0 2px>CIRCONFERENZE E PESO</div>
   <div class=field-row><div><label>Data</label><input id=an-date type=date value=${today()}>
   </div><div><label>Peso (kg)</label><input id=an-w type=number step=0.1></div><div><label>Altezza (cm)</label><input id=an-h type=number step=0.1></div></div>
@@ -1448,7 +1454,7 @@ function modal(body){
 }
 function closeModal(){$('modal-root').innerHTML=''}
 // CONFIRM (promise-based, styled)
-function showConfirm(title,text,opt){opt=opt||{};return new Promise(function(resolve){window._confirmResolve=resolve;modal('<div class=card style=text-align:center;min-width:280px><b>'+esc(title)+'</b><p style=font-size:12px;color:var(--text2);margin:6px 0>'+esc(text)+'</p><div style=display:flex;gap:8px;justify-content:center;margin-top:10px>'+
+function showConfirm(title,text,opt){opt=opt||{};return new Promise(function(resolve){window._confirmResolve=resolve;modal('<div class=card style="text-align:center;min-width:min(280px,90%);max-width:100%"><b>'+esc(title)+'</b><p style=font-size:12px;color:var(--text2);margin:6px 0>'+esc(text)+'</p><div style=display:flex;gap:8px;justify-content:center;margin-top:10px>'+
 '<button class=btn onclick="closeModal();setTimeout(function(){window._confirmResolve(false)},10)">'+(opt.cancelText||'Annulla')+'</button>'+
 '<button class="'+(opt.danger?'btn btn-danger':'btn btn-primary')+'" onclick="closeModal();setTimeout(function(){window._confirmResolve(true)},10)">'+(opt.confirmText||'Conferma')+'</button></div></div>')})}
 // ONBOARDING TOUR
@@ -1526,25 +1532,20 @@ async function showStats(){
     ${bia.avg_weight?`<hr style=margin:6px 0><div style=font-size:10px>⚖️ BIA medio: ${Number(bia.avg_weight).toFixed(1)}kg, BMI ${Number(bia.avg_bmi).toFixed(1)}, BF ${Number(bia.avg_bf).toFixed(1)}%, TBW ${Number(bia.avg_tbw).toFixed(1)}L</div>`:''}
     <div style=margin-top:8px><button class=btn onclick=closeModal()>Chiudi</button></div></div>`);
 }
-// ─── UI SCALE (font/schema scalabile) ─────────────────────────────────
-let _ncZoom=parseFloat(localStorage.getItem('nc-zoom')||'1')||1;
+// ─── UI SCALE (automatica in base allo schermo) ─────────────────────
+// Niente zoom manuale a percentuali: la scala segue la larghezza della
+// finestra (come un browser responsive), aggiornata al resize.
+let _ncResizeT=null;
 function ncApplyZoom(){
-  _ncZoom=Math.max(0.75,Math.min(1.5,Math.round(_ncZoom*20)/20));
-  localStorage.setItem('nc-zoom',_ncZoom);
-  document.documentElement.style.zoom=_ncZoom;
-  const z=document.getElementById('zoom-val');
-  if(z)z.textContent=Math.round(_ncZoom*100)+'%';
+  const w=window.innerWidth;
+  // Riferimento: 1440px di design → scala 1.0; finestre piu' piccole
+  // riducono proporzionalmente (min 0.8), piu' grandi alzano leggermente (max 1.2)
+  let z=Math.round(w/1440*100)/100;
+  z=Math.max(0.8,Math.min(1.2,z));
+  document.documentElement.style.zoom=z;
 }
-function ncZoom(d){_ncZoom+=d;ncApplyZoom()}
-function ncZoomReset(){_ncZoom=1;ncApplyZoom()}
-document.addEventListener('wheel',function(e){if(!e.ctrlKey)return;e.preventDefault();_ncZoom+=e.deltaY>0?-0.1:0.1;ncApplyZoom();},{passive:false});
-document.addEventListener('keydown',function(e){
-  if(!(e.ctrlKey||e.metaKey))return;
-  const k=e.key.toLowerCase();
-  if(k==='='||k==='+'){e.preventDefault();ncZoom(0.1)}
-  else if(k==='-'){e.preventDefault();ncZoom(-0.1)}
-  else if(k==='0'){e.preventDefault();ncZoomReset()}
-});
+function ncOnResize(){clearTimeout(_ncResizeT);_ncResizeT=setTimeout(ncApplyZoom,150)}
+window.addEventListener('resize',ncOnResize);
 // ─── SIDEBAR ridimensionabile (trascina divisore) ──────────────────────
 (function(){
   var rz=document.getElementById('sidebar-resizer');
@@ -1606,7 +1607,7 @@ async function refreshSidePanel(){
   ncApplyZoom();
   if(!_sidePanelOn){const sp=$('side-panel');if(sp)sp.classList.add('hidden')}
   const dbVersion=localStorage.getItem('nc-db-version');
-  if(dbVersion!=='2.20.15'){localStorage.clear();localStorage.setItem('nc-db-version','2.20.15');}
+  if(dbVersion!=='2.20.16'){localStorage.clear();localStorage.setItem('nc-db-version','2.20.16');}
   // Auto-login: skip login overlay, go straight to dashboard
   try{
     const r=await fetch(API+'/api/auto-login');
