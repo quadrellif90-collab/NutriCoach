@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.20.10")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.20.11")
 
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 
@@ -150,7 +150,7 @@ async def api_generate_plan(pid: int, request: Request):
 
 # ─── SMART IMPORT ───────────────────────────────────────────────────
 
-def _parse_import_text(text: str) -> dict:
+def _parse_import_text(text: str, _depth: int = 0) -> dict:
     """Rileva il tipo di contenuto incollato e restituisce {type, data, confidence}.
     Tipi supportati: 'bia', 'anthropometry', 'diet_plan', 'foods', 'json', 'unknown'.
     """
@@ -172,7 +172,11 @@ def _parse_import_text(text: str) -> dict:
                 return {"type": "diet_plan", "data": j, "confidence": 0.8}
             if any(k in keys for k in ("foods", "items", "catalog")) and isinstance(j.get("foods") or j.get("items"), list):
                 return {"type": "foods", "data": j, "confidence": 0.7}
-            return {"type": "json", "data": j, "confidence": 0.5}
+            if "md_results" in keys or "layout_details" in keys:
+                # Risposta completa OCR z.ai: lascia passare al branch 2c
+                pass
+            else:
+                return {"type": "json", "data": j, "confidence": 0.5}
         elif isinstance(j, list):
             return {"type": "json", "data": {"items": j}, "confidence": 0.4}
     except Exception:
@@ -192,7 +196,11 @@ def _parse_import_text(text: str) -> dict:
                 pass
 
     # 2b. HTML / tabelle (formato export z.ai OCR)
-    if "<table" in text.lower() or "<td" in text.lower() or "<tr" in text.lower():
+    # NB: salta le risposte COMPLETE z.ai (JSON con md_results/layout_details):
+    #     contengono "<table" dentro le stringhe ma il feed dell'intero blob
+    #     produrrebbe righe spurie e perderebbe il markdown -> va al 2c.
+    _zai_resp = "md_results" in text or "layout_details" in text
+    if not _zai_resp and ("<table" in text.lower() or "<td" in text.lower() or "<tr" in text.lower()):
         try:
             import io as _io
             from html.parser import HTMLParser as _HP
@@ -223,8 +231,6 @@ def _parse_import_text(text: str) -> dict:
             p = _TabParser()
             p.feed(text)
             if p.rows:
-                # UN HEADER orizzontale o layout verticale (chiave -> valore)?
-                header = p.rows[0]
                 data = {}
                 anthro = {}
 
@@ -241,26 +247,37 @@ def _parse_import_text(text: str) -> dict:
                     except Exception:
                         return None
 
-                def regola(chiave, target, pre_checked):
-                    """Cerca 'chiave' nella prima colonna di ogni riga (layout verticale)."""
-                    for row in p.rows:
-                        if len(row) >= 2 and norm(row[0]) == chiave:
-                            data[target] = num(row[1])
-                            return
+                def _contiene(row0, keys):
+                    """Match per sottostringa; chiavi corte (<=2 char) con match esatto
+                    ('mm' non deve matchare dentro 'grammi')."""
+                    r = norm(row0)
+                    for k in keys:
+                        if len(k) <= 2:
+                            if r == k:
+                                return True
+                        elif k in r:
+                            return True
+                    return False
 
                 # Layout verticale: ogni riga "Parametro | Valore"
+                # Sinonimi estesi al report BIA italiano (Biavector/Bodygram export z.ai)
                 vend = [
-                    (("peso", "weight", "kg", "massa corporea"), "weight_kg"),
-                    (("bf", "grasso", "fat", "body fat", "masse grasse"), "bf_pct"),
-                    (("muscolo", "muscle", "massa muscolare", "mm"), "mm_pct"),
-                    (("phase angle", "angolo di fase", "pha"), "pha"),
-                    (("tbw", "acqua corporea", "total body water", "acqua totale"), "tbw_l"),
-                    (("ecw", "extracellulare"), "ecw_l"),
-                    (("icw", "intracellulare"), "icw_l"),
-                    (("bmr", "metab", "metabolismo basale"), "bmr_kcal"),
-                    (("ffm", "fat free mass", "massa magra", "lean"), "ffm_kg"),
-                    (("smm", "massa muscolare scheletrica"), "smm_kg"),
-                    (("bcm", "massa cellulare"), "bcm_kg"),
+                    (("peso", "weight", "massa corporea", "body weight"), "weight_kg"),
+                    (("bf",), "bf_mixed"),
+                    (("massa grassa", "body fat", "grasso corporeo", "grasso", "masse grasse", "fat mass"), "bf_mixed"),
+                    (("mm",), "mm_mixed"),
+                    (("massa muscolare scheletrica", "massa muscolo-scheletrica",
+                      "massa muscolo scheletrica", "skeletal muscle", "smm"), "smm_kg"),
+                    (("massa muscolare appendicolare", "massa muscolare appendicol",
+                      "appendicular", "asmm"), "asmm_kg"),
+                    (("massa muscolare", "muscle mass"), "mm_mixed"),
+                    (("angolo di fase", "phase angle", "pha"), "pha"),
+                    (("acqua totale", "total body water", "tbw"), "tbw_l"),
+                    (("acqua extracellulare", "extracellular water", "extracellulare", "ecw"), "ecw_l"),
+                    (("acqua intracellulare", "intracellular water", "intracellulare", "icw"), "icw_l"),
+                    (("metabolismo basale", "basal metabolism", "basal metabolic", "bmr"), "bmr_kcal"),
+                    (("massa magra", "fat free mass", "lean body", "ffm"), "ffm_kg"),
+                    (("massa cellulare", "body cell mass", "bcm"), "bcm_kg"),
                 ]
                 v_anthro = [
                     (("vita", "waist", "circ. vita"), "waist_cm"),
@@ -272,39 +289,163 @@ def _parse_import_text(text: str) -> dict:
                     (("sottoscap", "subscapular"), "skinfold_sottoscapolare"),
                     (("sovrailiaca", "suprailiac", "sovrailiaca"), "skinfold_sovrailiaca"),
                 ]
+
+                def _unita(row1):
+                    """Ritorna 'kg', 'pct', o None in base al testo del valore."""
+                    r = norm(row1)
+                    if "%" in r or "\u00b0" in r:
+                        return "pct"
+                    if "kg" in r:
+                        return "kg"
+                    return None
+
+                def _salva(target, value):
+                    if value is not None:
+                        data[target] = value
+
                 for keys, target in vend:
                     for row in p.rows:
-                        if len(row) >= 2 and norm(row[0]) in keys:
-                            data[target] = num(row[1])
+                        if len(row) >= 2 and _contiene(row[0], keys):
+                            v = num(row[1])
+                            if target == "bf_mixed":
+                                u = _unita(row[1])
+                                _salva("bf_pct" if u == "pct" else "bf_kg" if u == "kg" else "bf_pct", v)
+                            elif target == "mm_mixed":
+                                u = _unita(row[1])
+                                _salva("mm_pct" if u == "pct" else "mm_kg" if u == "kg" else "mm_pct", v)
+                            else:
+                                _salva(target, v)
                             break
                 for keys, target in v_anthro:
                     for row in p.rows:
-                        if len(row) >= 2 and norm(row[0]) in keys:
+                        if len(row) >= 2 and _contiene(row[0], keys):
                             anthro[target] = num(row[1])
                             break
 
-                if len(data) >= 2:
+                # BIA valida solo se c'è almeno un campo specifico (non solo peso+altezza)
+                bia_specific = {"bf_pct", "bf_kg", "mm_pct", "mm_kg", "pha", "tbw_l",
+                                "ecw_l", "icw_l", "bmr_kcal", "ffm_kg", "smm_kg", "asmm_kg", "bcm_kg"}
+                if len(data) >= 2 and (set(data) & bia_specific):
                     return {"type": "bia", "data": data, "confidence": 0.88}
                 if len(anthro) >= 2:
                     return {"type": "anthropometry", "data": anthro, "confidence": 0.88}
         except Exception:
             pass
 
+    # 2c. Risposta completa OCR z.ai (md_results / layout_details)
+    # Formato: dump della risposta API contenente il markdown ("md_results")
+    # e gli elementi per pagina ("layout_details" con "content": testo e tabelle HTML).
+    # Le tabelle vengono CONVERTITE in righe "chiave: valore" così il parsing
+    # testuale successivo raccoglie TUTTI i campi (markdown + tabelle).
+    if _depth < 3 and ("md_results" in text or "layout_details" in text or '"content"' in text):
+        _zai_md = ""
+        _zai_rows = []  # righe di testo chiave: valore
+        _zai_txt = []
+        try:
+            jz = json.loads(text)
+            if isinstance(jz, dict) and ("md_results" in jz or "layout_details" in jz):
+                _md = jz.get("md_results")
+                if isinstance(_md, str):
+                    _zai_md = _md
+                _ld = jz.get("layout_details")
+                if isinstance(_ld, list):
+                    for page in _ld:
+                        if not isinstance(page, list):
+                            continue
+                        for elem in page:
+                            if not isinstance(elem, dict) or not isinstance(elem.get("content"), str):
+                                continue
+                            c = elem["content"]
+                            if "<table" in c.lower() or "<td" in c.lower() or "<tr" in c.lower():
+                                _zai_rows.append(c)
+                            else:
+                                _zai_txt.append(c)
+                _jz_ok = True
+            else:
+                _jz_ok = False
+        except Exception:
+            _jz_ok = False
+
+        if not _jz_ok:
+            # Non-JSON: separa markdown/table da text in base al contenuto
+            for m in re.finditer(r'"(?:md_results|content)"\s*:\s*"((?:[^"\\]|\\.)*)"', text):
+                raw = m.group(1)
+                try:
+                    c = json.loads('"' + raw + '"')
+                except Exception:
+                    c = raw
+                if "<table" in c.lower() or "<td" in c.lower() or "<tr" in c.lower():
+                    _zai_rows.append(c)
+                else:
+                    _zai_txt.append(c)
+
+        # Converte le tabelle HTML in righe "Parametro: Valore"
+        if _zai_rows:
+            try:
+                import io as _io2
+                from html.parser import HTMLParser as _HP2
+
+                class _TabParser2(_HP2):
+                    def __init__(self):
+                        super().__init__()
+                        self.rows = []
+                        self.cur = None
+                        self.cell = None
+                    def handle_starttag(self, tag, attrs):
+                        if tag == "tr":
+                            self.cur = []
+                        elif tag in ("td", "th") and self.cur is not None:
+                            self.cell = []
+                    def handle_data(self, data):
+                        if self.cell is not None:
+                            self.cell.append(data)
+                    def handle_endtag(self, tag):
+                        if tag in ("td", "th") and self.cell is not None:
+                            self.cur.append("".join(self.cell).strip())
+                            self.cell = None
+                        elif tag == "tr" and self.cur is not None:
+                            if any(self.cur):
+                                self.rows.append(self.cur)
+                            self.cur = None
+
+                for html_tab in _zai_rows:
+                    tp = _TabParser2()
+                    tp.feed(html_tab)
+                    for row in tp.rows:
+                        if len(row) >= 2 and row[0] and row[0].lower() not in ("parametro", "parameter", "valore", "value", "indicatore", "indicator", ""):
+                            _zai_txt.append(f"{row[0]}: {row[1]}")
+                        elif len(row) >= 2:
+                            _zai_txt.append(f"{row[0]}: {row[1]}")
+            except Exception:
+                pass
+
+        _zai_testo = "\n".join([_zai_md] + _zai_txt)
+        if _zai_testo.strip():
+            sub = _parse_import_text(_zai_testo, _depth + 1)
+            if sub["type"] != "unknown" and sub.get("confidence", 0) >= 0.5:
+                return sub
+
     # 3. Testo strutturato - pattern comuni BIA
+    # Separatore permissivo tra etichetta e valore (attraversa " (FM): " ecc.)
+    SEP = r"[\s:=]*?(?:\(?[^)\d]*\)?)?\s*[:=]?\s*"
     bia_patterns = [
-        (r"(?:peso|weight)[\s:]*(\d+[.,]?\d*)", "weight_kg"),
-        (r"(?:altezza|height)[\s:]*(\d+[.,]?\d*)", "height_cm"),
-        (r"(?:bf%|bf\s*%|body\s*fat|grasso)[\s:]*(\d+[.,]?\d*)", "bf_pct"),
-        (r"(?:mm%|muscle|massa\s*muscolare)[\s:]*(\d+[.,]?\d*)", "mm_pct"),
-        (r"(?:pha|phase\s*angle)[\s:]*(\d+[.,]?\d*)", "pha"),
-        (r"(?:tbw|total\s*body\s*water)[\s:]*(\d+[.,]?\d*)", "tbw_l"),
-        (r"(?:ecw|extracellular)[\s:]*(\d+[.,]?\d*)", "ecw_l"),
-        (r"(?:icw|intracellular)[\s:]*(\d+[.,]?\d*)", "icw_l"),
-        (r"(?:bmr|basal)[\s:]*(\d+[.,]?\d*)", "bmr_kcal"),
-        (r"(?:ffm|fat\s*free\s*mass)[\s:]*(\d+[.,]?\d*)", "ffm_kg"),
-        (r"(?:smm|skeletal\s*muscle)[\s:]*(\d+[.,]?\d*)", "smm_kg"),
-        (r"(?:asmm|appendicular)[\s:]*(\d+[.,]?\d*)", "asmm_kg"),
-        (r"(?:bcm|body\s*cell\s*mass)[\s:]*(\d+[.,]?\d*)", "bcm_kg"),
+        (r"(?:peso|weight|massa corporea)" + SEP + r"(\d+[.,]?\d*)", "weight_kg"),
+        (r"(?:altezza|height|stature)" + SEP + r"(\d+[.,]?\d*)", "height_cm"),
+        (r"(?:massa grassa|body fat|grasso corporeo|masse grasse|fat mass)" + SEP + r"(\d+[.,]?\d*)\s*%", "bf_pct"),
+        (r"(?:massa grassa|body fat|grasso corporeo|masse grasse|fat mass)" + SEP + r"(\d+[.,]?\d*)\s*kg\b", "bf_kg"),
+        (r"bf\s*%\s*[:=]?\s*(\d+[.,]?\d*)", "bf_pct"),
+        (r"(?:massa muscolare|muscle mass)" + SEP + r"(\d+[.,]?\d*)\s*%", "mm_pct"),
+        (r"(?:massa muscolare|muscle mass)" + SEP + r"(\d+[.,]?\d*)\s*kg\b", "mm_kg"),
+        (r"mm\s*%\s*[:=]?\s*(\d+[.,]?\d*)", "mm_pct"),
+        (r"(?:angolo di fase|phase angle|pha)" + SEP + r"(\d+[.,]?\d*)", "pha"),
+        (r"(?:acqua totale|total body water|tbw)" + SEP + r"(\d+[.,]?\d*)", "tbw_l"),
+        (r"(?:acqua extracellulare|extracellular water|ecw)" + SEP + r"(\d+[.,]?\d*)", "ecw_l"),
+        (r"(?:acqua intracellulare|intracellular water|icw)" + SEP + r"(\d+[.,]?\d*)", "icw_l"),
+        (r"(?:metabolismo basale|basal metastasis|basal metabolic rate|bmr)" + SEP + r"(\d+[.,]?\d*)", "bmr_kcal"),
+        (r"(?:massa magra|fat free mass|ffm)" + SEP + r"(\d+[.,]?\d*)", "ffm_kg"),
+        (r"(?:massa muscolare scheletrica|massa muscolo-scheletrica|skeletal muscle|smm)" + SEP + r"(\d+[.,]?\d*)", "smm_kg"),
+        (r"(?:massa muscolare appendicolare|appendicular skeletal|asmm)" + SEP + r"(\d+[.,]?\d*)", "asmm_kg"),
+        (r"(?:massa cellulare|body cell mass|bcm)" + SEP + r"(\d+[.,]?\d*)", "bcm_kg"),
     ]
     anthro_patterns = [
         (r"(?:vita|waist)[\s:]*(\d+[.,]?\d*)", "waist_cm"),
@@ -1707,7 +1848,7 @@ def api_delete_progress(nid: int):
 
 @app.get("/api/version")
 def api_version():
-    _, V = os.path.dirname(__file__), "2.20.10"
+    _, V = os.path.dirname(__file__), "2.20.11"
     return {"version": V, "platform": sys.platform}
 
 # ─── UPDATE CHECK (GitHub Releases) ──────────────────────────────────────
@@ -1732,7 +1873,7 @@ def _write_update_cache(data):
 def _cache_fresh(cache):
     if not cache:
         return False
-    if cache.get("current") != "2.20.10":
+    if cache.get("current") != "2.20.11":
         return False
     try:
         from datetime import datetime, timezone
@@ -1753,8 +1894,8 @@ def api_update_check(force: int = 0):
 
     if not force and _cache_fresh(cache):
         cache["cached"] = True
-        cache["current"] = "2.20.10"
-        cache["update_available"] = cache.get("latest", "0") > "2.20.10"
+        cache["current"] = "2.20.11"
+        cache["update_available"] = cache.get("latest", "0") > "2.20.11"
         return cache
 
     try:
@@ -1781,9 +1922,9 @@ def api_update_check(force: int = 0):
                 break
 
         payload = {
-            "current": "2.20.10",
+            "current": "2.20.11",
             "latest": tag,
-            "update_available": "2.20.10" < tag,
+            "update_available": "2.20.11" < tag,
             "release_url": rel.get("html_url", ""),
             "download_url": download_url,
             "asset_name": asset_name,
@@ -1800,10 +1941,10 @@ def api_update_check(force: int = 0):
         if cache:
             cache["cached"] = True
             cache["error"] = str(e)
-            cache["current"] = "2.20.10"
-            cache["update_available"] = cache.get("latest", "0") > "2.20.10"
+            cache["current"] = "2.20.11"
+            cache["update_available"] = cache.get("latest", "0") > "2.20.11"
             return cache
-        return {"current": "2.20.10", "latest": None, "update_available": False,
+        return {"current": "2.20.11", "latest": None, "update_available": False,
                 "release_url": None, "download_url": None, "asset_name": None,
                 "platform": plat, "checked_at": now, "cached": False,
                 "error": str(e), "release_body": None}
