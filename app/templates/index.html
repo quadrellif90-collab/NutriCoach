@@ -1,8 +1,8 @@
 <!DOCTYPE html><html lang=it><head>
 <meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
-<title>NutriCoach v2.20.9</title>
-<link rel=stylesheet href=/static/style.css?v=2.20.9>
+<title>NutriCoach v2.20.10</title>
+<link rel=stylesheet href=/static/style.css?v=2.20.10>
 <style>
 /* ONBOARDING TOUR */
 #onboarding-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;animation:fadeIn .3s}
@@ -49,7 +49,7 @@
   <div class=nav-item style=cursor:pointer;font-size:11px onclick=showSettings() title="Impostazioni studio e brand">⚙️ <span>Impostazioni</span></div>
   <div class=nav-item style=cursor:pointer;font-size:11px;position:relative onclick=toggleNotifDropdown() title="Notifiche: messaggi e promemoria" id=bell-btn>🔔 <span>Notifiche</span><span id=bell-badge style="display:none;background:#ef4444;color:#fff;font-size:9px;padding:0 4px;border-radius:8px;position:absolute;top:-2px;right:-4px">0</span></div>
   <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn title="Cambia tema chiaro/scuro" style="margin:0 18px 8px">🌙 Tema</button>
-  <div class=version>v2.20.9 · Dietowin</div>
+  <div class=version>v2.20.10 · Dietowin</div>
 </div>
 <div id=notif-dropdown style="display:none;position:fixed;top:50px;right:50px;width:320px;max-height:360px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:10px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.15);font-size:12px">
   <div style=display:flex;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border)><b>🔔 Notifiche</b><button class="btn btn-sm" onclick="closeNotifDropdown();markAllNotifRead()">✔️ Tutte lette</button></div>
@@ -1362,7 +1362,7 @@ async function showStats(){
 // BOOT
 (async function(){
   const dbVersion=localStorage.getItem('nc-db-version');
-  if(dbVersion!=='2.20.9'){localStorage.clear();localStorage.setItem('nc-db-version','2.20.9');}
+  if(dbVersion!=='2.20.10'){localStorage.clear();localStorage.setItem('nc-db-version','2.20.10');}
   // Auto-login: skip login overlay, go straight to dashboard
   try{
     const r=await fetch(API+'/api/auto-login');

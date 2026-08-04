@@ -2,14 +2,46 @@
 """NutriCoach v2 Launcher — entry point EXE per Dietowin-style app.
 Avvia il server FastAPI IN-PROCESS (thread), poi apre finestra nativa pywebview.
 Ricade su browser classico se pywebview non disponibile.
+
+Flag speciale `--zai-browser`: processo figlio usato dal browser OCR integrato.
+In PyInstaller onefile sys.executable == l'EXE, quindi
+`subprocess.Popen([sys.executable, "--zai-browser", ...])` rilancia questo
+entry point: se il flag è presente, NON si avvia uvicorn: si apre SOLO la
+finestra di login/OCR pywebview e si termina. Necessario per evitare il bug
+\"il pulsante OCR riapre una nuova sessione NutriCoach\".
 """
 import os, sys, threading, time, webbrowser, logging, socket
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-from app import main as app_module
-from app.database import DATA_DIR as _DATA_DIR, DB_PATH
+
+def _main_zai_browser(argv):
+    """Processo figlio: apre solo la finestra browser OCR e termina."""
+    url = "https://ocr.z.ai/"
+    titolo = "OCR z.ai — Estrai testo"
+    token_file = None
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "--url" and i + 1 < len(argv):
+            url = argv[i + 1]; i += 2; continue
+        if a == "--titolo" and i + 1 < len(argv):
+            titolo = argv[i + 1]; i += 2; continue
+        if a == "--token-file" and i + 1 < len(argv):
+            token_file = argv[i + 1]; i += 2; continue
+        i += 1
+    try:
+        from app.zai_ocr import _run_webview, _run_login_webview
+    except Exception as exc:
+        sys.stderr.write("zai_ocr import fallito: %s\n" % exc)
+        sys.exit(1)
+    if token_file:
+        _run_login_webview(url, token_file)
+    else:
+        _run_webview(url, titolo)
+    sys.exit(0)
+
 
 LOG_DIR = os.path.join(os.path.expanduser("~"), ".nutricoach")
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -34,6 +66,13 @@ def open_browser():
     except Exception as e: log.warning("browser: %s", e)
 
 if __name__ == "__main__":
+    # Processo figlio del browser OCR: NON avviare uvicorn!
+    if "--zai-browser" in sys.argv:
+        _main_zai_browser(sys.argv)
+
+    from app import main as app_module
+    from app.database import DATA_DIR as _DATA_DIR, DB_PATH
+
     # supporto pywebview (finestra nativa) — opzionale
     _HAVE_WEBVIEW = False
     try:
