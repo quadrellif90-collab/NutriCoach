@@ -1,8 +1,8 @@
 <!DOCTYPE html><html lang=it><head>
 <meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
-<title>NutriCoach v2.20.11</title>
-<link rel=stylesheet href=/static/style.css?v=2.20.11>
+<title>NutriCoach v2.20.12</title>
+<link rel=stylesheet href=/static/style.css?v=2.20.12>
 <style>
 /* ONBOARDING TOUR */
 #onboarding-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;animation:fadeIn .3s}
@@ -49,7 +49,7 @@
   <div class=nav-item style=cursor:pointer;font-size:11px onclick=showSettings() title="Impostazioni studio e brand">⚙️ <span>Impostazioni</span></div>
   <div class=nav-item style=cursor:pointer;font-size:11px;position:relative onclick=toggleNotifDropdown() title="Notifiche: messaggi e promemoria" id=bell-btn>🔔 <span>Notifiche</span><span id=bell-badge style="display:none;background:#ef4444;color:#fff;font-size:9px;padding:0 4px;border-radius:8px;position:absolute;top:-2px;right:-4px">0</span></div>
   <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn title="Cambia tema chiaro/scuro" style="margin:0 18px 8px">🌙 Tema</button>
-  <div class=version>v2.20.11 · Dietowin</div>
+  <div class=version>v2.20.12 · Dietowin</div>
 </div>
 <div id=notif-dropdown style="display:none;position:fixed;top:50px;right:50px;width:320px;max-height:360px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:10px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.15);font-size:12px">
   <div style=display:flex;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border)><b>🔔 Notifiche</b><button class="btn btn-sm" onclick="closeNotifDropdown();markAllNotifRead()">✔️ Tutte lette</button></div>
@@ -423,12 +423,14 @@ async function saveAnamnesi(){
 async function loadPatientBIA(){
   const bia=await jget('/api/patients/'+ST.cid+'/bia');
   const trend=await jget('/api/patients/'+ST.cid+'/bia-trend?field=weight_kg&days=365');
+  const radarCard = bia.length?`<div class=card><b>🕸️ Radar BIA — ultima misurazione (${bia[0].date})</b>${biaRadarSVG(bia[0])||'<div style=font-size:11px;color:var(--text2)>Dati insufficienti per il radar (servono almeno 3 parametri).</div>'}</div>`:'';
   $('patient-pane').innerHTML=`<div class=row style=margin-bottom:8px><b>📊 Misurazioni BIA</b><button class="btn btn-sm" onclick=showBIAForm()>➕ Nuova</button> <button class="btn btn-sm btn-outline" onclick="showImportModal('bia')">📥 Import</button></div>
+  ${radarCard}
   ${trend.length>1?`<div class=card>${trendSVG(trend.map(t=>({v:t.weight_kg,d:t.date})))}
   <div style=font-size:11px;color:var(--text2)>${trend[0].weight_kg} → ${trend[trend.length-1].weight_kg} kg</div></div>`:''}
-  <div class=card><b>Storico</b>${bia.length?`<table><tr><th>Data</th><th>Peso</th><th>BF%</th><th>MM%</th><th>PhA</th><th>TBW</th><th>BMR</th><th></th></tr>
-  ${bia.map(r=>`<tr><td>${r.date}</td><td>${r.weight_kg||'—'}</td><td>${r.bf_pct||'—'}</td><td>${r.mm_pct||'—'}</td><td>${r.pha||'—'}</td><td>${r.tbw_l||'—'}</td><td>${r.bmr_kcal||'—'}</td>
-  <td><button class="btn btn-sm btn-danger" onclick="deleteBIARow(${r.id},'patient')">✕</button></td></tr>`).join('')}</table>`:'<div class=empty>🔄 Nessuna BIA ancora. Clicca "+ Nuova" per aggiungere la prima misurazione.</div>'}</div>`;
+  <div class=card><b>Storico completo</b><div style=overflow-x:auto>${bia.length?`<table><tr><th>Data</th><th>Peso</th><th>Altezza</th><th>BF%</th><th>BF kg</th><th>MM%</th><th>MM kg</th><th>PhA</th><th>TBW</th><th>ECW</th><th>ICW</th><th>BMR</th><th>FFM</th><th>SMM</th><th>ASMM</th><th>BCM</th><th></th></tr>
+  ${bia.map(r=>`<tr><td>${r.date}</td><td>${r.weight_kg||'—'}</td><td>${r.height_cm||'—'}</td><td>${r.bf_pct||'—'}</td><td>${r.bf_kg||'—'}</td><td>${r.mm_pct||'—'}</td><td>${r.mm_kg||'—'}</td><td>${r.pha||'—'}</td><td>${r.tbw_l||'—'}</td><td>${r.ecw_l||'—'}</td><td>${r.icw_l||'—'}</td><td>${r.bmr_kcal||'—'}</td><td>${r.ffm_kg||'—'}</td><td>${r.smm_kg||'—'}</td><td>${r.asmm_kg||'—'}</td><td>${r.bcm_kg||'—'}</td>
+  <td><button class="btn btn-sm btn-danger" onclick="deleteBIARow(${r.id},'patient')">✕</button></td></tr>`).join('')}</table>`:'<div class=empty>🔄 Nessuna BIA ancora. Clicca "+ Nuova" per aggiungere la prima misurazione.</div>'}</div></div>`;
 }
 function showBIAForm(){
   modal(`<div class=card style=min-width:460px><b>➕ Nuova BIA</b>
@@ -1115,6 +1117,40 @@ async function runCompare(){
   }
 
 // SVG TREND HELPER
+// Radar BIA — SVG puro (nessuna dipendenza). Normalizza i parametri su
+// range di riferimento tipici, disegna un N-gon (fino a 6 assi).
+function biaRadarSVG(b){
+  if(!b)return '';
+  const axes=[];
+  const w=b.weight_kg;
+  if(b.bf_pct!=null)axes.push(['Grasso BF%',b.bf_pct,45]);
+  if(b.mm_pct!=null)axes.push(['Muscolo MM%',b.mm_pct,55]);
+  if(b.tbw_l!=null&&w)axes.push(['Acqua TBW%',b.tbw_l/w*100,75]);
+  if(b.ffm_kg!=null&&w)axes.push(['Massa magra%',b.ffm_kg/w*100,90]);
+  if(b.smm_kg!=null&&w)axes.push(['SMM%',b.smm_kg/w*100,55]);
+  if(b.pha!=null)axes.push(['PhA (°)',b.pha,8]);
+  if(axes.length<3)return '';
+  const n=axes.length,CX=140,CY=125,R=85;
+  const pt=(i,val)=>{const a=-Math.PI/2+i*2*Math.PI/n;const r=R*Math.max(0.02,Math.min(1,val/axes[i][2]));return [CX+r*Math.cos(a),CY+r*Math.sin(a)]};
+  // griglia: 4 livelli concentrici
+  let grid='';
+  for(let lv=1;lv<=4;lv++){
+    const pts=axes.map((_,i)=>{const a=-Math.PI/2+i*2*Math.PI/n;const r=R*lv/4;return (CX+r*Math.cos(a)).toFixed(1)+','+(CY+r*Math.sin(a)).toFixed(1)}).join(' ');
+    grid+='<polygon points="'+pts+'" fill=none stroke=var(--border) stroke-width=1/>';
+  }
+  // assi
+  const lines=axes.map((_,i)=>{const a=-Math.PI/2+i*2*Math.PI/n;return '<line x1="'+CX+'" y1="'+CY+'" x2="'+(CX+R*Math.cos(a)).toFixed(1)+'" y2="'+(CY+R*Math.sin(a)).toFixed(1)+'" stroke=var(--border) stroke-width=1/>'}).join('');
+  // poligono dati
+  const dataPts=axes.map((_,i)=>{const q=pt(i,axes[i][1]);return q[0].toFixed(1)+','+q[1].toFixed(1)}).join(' ');
+  // etichette
+  const labels=axes.map((ax,i)=>{const a=-Math.PI/2+i*2*Math.PI/n;const x=CX+(R+22)*Math.cos(a);const y=CY+(R+22)*Math.sin(a);
+    const anc=Math.abs(x-CX)<8?'middle':(x>CX?'start':'end');
+    return '<text x="'+x.toFixed(1)+'" y="'+(y+3).toFixed(1)+'" text-anchor="'+anc+'" font-size=9 fill=var(--text2) font-weight=600>'+ax[0]+'</text><text x="'+x.toFixed(1)+'" y="'+(y+14).toFixed(1)+'" text-anchor="'+anc+'" font-size=10 fill=var(--primary)>'+ax[1].toFixed(1)+'</text>'}).join('');
+  return '<svg viewBox="0 0 280 270" width="100%" style="max-width:300px;margin:6px auto;display:block">'+grid+lines+
+    '<polygon points="'+dataPts+'" fill=var(--primary) fill-opacity="0.18" stroke=var(--primary) stroke-width=2 stroke-linejoin=round/>'+
+    axes.map((_,i)=>{const q=pt(i,axes[i][1]);return '<circle cx="'+q[0].toFixed(1)+'" cy="'+q[1].toFixed(1)+'" r=3 fill=var(--primary)/>'}).join('')+
+    labels+'</svg>';
+}
 function trendSVG(values){
   if(!values||values.length<2)return '';
   const w=Math.max(values.length*40,200),h=80,pad=10;
@@ -1362,7 +1398,7 @@ async function showStats(){
 // BOOT
 (async function(){
   const dbVersion=localStorage.getItem('nc-db-version');
-  if(dbVersion!=='2.20.11'){localStorage.clear();localStorage.setItem('nc-db-version','2.20.11');}
+  if(dbVersion!=='2.20.12'){localStorage.clear();localStorage.setItem('nc-db-version','2.20.12');}
   // Auto-login: skip login overlay, go straight to dashboard
   try{
     const r=await fetch(API+'/api/auto-login');
