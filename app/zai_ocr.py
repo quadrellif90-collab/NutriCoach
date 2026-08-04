@@ -267,7 +267,7 @@ def login_e_cattura_token(timeout=330):
 def _headers(extra=None):
     h = {
         "Accept": "application/json",
-        "User-Agent": "NutriCoach/2.20.14",
+        "User-Agent": "NutriCoach/2.20.15",
     }
     tok = get_token()
     if tok:
