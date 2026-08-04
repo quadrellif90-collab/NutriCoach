@@ -12,7 +12,7 @@ import app.database as db
 from app import energy_calc
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr, bia_analysis
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.20.15")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.20.16")
 
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 
@@ -790,7 +790,18 @@ async def api_ocr_local_process(pid: int, file: UploadFile = File(...)):
         # Windows OCR usa asyncio.run(): esegui in un thread fuori dall'event loop
         data = await asyncio.to_thread(parse_bia_pdf, _pre_bytes)
         if not data:
-            return {"ok": False, "error": "Nessun dato BIA riconosciuto dal file. Riprova con un'immagine piu' nitida."}
+            # Distingue: file con testo ma non-BIA (es. piano alimentare) vs OCR fallito
+            hint = ""
+            try:
+                import fitz
+                doc = fitz.open(stream=_pre_bytes, filetype="pdf")
+                has_text = any(page.get_text().strip() for page in doc)
+                doc.close()
+                if has_text:
+                    hint = " Il file contiene testo ma nessun dato BIA riconoscibile (es. non e' un report di analisi corporea)."
+            except Exception:
+                pass
+            return {"ok": False, "error": "Nessun dato BIA riconosciuto dal file." + hint + " Per i report Bodygram scansionati assicurati che le pagine siano nitide."}
         # Mappa per compatibilita' con l'anteprima import
         compat = {"phase_angle": "pha", "weight_kg": "weight_kg", "height_cm": "height_cm",
                   "fat_mass_kg": "bf_kg", "fat_free_mass_kg": "ffm_kg", "fat_mass_pct": "bf_pct"}
@@ -1964,7 +1975,7 @@ def api_delete_progress(nid: int):
 
 @app.get("/api/version")
 def api_version():
-    _, V = os.path.dirname(__file__), "2.20.15"
+    _, V = os.path.dirname(__file__), "2.20.16"
     return {"version": V, "platform": sys.platform}
 
 # ─── UPDATE CHECK (GitHub Releases) ──────────────────────────────────────
@@ -1989,7 +2000,7 @@ def _write_update_cache(data):
 def _cache_fresh(cache):
     if not cache:
         return False
-    if cache.get("current") != "2.20.15":
+    if cache.get("current") != "2.20.16":
         return False
     try:
         from datetime import datetime, timezone
@@ -2010,8 +2021,8 @@ def api_update_check(force: int = 0):
 
     if not force and _cache_fresh(cache):
         cache["cached"] = True
-        cache["current"] = "2.20.15"
-        cache["update_available"] = cache.get("latest", "0") > "2.20.15"
+        cache["current"] = "2.20.16"
+        cache["update_available"] = cache.get("latest", "0") > "2.20.16"
         return cache
 
     try:
@@ -2038,9 +2049,9 @@ def api_update_check(force: int = 0):
                 break
 
         payload = {
-            "current": "2.20.15",
+            "current": "2.20.16",
             "latest": tag,
-            "update_available": "2.20.15" < tag,
+            "update_available": "2.20.16" < tag,
             "release_url": rel.get("html_url", ""),
             "download_url": download_url,
             "asset_name": asset_name,
@@ -2057,10 +2068,10 @@ def api_update_check(force: int = 0):
         if cache:
             cache["cached"] = True
             cache["error"] = str(e)
-            cache["current"] = "2.20.15"
-            cache["update_available"] = cache.get("latest", "0") > "2.20.15"
+            cache["current"] = "2.20.16"
+            cache["update_available"] = cache.get("latest", "0") > "2.20.16"
             return cache
-        return {"current": "2.20.15", "latest": None, "update_available": False,
+        return {"current": "2.20.16", "latest": None, "update_available": False,
                 "release_url": None, "download_url": None, "asset_name": None,
                 "platform": plat, "checked_at": now, "cached": False,
                 "error": str(e), "release_body": None}

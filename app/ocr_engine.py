@@ -315,9 +315,33 @@ def parse_bia_ocr(ocr_result: OcrResult) -> dict:
 
 def parse_bia_pdf(pdf_bytes: bytes) -> dict:
     """
-    Entry point principale: carica PDF, esegue OCR, estrae campi BIA.
+    Entry point principale: estrae campi BIA da un PDF.
+    Strategia in 2 passi:
+      1. Se il PDF ha TESTO NATIVO estraibile (PDF testuali/export digitali),
+         prova prima quello: piu' affidabile e veloce dell'OCR.
+      2. Se il testo nativo non contiene dati BIA, rasterizza le pagine ed
+         esegue OCR (Windows OCR / Tesseract) per PDF a immagini (Bodygram).
     Restituisce dict con campi BIA (stessa interfaccia di bia_parser_v2.parse_bia_text).
     """
+    # Passo 1: testo nativo estraibile
+    try:
+        import fitz
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        native_text = "\n".join(page.get_text() for page in doc).strip()
+        doc.close()
+        if native_text:
+            try:
+                from app.main import _parse_import_text
+                parsed = _parse_import_text(native_text)
+                data = parsed.get("data") or {}
+                if data and parsed.get("type") == "bia":
+                    return data
+            except Exception as e:
+                log.error("Native text parse failed (fallback to OCR): %s", e)
+    except Exception as e:
+        log.error("PDF open for native text failed (fallback to OCR): %s", e)
+
+    # Passo 2: OCR su immagini renderizzate
     try:
         ocr_result = ocr_pdf(pdf_bytes)
         found = parse_bia_ocr(ocr_result)
