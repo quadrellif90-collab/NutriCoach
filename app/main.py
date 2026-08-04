@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import app.database as db
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.20.8")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.20.9")
 
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 
@@ -1707,7 +1707,7 @@ def api_delete_progress(nid: int):
 
 @app.get("/api/version")
 def api_version():
-    _, V = os.path.dirname(__file__), "2.20.8"
+    _, V = os.path.dirname(__file__), "2.20.9"
     return {"version": V, "platform": sys.platform}
 
 # ─── UPDATE CHECK (GitHub Releases) ──────────────────────────────────────
@@ -1732,7 +1732,7 @@ def _write_update_cache(data):
 def _cache_fresh(cache):
     if not cache:
         return False
-    if cache.get("current") != "2.20.8":
+    if cache.get("current") != "2.20.9":
         return False
     try:
         from datetime import datetime, timezone
@@ -1753,8 +1753,8 @@ def api_update_check(force: int = 0):
 
     if not force and _cache_fresh(cache):
         cache["cached"] = True
-        cache["current"] = "2.20.8"
-        cache["update_available"] = cache.get("latest", "0") > "2.20.8"
+        cache["current"] = "2.20.9"
+        cache["update_available"] = cache.get("latest", "0") > "2.20.9"
         return cache
 
     try:
@@ -1781,9 +1781,9 @@ def api_update_check(force: int = 0):
                 break
 
         payload = {
-            "current": "2.20.8",
+            "current": "2.20.9",
             "latest": tag,
-            "update_available": "2.20.8" < tag,
+            "update_available": "2.20.9" < tag,
             "release_url": rel.get("html_url", ""),
             "download_url": download_url,
             "asset_name": asset_name,
@@ -1800,10 +1800,10 @@ def api_update_check(force: int = 0):
         if cache:
             cache["cached"] = True
             cache["error"] = str(e)
-            cache["current"] = "2.20.8"
-            cache["update_available"] = cache.get("latest", "0") > "2.20.8"
+            cache["current"] = "2.20.9"
+            cache["update_available"] = cache.get("latest", "0") > "2.20.9"
             return cache
-        return {"current": "2.20.8", "latest": None, "update_available": False,
+        return {"current": "2.20.9", "latest": None, "update_available": False,
                 "release_url": None, "download_url": None, "asset_name": None,
                 "platform": plat, "checked_at": now, "cached": False,
                 "error": str(e), "release_body": None}
@@ -1836,14 +1836,37 @@ def api_update_download():
 
         # Launch installer and restart app
         if _sys.platform == "win32":
-            # Start installer silently, then restart
-            subprocess.Popen([dest, "/S"], shell=False)
+            # Start installer silently with ELEVATION (UAC).
+            # Senza "runas" un installer NSIS con requireAdministrator fallisce
+            # con ERROR_ELEVATION_REQUIRED (WinError 740) se l'app gira in
+            # Program Files senza privilegi admin.
+            import ctypes
+            launched = False
+            try:
+                res = ctypes.windll.shell32.ShellExecuteW(
+                    None, "runas", dest, "/S", None, 1)
+                # >32 => successo; 740 (ERROR_ELEVATION_REQUIRED) o altri => errore
+                if res > 32:
+                    launched = True
+            except Exception:
+                launched = False
+            if not launched:
+                # Fallback: tentativo normale; se fallisce, istruisci l'utente
+                try:
+                    subprocess.Popen([dest, "/S"], shell=False)
+                    launched = True
+                except Exception:
+                    launched = False
             # Give installer time to start, then exit
             time.sleep(2)
             # Restart: launch new exe and exit current
             exe_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "NutriCoach.exe")
             if os.path.exists(exe_path):
-                subprocess.Popen([exe_path])
+                try:
+                    ctypes.windll.shell32.ShellExecuteW(
+                        None, "open", exe_path, "", None, 1)
+                except Exception:
+                    subprocess.Popen([exe_path])
             os._exit(0)
         else:
             return {"ok": True, "downloaded": dest, "action": "manual_install"}
