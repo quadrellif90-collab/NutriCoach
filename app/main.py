@@ -8,9 +8,9 @@ from fastapi.staticfiles import StaticFiles
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import app.database as db
-import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr
+import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr, bia_analysis
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.20.12")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.20.13")
 
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 
@@ -1597,6 +1597,23 @@ def api_delete_category(cid: int):
 def api_bia_list(pid: int):
     return db.list_bia(pid)
 
+@app.get("/api/patients/{pid}/bia-analysis")
+def api_bia_analysis(pid: int):
+    """Analisi BIA avanzata: indici derivati + riassunto clinico in italiano."""
+    bia = db.list_bia(pid)
+    if not bia:
+        return {"ok": True, "has_data": False, "calculations": {}, "flags": [], "summary": ""}
+    latest = bia[0]  # list_bia ordina per data DESC
+    patient = db.get_patient(pid) or {}
+    anthro = db.list_anthropometry(pid)
+    anthro_latest = anthro[0] if anthro else None
+    r = bia_analysis.summarize(latest, patient, anthro_latest)
+    r["has_data"] = True
+    r["latest_date"] = latest.get("date")
+    r["patient_name"] = patient.get("name", "")
+    r["sex"] = patient.get("sex", "")
+    return {"ok": True, **r}
+
 @app.post("/api/patients/{pid}/bia")
 async def api_add_bia(pid: int, request: Request):
     b = await request.json()
@@ -1848,7 +1865,7 @@ def api_delete_progress(nid: int):
 
 @app.get("/api/version")
 def api_version():
-    _, V = os.path.dirname(__file__), "2.20.12"
+    _, V = os.path.dirname(__file__), "2.20.13"
     return {"version": V, "platform": sys.platform}
 
 # ─── UPDATE CHECK (GitHub Releases) ──────────────────────────────────────
@@ -1873,7 +1890,7 @@ def _write_update_cache(data):
 def _cache_fresh(cache):
     if not cache:
         return False
-    if cache.get("current") != "2.20.12":
+    if cache.get("current") != "2.20.13":
         return False
     try:
         from datetime import datetime, timezone
@@ -1894,8 +1911,8 @@ def api_update_check(force: int = 0):
 
     if not force and _cache_fresh(cache):
         cache["cached"] = True
-        cache["current"] = "2.20.12"
-        cache["update_available"] = cache.get("latest", "0") > "2.20.12"
+        cache["current"] = "2.20.13"
+        cache["update_available"] = cache.get("latest", "0") > "2.20.13"
         return cache
 
     try:
@@ -1922,9 +1939,9 @@ def api_update_check(force: int = 0):
                 break
 
         payload = {
-            "current": "2.20.12",
+            "current": "2.20.13",
             "latest": tag,
-            "update_available": "2.20.12" < tag,
+            "update_available": "2.20.13" < tag,
             "release_url": rel.get("html_url", ""),
             "download_url": download_url,
             "asset_name": asset_name,
@@ -1941,10 +1958,10 @@ def api_update_check(force: int = 0):
         if cache:
             cache["cached"] = True
             cache["error"] = str(e)
-            cache["current"] = "2.20.12"
-            cache["update_available"] = cache.get("latest", "0") > "2.20.12"
+            cache["current"] = "2.20.13"
+            cache["update_available"] = cache.get("latest", "0") > "2.20.13"
             return cache
-        return {"current": "2.20.12", "latest": None, "update_available": False,
+        return {"current": "2.20.13", "latest": None, "update_available": False,
                 "release_url": None, "download_url": None, "asset_name": None,
                 "platform": plat, "checked_at": now, "cached": False,
                 "error": str(e), "release_body": None}

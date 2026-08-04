@@ -1,8 +1,8 @@
 <!DOCTYPE html><html lang=it><head>
 <meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
-<title>NutriCoach v2.20.12</title>
-<link rel=stylesheet href=/static/style.css?v=2.20.12>
+<title>NutriCoach v2.20.13</title>
+<link rel=stylesheet href=/static/style.css?v=2.20.13>
 <style>
 /* ONBOARDING TOUR */
 #onboarding-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;animation:fadeIn .3s}
@@ -49,7 +49,7 @@
   <div class=nav-item style=cursor:pointer;font-size:11px onclick=showSettings() title="Impostazioni studio e brand">⚙️ <span>Impostazioni</span></div>
   <div class=nav-item style=cursor:pointer;font-size:11px;position:relative onclick=toggleNotifDropdown() title="Notifiche: messaggi e promemoria" id=bell-btn>🔔 <span>Notifiche</span><span id=bell-badge style="display:none;background:#ef4444;color:#fff;font-size:9px;padding:0 4px;border-radius:8px;position:absolute;top:-2px;right:-4px">0</span></div>
   <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn title="Cambia tema chiaro/scuro" style="margin:0 18px 8px">🌙 Tema</button>
-  <div class=version>v2.20.12 · Dietowin</div>
+  <div class=version>v2.20.13 · Dietowin</div>
 </div>
 <div id=notif-dropdown style="display:none;position:fixed;top:50px;right:50px;width:320px;max-height:360px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:10px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.15);font-size:12px">
   <div style=display:flex;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--border)><b>🔔 Notifiche</b><button class="btn btn-sm" onclick="closeNotifDropdown();markAllNotifRead()">✔️ Tutte lette</button></div>
@@ -423,14 +423,23 @@ async function saveAnamnesi(){
 async function loadPatientBIA(){
   const bia=await jget('/api/patients/'+ST.cid+'/bia');
   const trend=await jget('/api/patients/'+ST.cid+'/bia-trend?field=weight_kg&days=365');
-  const radarCard = bia.length?`<div class=card><b>🕸️ Radar BIA — ultima misurazione (${bia[0].date})</b>${biaRadarSVG(bia[0])||'<div style=font-size:11px;color:var(--text2)>Dati insufficienti per il radar (servono almeno 3 parametri).</div>'}</div>`:'';
-  $('patient-pane').innerHTML=`<div class=row style=margin-bottom:8px><b>📊 Misurazioni BIA</b><button class="btn btn-sm" onclick=showBIAForm()>➕ Nuova</button> <button class="btn btn-sm btn-outline" onclick="showImportModal('bia')">📥 Import</button></div>
+  let anans=null;try{anans=await jget('/api/patients/'+ST.cid+'/bia-analysis');}catch(e){}
+  let radarCard='',analCard='';
+  if(bia.length&&anans&&anans.has_data){
+    const ra=biaRadarAxes(anans.calculations,bia[0]);
+    radarCard=`<div class="card"><b>🕸️ Radar BIA — ultima misurazione (${bia[0].date})</b><div style="font-size:11px;color:var(--text2);margin-bottom:4px">Passa il mouse o tocca un punto per il dettaglio.</div>${biaRadarSVG(ra)}<div id="radar-detail"></div></div>`;
+    analCard=biaAnalysisHTML(anans);
+  }else if(bia.length){
+    radarCard=`<div class="card"><b>🕸️ Radar BIA</b><div style="font-size:11px;color:var(--text2)">${biaRadarSVG(bia[0])||'Dati insufficienti per il radar (servono almeno 3 parametri).'}</div></div>`;
+  }
+  $('patient-pane').innerHTML=`<div class="row" style="margin-bottom:8px"><b>📊 Misurazioni BIA</b><button class="btn btn-sm" onclick="showBIAForm()">➕ Nuova</button> <button class="btn btn-sm btn-outline" onclick="showImportModal('bia')">📥 Import</button></div>
   ${radarCard}
-  ${trend.length>1?`<div class=card>${trendSVG(trend.map(t=>({v:t.weight_kg,d:t.date})))}
-  <div style=font-size:11px;color:var(--text2)>${trend[0].weight_kg} → ${trend[trend.length-1].weight_kg} kg</div></div>`:''}
-  <div class=card><b>Storico completo</b><div style=overflow-x:auto>${bia.length?`<table><tr><th>Data</th><th>Peso</th><th>Altezza</th><th>BF%</th><th>BF kg</th><th>MM%</th><th>MM kg</th><th>PhA</th><th>TBW</th><th>ECW</th><th>ICW</th><th>BMR</th><th>FFM</th><th>SMM</th><th>ASMM</th><th>BCM</th><th></th></tr>
+  ${analCard}
+  ${trend.length>1?`<div class="card">${trendSVG(trend.map(t=>({v:t.weight_kg,d:t.date})))}
+  <div style="font-size:11px;color:var(--text2)">${trend[0].weight_kg} → ${trend[trend.length-1].weight_kg} kg</div></div>`:''}
+  <div class="card"><b>Storico completo</b><div style="overflow-x:auto">${bia.length?`<table><tr><th>Data</th><th>Peso</th><th>Altezza</th><th>BF%</th><th>BF kg</th><th>MM%</th><th>MM kg</th><th>PhA</th><th>TBW</th><th>ECW</th><th>ICW</th><th>BMR</th><th>FFM</th><th>SMM</th><th>ASMM</th><th>BCM</th><th></th></tr>
   ${bia.map(r=>`<tr><td>${r.date}</td><td>${r.weight_kg||'—'}</td><td>${r.height_cm||'—'}</td><td>${r.bf_pct||'—'}</td><td>${r.bf_kg||'—'}</td><td>${r.mm_pct||'—'}</td><td>${r.mm_kg||'—'}</td><td>${r.pha||'—'}</td><td>${r.tbw_l||'—'}</td><td>${r.ecw_l||'—'}</td><td>${r.icw_l||'—'}</td><td>${r.bmr_kcal||'—'}</td><td>${r.ffm_kg||'—'}</td><td>${r.smm_kg||'—'}</td><td>${r.asmm_kg||'—'}</td><td>${r.bcm_kg||'—'}</td>
-  <td><button class="btn btn-sm btn-danger" onclick="deleteBIARow(${r.id},'patient')">✕</button></td></tr>`).join('')}</table>`:'<div class=empty>🔄 Nessuna BIA ancora. Clicca "+ Nuova" per aggiungere la prima misurazione.</div>'}</div></div>`;
+  <td><button class="btn btn-sm btn-danger" onclick="deleteBIARow(${r.id},'patient')">✕</button></td></tr>`).join('')}</table>`:'<div class="empty">🔄 Nessuna BIA ancora. Clicca "+ Nuova" per aggiungere la prima misurazione.</div>'}</div></div>`;
 }
 function showBIAForm(){
   modal(`<div class=card style=min-width:460px><b>➕ Nuova BIA</b>
@@ -1119,38 +1128,73 @@ async function runCompare(){
 // SVG TREND HELPER
 // Radar BIA — SVG puro (nessuna dipendenza). Normalizza i parametri su
 // range di riferimento tipici, disegna un N-gon (fino a 6 assi).
-function biaRadarSVG(b){
-  if(!b)return '';
-  const axes=[];
-  const w=b.weight_kg;
-  if(b.bf_pct!=null)axes.push(['Grasso BF%',b.bf_pct,45]);
-  if(b.mm_pct!=null)axes.push(['Muscolo MM%',b.mm_pct,55]);
-  if(b.tbw_l!=null&&w)axes.push(['Acqua TBW%',b.tbw_l/w*100,75]);
-  if(b.ffm_kg!=null&&w)axes.push(['Massa magra%',b.ffm_kg/w*100,90]);
-  if(b.smm_kg!=null&&w)axes.push(['SMM%',b.smm_kg/w*100,55]);
-  if(b.pha!=null)axes.push(['PhA (°)',b.pha,8]);
-  if(axes.length<3)return '';
+// ── Radar BIA interattivo: assi costruiti dai calcoli backend (con status/range/unit) ──
+let _radarAxes=null;
+function biaRadarAxes(calc,b){
+  const w=b&&b.weight_kg;const axes=[];
+  const def=(k,label,max)=>{const v=calc&&calc[k];if(v&&v.value!=null)axes.push({key:k,label:label,value:v.value,unit:v.unit||'',max:max,status:v.status||'normale',range:v.range||'',note:v.note||''})};
+  def('bf_pct','Grasso BF%',45);
+  def('mm_pct','Muscolo MM%',55);
+  if(w)def('tbw_pct','Acqua TBW%',75);
+  if(w)def('ffm_pct','Massa magra',90);
+  if(w)def('smm_pct','SMM su peso',55);
+  def('pha','Angolo di fase',8);
+  return axes;
+}
+function biaRadarSVG(axes){
+  if(!axes||axes.length<3)return '';
+  _radarAxes=axes;
   const n=axes.length,CX=140,CY=125,R=85;
-  const pt=(i,val)=>{const a=-Math.PI/2+i*2*Math.PI/n;const r=R*Math.max(0.02,Math.min(1,val/axes[i][2]));return [CX+r*Math.cos(a),CY+r*Math.sin(a)]};
-  // griglia: 4 livelli concentrici
+  const pt=(i,val)=>{const a=-Math.PI/2+i*2*Math.PI/n;const r=R*Math.max(0.02,Math.min(1,val/axes[i].max));return [CX+r*Math.cos(a),CY+r*Math.sin(a)]};
   let grid='';
   for(let lv=1;lv<=4;lv++){
     const pts=axes.map((_,i)=>{const a=-Math.PI/2+i*2*Math.PI/n;const r=R*lv/4;return (CX+r*Math.cos(a)).toFixed(1)+','+(CY+r*Math.sin(a)).toFixed(1)}).join(' ');
-    grid+='<polygon points="'+pts+'" fill=none stroke=var(--border) stroke-width=1/>';
+    grid+='<polygon points="'+pts+'" fill="none" stroke="var(--border)" stroke-width="1"/>';
   }
-  // assi
-  const lines=axes.map((_,i)=>{const a=-Math.PI/2+i*2*Math.PI/n;return '<line x1="'+CX+'" y1="'+CY+'" x2="'+(CX+R*Math.cos(a)).toFixed(1)+'" y2="'+(CY+R*Math.sin(a)).toFixed(1)+'" stroke=var(--border) stroke-width=1/>'}).join('');
-  // poligono dati
-  const dataPts=axes.map((_,i)=>{const q=pt(i,axes[i][1]);return q[0].toFixed(1)+','+q[1].toFixed(1)}).join(' ');
-  // etichette
-  const labels=axes.map((ax,i)=>{const a=-Math.PI/2+i*2*Math.PI/n;const x=CX+(R+22)*Math.cos(a);const y=CY+(R+22)*Math.sin(a);
+  const lines=axes.map((_,i)=>{const a=-Math.PI/2+i*2*Math.PI/n;return '<line x1="'+CX+'" y1="'+CY+'" x2="'+(CX+R*Math.cos(a)).toFixed(1)+'" y2="'+(CY+R*Math.sin(a)).toFixed(1)+'" stroke="var(--border)" stroke-width="1"/>'}).join('');
+  const dataPts=axes.map((_,i)=>{const q=pt(i,axes[i].value);return q[0].toFixed(1)+','+q[1].toFixed(1)}).join(' ');
+  const labels=axes.map((ax,i)=>{const a=-Math.PI/2+i*2*Math.PI/n;const x=CX+(R+24)*Math.cos(a);const y=CY+(R+24)*Math.sin(a);
     const anc=Math.abs(x-CX)<8?'middle':(x>CX?'start':'end');
-    return '<text x="'+x.toFixed(1)+'" y="'+(y+3).toFixed(1)+'" text-anchor="'+anc+'" font-size=9 fill=var(--text2) font-weight=600>'+ax[0]+'</text><text x="'+x.toFixed(1)+'" y="'+(y+14).toFixed(1)+'" text-anchor="'+anc+'" font-size=10 fill=var(--primary)>'+ax[1].toFixed(1)+'</text>'}).join('');
-  return '<svg viewBox="0 0 280 270" width="100%" style="max-width:300px;margin:6px auto;display:block">'+grid+lines+
-    '<polygon points="'+dataPts+'" fill=var(--primary) fill-opacity="0.18" stroke=var(--primary) stroke-width=2 stroke-linejoin=round/>'+
-    axes.map((_,i)=>{const q=pt(i,axes[i][1]);return '<circle cx="'+q[0].toFixed(1)+'" cy="'+q[1].toFixed(1)+'" r=3 fill=var(--primary)/>'}).join('')+
-    labels+'</svg>';
+    return '<text x="'+x.toFixed(1)+'" y="'+(y+2).toFixed(1)+'" text-anchor="'+anc+'" font-size="9" fill="var(--text2)" font-weight="600">'+ax.label+'</text><text x="'+x.toFixed(1)+'" y="'+(y+13).toFixed(1)+'" text-anchor="'+anc+'" font-size="10" fill="var(--primary)">'+ax.value.toFixed(1)+(ax.unit||'')+'</text>'}).join('');
+  // punti interattivi: hover -> dettaglio, click -> fissa
+  const pts=axes.map((ax,i)=>{const q=pt(i,ax.value);
+    return '<g onclick="radarDetail('+i+',true)" onmouseover="radarDetail('+i+',false)" style="cursor:pointer"><circle cx="'+q[0].toFixed(1)+'" cy="'+q[1].toFixed(1)+'" r="4.5" fill="var(--primary)"/><circle cx="'+q[0].toFixed(1)+'" cy="'+q[1].toFixed(1)+'" r="11" fill="transparent"/></g>'}).join('');
+  return '<svg viewBox="0 0 280 272" width="100%" style="max-width:300px;margin:6px auto;display:block">'+grid+lines+
+    '<polygon points="'+dataPts+'" fill="var(--primary)" fill-opacity="0.18" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round"/>'+
+    pts+labels+'</svg>';
 }
+function radarDetail(i,fix){
+  const a=_radarAxes&&_radarAxes[i];if(!a)return;
+  const st=a.status||'normale';
+  const col=st.includes('elevato')||st.includes('ridotto')||st.includes('basso')||st.includes('sarcopenia')||st.includes('obesit')||st.includes('sovrappeso')?'#e2a336':(st.includes('buono')||st.includes('nella norma')||st.includes('adeguato')||st==='normale'?'#10b981':'#e2a336');
+  const d=document.getElementById('radar-detail');
+  if(!d)return;
+  d.innerHTML='<div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px">'+
+    '<div style="font-weight:700;color:'+col+'">● '+a.label+': <b>'+a.value.toFixed(1)+' '+a.unit+'</b></div>'+
+    (a.range?'<div style="color:var(--text2);margin-top:2px">Riferimento: '+a.range+'</div>':'')+
+    '<div style="margin-top:2px">Status: <span style="color:'+col+';font-weight:600">'+esc(st)+'</span></div>'+
+    (a.note?'<div style="color:var(--text2);margin-top:2px;font-style:italic">'+esc(a.note)+'</div>':'')+
+    (fix?'<div style="font-size:10px;color:var(--text2);margin-top:4px">Fissato. Clicca un altro punto per cambiare.</div>':'')+
+    '</div>';
+}
+// ── Card Analisi condizione: chips + flag + riassunto narrativo ──
+function biaAnalysisHTML(an){
+  const calc=an.calculations||{};
+  const chips=Object.keys(calc).filter(k=>calc[k]&&calc[k].value!=null&&k!=='bmr_harris'&&k!=='bmr_katch'&&k!=='bf_kg_der'&&k!=='mm_kg_der').map(k=>{
+    const v=calc[k],st=v.status||'normale';
+    const col=st.includes('elevato')||st.includes('ridotto')||st.includes('basso')||st.includes('sarcopenia')||st.includes('obesit')||st.includes('sovrappeso')?'#e2a336':(st.includes('buono')||st.includes('nella norma')||st.includes('adeguato')||st==='normale'?'#10b981':'#e2a336');
+    return '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:11px;min-width:92px">'+
+      '<div style="color:var(--text2)">'+esc(v.label)+'</div><div style="font-weight:700;font-size:13px">'+v.value+(v.unit||'')+'</div>'+
+      '<div style="color:'+col+';font-size:10px;font-weight:600">'+esc(st)+'</div></div>';
+  }).join('');
+  const flags=(an.flags||[]).map(f=>'<div style="font-size:12px;padding:2px 0;color:'+(f.good?'#10b981':'#e2a336')+'">'+(f.good?'✓':'⚠️ ')+esc(f.text)+'</div>').join('');
+  return `<div class="card"><b>🧠 Analisi BIA — condizione del paziente</b>
+  ${chips?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0">${chips}</div>`:''}
+  ${flags?`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:8px">${flags}</div>`:''}
+  ${an.summary?`<div style="background:var(--bg2);border-left:3px solid var(--primary);border-radius:6px;padding:8px;font-size:12.5px;line-height:1.5">${esc(an.summary)}</div>`:''}
+  </div>`;
+}
+
 function trendSVG(values){
   if(!values||values.length<2)return '';
   const w=Math.max(values.length*40,200),h=80,pad=10;
@@ -1398,7 +1442,7 @@ async function showStats(){
 // BOOT
 (async function(){
   const dbVersion=localStorage.getItem('nc-db-version');
-  if(dbVersion!=='2.20.12'){localStorage.clear();localStorage.setItem('nc-db-version','2.20.12');}
+  if(dbVersion!=='2.20.13'){localStorage.clear();localStorage.setItem('nc-db-version','2.20.13');}
   // Auto-login: skip login overlay, go straight to dashboard
   try{
     const r=await fetch(API+'/api/auto-login');
