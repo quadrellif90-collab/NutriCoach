@@ -1,8 +1,8 @@
 <!DOCTYPE html><html lang=it><head>
 <meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
-<title>NutriCoach v2.20.16</title>
-<link rel=stylesheet href=/static/style.css?v=2.20.16>
+<title>NutriCoach v2.20.17</title>
+<link rel=stylesheet href=/static/style.css?v=2.20.17>
 <style>
 /* ONBOARDING TOUR */
 #onboarding-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;animation:fadeIn .3s}
@@ -52,7 +52,7 @@
   <div class=nav-item style=cursor:pointer;font-size:11px onclick=showSettings() title="Impostazioni studio e brand">⚙️ <span>Impostazioni</span></div>
   <div class=nav-item style=cursor:pointer;font-size:11px;position:relative onclick=toggleNotifDropdown() title="Notifiche: messaggi e promemoria" id=bell-btn>🔔 <span>Notifiche</span><span id=bell-badge style="display:none;background:#ef4444;color:#fff;font-size:9px;padding:0 4px;border-radius:8px;position:absolute;top:-2px;right:-4px">0</span></div>
   <button class="btn btn-sm btn-outline" onclick=toggleTheme() id=theme-btn title="Cambia tema chiaro/scuro" style="margin:0 18px 8px">🌙 Tema</button>
-  <div class=version>v2.20.16 · Dietowin</div>
+  <div class=version>v2.20.17 · Dietowin</div>
 </div>
 <div id="sidebar-resizer"></div>
 <div id=notif-dropdown style="display:none;position:fixed;top:50px;right:50px;width:320px;max-height:360px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:10px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.15);font-size:12px">
@@ -75,6 +75,7 @@
 </div>
 <div id=modal-root></div>
 <div id=toast></div>
+<div id=ai-overlay><div class=box><div class=spinner></div><div class=ai-msg id=ai-msg>Elaborazione in corso<span class=ai-dots><i></i><i></i><i></i></span></div><div class=ai-sub id=ai-sub></div></div></div>
 <div id=update-banner style="display:none;position:fixed;bottom:20px;right:20px;max-width:380px;background:var(--card);border:2px solid var(--primary);border-radius:12px;padding:16px 20px;box-shadow:0 8px 24px rgba(0,0,0,.2);z-index:99999;font-size:13px">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
     <span style="font-size:24px">🔄</span>
@@ -115,13 +116,26 @@ async function _authedFetch(method,u,b){
   }
   return r;
 }
-async function jget(u){try{const r=await _authedFetch('GET',u);if(!r)return null;if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore caricamento: '+e.message,{type:'error'});return null}}
-async function jpost(u,b){try{const r=await _authedFetch('POST',u,b);if(!r)return null;if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore salvataggio: '+e.message,{type:'error'});return null}}
-async function jdel(u){try{const r=await _authedFetch('DELETE',u);if(!r)return null;if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore eliminazione: '+e.message,{type:'error'});return null}}
-async function jpatch(u,b){try{const r=await _authedFetch('PATCH',u,b);if(!r)return null;if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore aggiornamento: '+e.message,{type:'error'});return null}}
+async function jget(u){try{const r=await _authedFetch('GET',u);if(!r)return null;if(!r.ok)throw new Error(await _apiErr(r,'caricamento'));return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore caricamento: '+e.message,{type:'error'});return null}}
+async function jpost(u,b){try{const r=await _authedFetch('POST',u,b);if(!r)return null;if(!r.ok)throw new Error(await _apiErr(r,'salvataggio'));return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore salvataggio: '+e.message,{type:'error'});return null}}
+async function jdel(u){try{const r=await _authedFetch('DELETE',u);if(!r)return null;if(!r.ok)throw new Error(await _apiErr(r,'eliminazione'));return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore eliminazione: '+e.message,{type:'error'});return null}}
+async function jpatch(u,b){try{const r=await _authedFetch('PATCH',u,b);if(!r)return null;if(!r.ok)throw new Error(await _apiErr(r,'aggiornamento'));return await r.json()}catch(e){if(!e.message.includes('Failed to fetch'))toast('Errore aggiornamento: '+e.message,{type:'error'});return null}}
+// Estrae il messaggio di errore dal body JSON del server (detail/error), con fallback leggibile
+async function _apiErr(r,azione){
+  let msg='';
+  try{const j=await r.clone().json();msg=(j&&(j.detail||j.error||j.message))||''}catch(e){}
+  if(!msg){const m={400:'richiesta non valida',401:'sessione scaduta',403:'operazione non autorizzata',404:'risorsa non trovata',409:'conflitto con dati esistenti',413:'file troppo grande',422:'dati non validi',500:'errore interno del server'}[r.status]||'errore ('+r.status+')';return 'il server ha risposto: '+m}
+  return typeof msg==='string'?msg:(Array.isArray(msg)?msg.map(x=>x.msg||JSON.stringify(x)).join('; '):JSON.stringify(msg))
+}
 
 /* === LOADING STATE HELPER for buttons === */
+// Estrae il messaggio di errore da una risposta business {ok:false, error:...}
+function _errMsg(r,fb){return (r&&(r.error||r.detail||r.message))?String(r.error||r.detail||r.message):(fb||'Errore')}
 function setLoading(el,loading,label){if(!el)return;if(loading){el._origText=el.innerHTML;el._origDisabled=el.disabled;el.disabled=true;el.classList.add('btn-loading');if(label)el.innerHTML=label}else{el.disabled=el._origDisabled||false;el.classList.remove('btn-loading');if(el._origText)el.innerHTML=el._origText;delete el._origText;delete el._origDisabled}}
+
+/* === AI BUSY OVERLAY — trasparenza su cosa sta elaborando === */
+function aiBusy(msg,sub){const o=$('ai-overlay');if(!o)return;const m=$('ai-msg'),s=$('ai-sub');if(m)m.innerHTML=esc(msg||'Elaborazione in corso')+'<span class=ai-dots><i></i><i></i><i></i></span>';if(s)s.textContent=sub||'';o.classList.add('on')}
+function aiIdle(){const o=$('ai-overlay');if(o)o.classList.remove('on')}
 
 /* === AI STATUS INDICATOR === */
 function showAIStatus(msg,containerId){const c=document.getElementById(containerId);if(!c)return;c.innerHTML='<span class="ai-status"><span class="dot"></span> '+esc(msg)+'</span>'}
@@ -335,7 +349,7 @@ async function saveNewPatient(){
   const b={name:$('np-name').value,sex:$('np-sex').value,phone:$('np-phone').value,email:$('np-email').value,goal:$('np-goal').value,sport:$('np-sport').value,meals_per_day:parseInt($('np-mpd').value)||5};
   if(!b.name){toast('Inserisci il nome');return}
   const r=await jpost('/api/patients',b);
-  if(r&&r.ok){toast('Paziente creato ✓');closeModal();nav('pazienti')}else toast('Errore');
+  if(r&&r.ok){toast('Paziente creato ✓');closeModal();nav('pazienti')}else toast(_errMsg(r,'Impossibile creare il paziente'),{type:'error'});
 }
 // OPEN PATIENT
 async function openPatient(cid){
@@ -391,7 +405,7 @@ async function genPortal(){
     const full=location.origin+r.url;
     try{navigator.clipboard.writeText(full);toast('✅ Link copiato');}catch(e){toast('Link generato',{type:'info'})}
     modal(`<div class=card><b>🔗 Portale paziente</b><div style=font-size:11px;word-break:break-all;background:var(--bg);padding:8px;border-radius:6px;margin:6px 0>${full}</div><button class="btn btn-primary" onclick="window.open('${r.url}','_blank')">🌐 Apri portale</button></div>`);
-  } else toast('Errore');
+  } else toast(_errMsg(r,'Impossibile generare il link del portale'),{type:'error'});
 }
 // PATIENT TABS
 function switchTab(el,tab){
@@ -441,7 +455,7 @@ async function saveAnamnesi(){
   const allerg=$('an-allerg')?.value;
   const lang=$('an-lang')?.value;
   await fetch('/api/patients/'+ST.cid,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({allergies:allerg||'',language:lang||'it'})});
-  if(r&&r.ok){toast('Anamnesi salvata ✓');closeModal();loadAnamnesi()}else toast('Errore');
+  if(r&&r.ok){toast('Anamnesi salvata ✓');closeModal();loadAnamnesi()}else toast(_errMsg(r,'Impossibile salvare l\'anamnesi'),{type:'error'});
 }
 // PATIENT BIA
 async function loadPatientBIA(){
@@ -486,7 +500,7 @@ async function saveBIA(){
   const n=id=>{const v=parseFloat($(id).value);return isNaN(v)?null:v};
   const fields={weight_kg:n('bf-w'),height_cm:n('bf-h'),bf_pct:n('bf-bf'),mm_pct:n('bf-mm'),pha:n('bf-pha'),tbw_l:n('bf-tbw'),bmr_kcal:n('bf-bmr'),bmi:n('bf-bmi'),ecw_l:n('bf-ecw'),icw_l:n('bf-icw'),ffm_kg:n('bf-ffm'),bf_kg:n('bf-bfkg'),mm_kg:n('bf-mmkg'),smm_kg:n('bf-smm'),asmm_kg:n('bf-asmm'),bcm_kg:n('bf-bcm'),date:$('bf-date').value};
   const r=await jpost('/api/patients/'+ST.cid+'/bia',fields);
-  if(r&&r.ok){toast('BIA salvata ✓');closeModal();loadPatientBIA()}else toast('Errore');
+  if(r&&r.ok){toast('BIA salvata ✓');closeModal();loadPatientBIA()}else toast(_errMsg(r,'Impossibile salvare la BIA'),{type:'error'});
 }
 // SMART IMPORT — incolla JSON/Markdown/testo e rileva il tipo
 function showImportModal(kind){
@@ -584,12 +598,13 @@ function skipMissingImport(){
 }
 async function localOCRSubmit(file){
   const fd=new FormData();fd.append('file',file);
+  aiBusy('📄 Lettura del report','OCR locale: estrazione dei valori BIA dal PDF…');
   try{
     const res=await fetch(API+'/api/ocr/local/process?pid='+ST.cid,{method:'POST',body:fd});
     const r=await res.json();
     if(!r.ok){toast(r.error||'Errore OCR locale',{type:'error'});return}
     const mf=r.mapped_fields||{};
-    // Vai direttamente all'anteprima senza passare dal testo → import
+    // Vai direttamente all anteprima senza passare dal testo, poi import
     const labs={'weight_kg':'Peso','height_cm':'Altezza','bmi':'BMI','phase_angle':'Angolo di Fase (PhA)','pha':'Angolo di Fase (PhA)','tbw_l':'Acqua Totale (TBW)','ecw_l':'Acqua Extra Cellulare (ECW)','icw_l':'Acqua Intra Cellulare (ICW)','fat_mass_kg':'Massa Grassa (FM)','bf_kg':'Massa Grassa (FM)','fat_mass_pct':'Massa Grassa (%)','bf_pct':'Massa Grassa (%)','fat_free_mass_kg':'Massa Magra (FFM)','ffm_kg':'Massa Magra (FFM)','smm_kg':'Massa Muscolo-Scheletrica (SMM)','asmm_kg':'Massa Muscolare Appendicolare (ASMM)','bcm_kg':'Massa Cellulare (BCM)','hydration_pct':'Idratazione tissutale (%)','chi_value':'Indice nutrizionale (CHI)','bmr_kcal':'Metabolismo Basale (kcal)'};
     _impData={type:'bia',fields:{}};
     // Passa tutti i campi OCR, deduplicando
@@ -602,8 +617,8 @@ async function localOCRSubmit(file){
     const rows=Object.entries(_impData.fields).map(([k,v])=>`<div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding:2px 0"><span>${esc(labs[k]||k)}</span><b>${v}</b></div>`).join('');
     $('imp-preview').innerHTML=`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:8px"><div><b>✅ Rilevato: 📊 BIA (OCR locale)</b> <span style=color:var(--text2)>(${Object.keys(mf).length} campi)</span></div>${rows}</div>`;
     $('imp-save').disabled=false;
-    toast('OCR locale completato ✓',{type:'success'});
-  }catch(e){toast('Errore OCR locale: '+e.message,{type:'error'})}
+    aiIdle();toast('OCR locale completato ✓',{type:'success'});
+  }catch(e){aiIdle();toast('Errore OCR locale: '+e.message,{type:'error'})}
 }
 function pickLocalFile(){
   const inp=document.createElement('input');inp.type='file';inp.accept='application/pdf,image/*';
@@ -678,7 +693,7 @@ async function saveAntropometria(){
   const n=id=>{const v=parseFloat($(id).value);return isNaN(v)?null:v};
   const fields={weight_kg:n('an-w'),height_cm:n('an-h'),waist_cm:n('an-waist'),hip_cm:n('an-hip'),arm_cm:n('an-arm'),thigh_cm:n('an-thigh'),skinfold_tricipite:n('an-sk1'),skinfold_bicipite:n('an-sk2'),skinfold_sottoscapolare:n('an-sk3'),skinfold_sovrailiaca:n('an-sk4'),date:$('an-date').value};
   const r=await jpost('/api/patients/'+ST.cid+'/anthropometry',fields);
-  if(r&&r.ok){toast('Misura salvata ✓');closeModal();loadAntropometria()}else toast('Errore');
+  if(r&&r.ok){toast('Misura salvata ✓');closeModal();loadAntropometria()}else toast(_errMsg(r,'Impossibile salvare la misura'),{type:'error'});
 }
 async function deleteAnthroRow(aid){
   if(!await showConfirm('Eliminare misura?','',{danger:true,confirmText:'Elimina'}))return;
@@ -782,7 +797,7 @@ async function saveAddFood(){
      protein_g:Math.round(f.p*grams/100),
      carbs_g:Math.round(f.c*grams/100),
      fat_g:Math.round(f.f*grams/100)});
-  if(r&&r.ok){toast('Aggiunto ✓');closeModal();loadPatientDieta()}else toast('Errore');
+  if(r&&r.ok){toast('Aggiunto ✓');closeModal();loadPatientDieta()}else toast(_errMsg(r,'Impossibile aggiungere l\'alimento'),{type:'error'});
 }
 function showGenPlan(){
   Promise.all([
@@ -795,7 +810,7 @@ function showGenPlan(){
     const presets=pr.presets||[];
     const conds=cl.conditions||{};
     const mpd=pi.meals_per_day||5;
-    // Build meals dropdown options from patient's meals_per_day setting
+    // Build meals dropdown options from the patient meals_per_day setting
     const mpdOpts=[
       {v:3,l:'3 pasti (Colazione, Pranzo, Cena)'},
       {v:4,l:'4 pasti (+ Spuntino)'},
@@ -820,16 +835,20 @@ function showGenPlan(){
   });
 }
 async function savePlanTemplate(){
+  // H6 fix: cattura i valori PRIMA che modal() sostituisca #modal-root
+  // (gli input gp-* della modale Genera piano vengono distrutti)
+  const _tpl={k:parseFloat(($('gp-k')||{}).value)||2000,p:parseFloat(($('gp-p')||{}).value)||30,c:parseFloat(($('gp-c')||{}).value)||45,f:parseFloat(($('gp-f')||{}).value)||25};
   modal(`<div class=card><b>📁 Salva come template</b>
   <div class=field-row><div><label>Nome template</label><input id=tpl-name placeholder='es. Normocalorica Mediterranea'></div></div>
-  <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick="doSavePlanTemplate()">💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
+  <div style=margin-top:8px;display:flex;gap:8px><button class="btn btn-primary" onclick="doSavePlanTemplate(${_tpl.k},${_tpl.p},${_tpl.c},${_tpl.f})">💾 Salva</button><button class=btn onclick=closeModal()>Annulla</button></div></div>`);
 }
-async function doSavePlanTemplate(){
+async function doSavePlanTemplate(_k,_p,_c,_f){
   const name=$('tpl-name').value;if(!name){toast('Inserire un nome',{type:'warn'});return}
   const btn=event&&event.target;if(btn){btn.disabled=true;btn.textContent='⏳...'}
-  const targets={kcal:parseFloat($('gp-k').value)||2000,p:parseFloat($('gp-p').value)||30,c:parseFloat($('gp-c').value)||45,f:parseFloat($('gp-f').value)||25};
+  const targets={kcal:_k||2000,p:_p||30,c:_c||45,f:_f||25};
   const r=await jpost('/api/diet-templates',{name,targets});
-  if(r&&r.ok)toast('Template salvato ✓');else toast('Errore');
+  if(r&&r.ok)toast('Template salvato ✓');else toast(_errMsg(r,'Impossibile salvare il template'),{type:'error'});
+  if(btn){btn.disabled=false;btn.textContent='💾 Salva'}
 }
 async function calcEnergy(){
   try{
@@ -870,7 +889,7 @@ async function genPlan(){
   const targets={kcal:parseFloat($('gp-k').value),protein_pct:parseFloat($('gp-p').value),carb_pct:parseFloat($('gp-c').value),fat_pct:parseFloat($('gp-f').value)};
   const conds=Array.from(qsa('#gp-cd input:checked')).map(c=>c.value);
   const opts={meals:parseInt($('gp-fr').value),days:['lun','mar','mer','gio','ven','sab','dom'],conditions:conds,preset:pre};
-  closeModal();$('patient-pane').innerHTML='<div class=card style=text-align:center;padding:32px><div class=spinner></div><div style=margin-top:8px;color:var(--text2);font-size:13px>🧠 Generazione piano in corso…</div></div>';toast('Generazione...');
+  closeModal();aiBusy('🧠 Generazione piano personalizzato','Analisi condizioni cliniche e obiettivi del paziente…');
   const pl=await jpost('/api/patients/'+ST.cid+'/plan/generate',{targets,options:opts,preset:pre});
   if(pl&&pl.days){
     // apply plan items
@@ -885,8 +904,8 @@ async function genPlan(){
         }
       }
     }
-    toast('Piano generato ✓');loadPatientDieta()
-  } else toast('Errore');
+    aiIdle();toast('Piano generato ✓');loadPatientDieta()
+  } else {aiIdle();toast(_errMsg(pl,'Generazione piano non riuscita'),{type:'error'});}
 }
 // MISURE
 async function loadMisure(){
@@ -1112,7 +1131,7 @@ function uploadBIAHub(){
     try{
       const r=await fetch(API+'/api/patients/'+cid+'/bia/upload',{method:'POST',body:fd});
       const j=await r.json();
-      if(j.ok||j.bia_id){toast('BIA importata ✓');loadBIAReading()}else toast('Errore');
+      if(j.ok||j.bia_id){toast('BIA importata ✓');loadBIAReading()}else toast(_errMsg(j,'Import non riuscito'),{type:'error'});
     }catch(e){toast('Errore upload')}
   };inp.click();
 }
@@ -1373,7 +1392,7 @@ async function saveBilancia(){
     muscle_kg:float($('bs-m')?.value),tbw_kg:float($('bs-t')?.value),visceral_fat:float($('bs-v')?.value),
     bmr:int($('bs-r')?.value),metabolic_age:int($('bs-a')?.value),notes:$('bs-n')?.value||''};
   const r=await jpost('/api/patients/'+ST.cid+'/scale',b);
-  if(r&&r.ok){toast('Salvato ✓');closeModal();loadBilancia()}else toast('Errore');
+  if(r&&r.ok){toast('Salvato ✓');closeModal();loadBilancia()}else toast(_errMsg(r,'Impossibile salvare la misurazione'),{type:'error'});
 }
 
 async function loadWearable(){
@@ -1407,7 +1426,7 @@ async function saveWearable(){
     calories_active:int($('wr-c')?.value)||0,sleep_hours:float($('wr-sl')?.value),
     stress_avg:int($('wr-stress')?.value)};
   const r=await jpost('/api/patients/'+ST.cid+'/wearable',b);
-  if(r&&r.ok){toast('Salvato ✓');closeModal();loadWearable()}else toast('Errore');
+  if(r&&r.ok){toast('Salvato ✓');closeModal();loadWearable()}else toast(_errMsg(r,'Impossibile salvare i dati wearable'),{type:'error'});
 }
 
 async function loadFitness(){
@@ -1442,7 +1461,7 @@ async function saveFitness(){
     elevation_m:int($('ft-el')?.value),calories:int($('ft-cal')?.value),
     avg_hr:int($('ft-hr')?.value),notes:$('ft-n')?.value||''};
   const r=await jpost('/api/patients/'+ST.cid+'/fitness',b);
-  if(r&&r.ok){toast('Salvato ✓');closeModal();loadFitness()}else toast('Errore');
+  if(r&&r.ok){toast('Salvato ✓');closeModal();loadFitness()}else toast(_errMsg(r,'Impossibile salvare l\'attività'),{type:'error'});
 }
 
 function int(v){const n=parseInt(v);return isNaN(n)?null:n}
@@ -1533,19 +1552,11 @@ async function showStats(){
     <div style=margin-top:8px><button class=btn onclick=closeModal()>Chiudi</button></div></div>`);
 }
 // ─── UI SCALE (automatica in base allo schermo) ─────────────────────
-// Niente zoom manuale a percentuali: la scala segue la larghezza della
-// finestra (come un browser responsive), aggiornata al resize.
-let _ncResizeT=null;
-function ncApplyZoom(){
-  const w=window.innerWidth;
-  // Riferimento: 1440px di design → scala 1.0; finestre piu' piccole
-  // riducono proporzionalmente (min 0.8), piu' grandi alzano leggermente (max 1.2)
-  let z=Math.round(w/1440*100)/100;
-  z=Math.max(0.8,Math.min(1.2,z));
-  document.documentElement.style.zoom=z;
-}
-function ncOnResize(){clearTimeout(_ncResizeT);_ncResizeT=setTimeout(ncApplyZoom,150)}
-window.addEventListener('resize',ncOnResize);
+// H2 fix: lo zoom root spostava la valutazione delle media query (~20%).
+// Ora la scala e gestita in CSS con font-size fluido (clamp su body),
+// che si adatta alla larghezza della finestra senza alterare la viewport.
+function ncApplyZoom(){ /* rimosso: scala CSS fluida (body font-size clamp) */ }
+function ncOnResize(){/* rimosso: niente listener, il CSS reagisce da solo */}
 // ─── SIDEBAR ridimensionabile (trascina divisore) ──────────────────────
 (function(){
   var rz=document.getElementById('sidebar-resizer');
@@ -1607,7 +1618,7 @@ async function refreshSidePanel(){
   ncApplyZoom();
   if(!_sidePanelOn){const sp=$('side-panel');if(sp)sp.classList.add('hidden')}
   const dbVersion=localStorage.getItem('nc-db-version');
-  if(dbVersion!=='2.20.16'){localStorage.clear();localStorage.setItem('nc-db-version','2.20.16');}
+  if(dbVersion!=='2.20.17'){localStorage.clear();localStorage.setItem('nc-db-version','2.20.17');}
   // Auto-login: skip login overlay, go straight to dashboard
   try{
     const r=await fetch(API+'/api/auto-login');
@@ -1672,8 +1683,8 @@ function selectWizardPreset(el,path){
   $('wizard-folder').value=path;
 }
 function showSetupWizard(){
-  // Configurazione automatica: nessun wizard all'avvio.
-  // Se non esiste gia' una cartella backup, imposta quella predefinita in silenzio.
+  // Configurazione automatica: nessun wizard in avvio.
+  // Se non esiste gia una cartella backup, imposta quella predefinita in silenzio.
   if(localStorage.getItem('setup_wizard_done'))return;
   const t=localStorage.getItem('token');
   if(!t)return;

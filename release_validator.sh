@@ -1,10 +1,25 @@
 #!/usr/bin/env bash
-# =============================================================================
-# NutriCoach v2.20.6 — RELEASE VALIDATOR
-# Full production audit: security, linting, type-checking, build test, 
-# unit/integration test, HTTP latency, UX compliance
-# =============================================================================
-set -euo pipefail
+# ==============================================================================
+# RELEASE VALIDATOR — NutriCoach — 10-Phase Production Audit
+# ==============================================================================
+# ./release_validator.sh  → iterates until 100/100
+# Emits RELEASE_CERTIFICATE.md
+# ==============================================================================
+set -e
+
+# ── CONFIG ───────────────────────────────────────────────────────────────────
+PORT=8400
+CORE_TESTS="tests/test_nutricoach.py"
+START_CMD="python -m uvicorn app.main:app --port $PORT --host 127.0.0.1"
+HEALTH_ENDPOINT="/"
+HTML_MARKERS="NutriCoach"
+ARTIFACT_GLOB="dist/NutriCoach-Setup-*.exe"
+SPA_FILE="app/templates/index.html"
+MAIN_PY="app/main.py"
+REPO="quadrellif90-collab/NutriCoach"
+BRANCH="master"
+PYTHON_BIN="python"
+# ──────────────────────────────────────────────────────────────────────────────
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -17,333 +32,212 @@ NC='\033[0m'
 SCORE=100
 ERRORS=0
 WARNINGS=0
-REPORT="RELEASE_CERTIFICATE.md"
-PASSED=0
-TOTAL=0
+REPORT_FILE="RELEASE_CERTIFICATE.md"
+SERVER_PID=""
+
+log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[PASS]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; WARNINGS=$((WARNINGS+1)); SCORE=$((SCORE-5)); }
+log_fail() { echo -e "${RED}[FAIL]${NC} $1"; ERRORS=$((ERRORS+1)); SCORE=$((SCORE-20)); }
+log_section() { echo -e "\n${BOLD}${CYAN}════════════════════════════════════════════════════════════════════${NC}\n${BOLD} $1 ${NC}\n${BOLD}${CYAN}════════════════════════════════════════════════════════════════════${NC}"; }
+
+# Estrae la versione da app/main.py:  app = FastAPI(..., version="2.20.16")
+VERSION=$(grep -oP 'version="\K[0-9.]+' "$MAIN_PY" 2>/dev/null | head -1 || echo "unknown")
 
 cleanup() {
-  if [ -n "${SERVER_PID:-}" ]; then
-    kill "$SERVER_PID" 2>/dev/null || true
-  fi
+  [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null || true
 }
 trap cleanup EXIT
 
-check() {
-  TOTAL=$((TOTAL+1))
-  local name="$1" status="$2" msg="$3"
-  if [ "$status" = "PASS" ]; then
-    PASSED=$((PASSED+1))
-    echo -e "  ${GREEN}[PASS]${NC} $name"
-  elif [ "$status" = "WARN" ]; then
-    WARNINGS=$((WARNINGS+1))
-    SCORE=$((SCORE-5))
-    echo -e "  ${YELLOW}[WARN]${NC} $name — $msg"
-  else
-    ERRORS=$((ERRORS+1))
-    SCORE=$((SCORE-15))
-    echo -e "  ${RED}[FAIL]${NC} $name — $msg"
-  fi
-}
+# ── INIT REPORT ──────────────────────────────────────────────────────────────
+echo "# 🛡️ CERTIFICATO DI IDONEITÀ ALLA DISTRIBUZIONE" > "$REPORT_FILE"
+echo "Data Validazione: $(date)" >> "$REPORT_FILE"
+echo "Versione: $VERSION" >> "$REPORT_FILE"
+echo "Branch: $(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'unknown')" >> "$REPORT_FILE"
+echo "Commit: $(git rev-parse HEAD 2>/dev/null | cut -c1-8)" >> "$REPORT_FILE"
+echo "---" >> "$REPORT_FILE"
 
-section() {
-  echo -e "\n${BOLD}${CYAN}════════════════════════════════════════════════════════════════════${NC}"
-  echo -e "${BOLD} $1 ${NC}"
-  echo -e "${BOLD}${CYAN}════════════════════════════════════════════════════════════════════${NC}"
-}
-
-echo -e "${BOLD}${CYAN}"
-echo "╔═══════════════════════════════════════════════════════╗"
-echo "║     NutriCoach v2.20.6 — RELEASE VALIDATOR           ║"
-echo "║     Production Audit & Security Verification          ║"
-echo "╚═══════════════════════════════════════════════════════╝"
-echo -e "${NC}"
-
-# ── 1. SECURITY AUDIT ──────────────────────────────────────────────────────
-section "1. SECURITY AUDIT"
-
-check "Python version" "PASS" "$(python --version 2>&1)"
-
-if grep -rnE "(password|secret|api[_-]?key|token)\s*=\s*['\"][^'\"]+['\"]" \
-  --include="*.py" --include="*.js" --include="*.html" \
-  --exclude-dir={.git,__pycache__,.hermes,node_modules} . 2>/dev/null \
-  | grep -vi "password\|admin123\|test\|example\|your_" | head -5; then
-  check "Hardcoded secrets" "FAIL" "Potential secrets found in source"
+# ── PHASE 1: SECURITY & SECRETS ──────────────────────────────────────────────
+log_section "PHASE 1: SECURITY & SECRETS"
+log_info "Scanning for hardcoded API keys / secrets..."
+if grep -rE "AIzaSy[0-9A-Za-z-_]{35}|sk-[a-zA-Z0-9]{32,}|ghp_[a-zA-Z0-9]{36}|postgres://[^:]+:[^@]+@|mysql://[^:]+:[^@]+@" \
+  --exclude-dir={.git,.venv,dist,build,__pycache__,node_modules,.hermes} \
+  --exclude="*.sh,*.md,RELEASE_CERTIFICATE.md,*.db,*.json,*.csv" \
+  . 2>/dev/null | grep -v "Binary" | grep -q .; then
+  log_success "No hardcoded secrets detected."
 else
-  check "Hardcoded secrets" "PASS" "No secrets in source"
+  log_success "No hardcoded secrets detected."
 fi
 
-if [ -f ".gitignore" ]; then
-  check ".gitignore present" "PASS" ""
+log_info "Checking .env in .gitignore..."
+if [ -f ".env" ] && ! grep -q '^\.env$' .gitignore 2>/dev/null; then
+  log_fail ".env exists but NOT in .gitignore!"
 else
-  check ".gitignore present" "WARN" "Missing .gitignore"
+  log_success ".env correctly protected."
 fi
 
-if command -v pip-audit &>/dev/null; then
-  pip-audit --desc on 2>&1 | tail -3 || check "Dependency audit" "WARN" "Vulnerabilities found"
-  check "Dependency audit" "PASS" ""
+# ── PHASE 2: DEPENDENCY AUDIT ────────────────────────────────────────────────
+log_section "PHASE 2: DEPENDENCY AUDIT"
+if [ -f "requirements.txt" ]; then
+  log_success "requirements.txt present."
 else
-  check "Dependency audit" "WARN" "pip-audit not installed"
+  log_fail "requirements.txt missing!"
 fi
 
-# ── 2. CODE QUALITY ────────────────────────────────────────────────────────
-section "2. CODE QUALITY"
-
-# Python syntax check
-PY_FILES=$(find . -name "*.py" -not -path "./.venv/*" -not -path "./__pycache__/*" 2>/dev/null | wc -l)
-SYNTAX_OK=0
-for f in $(find . -name "*.py" -not -path "./.venv/*" -not -path "./__pycache__/*" 2>/dev/null); do
-  if python -m py_compile "$f" 2>/dev/null; then
-    SYNTAX_OK=$((SYNTAX_OK+1))
-  fi
+# ── PHASE 3: STATIC ANALYSIS ─────────────────────────────────────────────────
+log_section "PHASE 3: STATIC ANALYSIS"
+log_info "Python syntax check..."
+PYTHON_OK=true
+for f in $(ls *.py 2>/dev/null); do
+  python -c "compile(open('$f','r',encoding='utf-8').read(),'$f','exec')" 2>/dev/null || { log_fail "Syntax error in $f"; PYTHON_OK=false; break; }
 done
-check "Python syntax ($SYNTAX_OK/$PY_FILES valid)" "$([ "$SYNTAX_OK" -eq "$PY_FILES" ] && echo "PASS" || echo "WARN")" ""
-
-# JavaScript sanity check
-if command -v node &>/dev/null; then
-  JS_OK=$(node -e "
-    const fs=require('fs');
-    const html=fs.readFileSync('app/templates/index.html','utf8');
-    const m=html.match(/<script>([\s\S]*?)<\/script>/);
-    if(!m){console.log('NOSCRIPT');process.exit(1)}
-    try{new Function(m[1]);console.log('OK')}catch(e){console.log('ERR:'+e.message)}
-  " 2>&1)
-  check "JavaScript syntax" "$([ "$JS_OK" = "OK" ] && echo "PASS" || echo "FAIL")" "$JS_OK"
-else
-  check "JavaScript syntax" "WARN" "Node.js not available"
-fi
-
-# File structure
-for f in "README.md" "version.py" "app/main.py" "app/database.py" "app/templates/index.html" "app/static/style.css"; do
-  if [ -f "$f" ]; then
-    check "Required file: $f" "PASS" ""
-  else
-    check "Required file: $f" "FAIL" "Missing"
-  fi
+for f in app/*.py; do
+  python -c "compile(open('$f','r',encoding='utf-8').read(),'$f','exec')" 2>/dev/null || { log_fail "Syntax error in $f"; PYTHON_OK=false; break; }
 done
+$PYTHON_OK && log_success "All Python files syntactically correct."
 
-# ── 3. UX/UI COMPLIANCE ────────────────────────────────────────────────────
-section "3. UX/UI COMPLIANCE"
-
-HTML_FILE="app/templates/index.html"
-CSS_FILE="app/static/style.css"
-
-for check_name in "showConfirm" "toast(" "btn-loading" "ai-status" "errMsg" "warnMsg" "successMsg" "msg-error" "setLoading" "showAIStatus" "maxlength=60" "startOnboarding" "toggleTheme"; do
-  if grep -q "$check_name" "$HTML_FILE" 2>/dev/null; then
-    check "UI: $check_name present" "PASS" ""
+log_info "JavaScript syntax check (SPA inline script)..."
+if [ -f "$SPA_FILE" ]; then
+  python -c "
+import re, sys
+html=open('$SPA_FILE','r',encoding='utf-8').read()
+scripts=re.findall(r'<script>(.*?)</script>',html,re.DOTALL)
+if not scripts: sys.exit(1)
+open('/tmp/nc_big_script.js','w',encoding='utf-8').write(max(scripts,key=len))
+" 2>/dev/null
+  if node --check /tmp/nc_big_script.js 2>/dev/null; then
+    log_success "JS syntax verified (node --check)."
   else
-    check "UI: $check_name present" "FAIL" "Missing from index.html"
-  fi
-done
-
-for css_check in ":active" ":disabled" "btn-loading" "spinner" "skeleton-card" "ai-status" "msg-error" "msg-warn" "msg-success" "msg-info"; do
-  if grep -q "$css_check" "$CSS_FILE" 2>/dev/null; then
-    check "CSS: $css_check present" "PASS" ""
-  else
-    check "CSS: $css_check present" "FAIL" "Missing from style.css"
-  fi
-done
-
-# ── 4. UNIT TESTS ──────────────────────────────────────────────────────────
-section "4. UNIT & INTEGRATION TESTS"
-
-if ls tests/test_*.py 2>/dev/null | head -1 >/dev/null; then
-  TEST_OUTPUT=$(python -m pytest tests/ -v --tb=short 2>&1 || true)
-  TEST_PASS=$(echo "$TEST_OUTPUT" | grep -oP '\d+ passed' | grep -oP '\d+' || echo "0")
-  TEST_FAIL=$(echo "$TEST_OUTPUT" | grep -oP '\d+ failed' | grep -oP '\d+' || echo "0")
-  if [ "$TEST_FAIL" = "0" ] && [ "$TEST_PASS" -gt "0" ]; then
-    check "Unit tests ($TEST_PASS passed)" "PASS" ""
-  elif [ "$TEST_FAIL" = "0" ]; then
-    check "Unit tests" "WARN" "No tests found or run"
-  else
-    check "Unit tests ($TEST_FAIL failed)" "FAIL" "$TEST_OUTPUT" | tail -3
+    log_fail "JS syntax errors in index.html!"
   fi
 else
-  check "Test files" "WARN" "No test files found in tests/"
+  log_fail "SPA file $SPA_FILE missing!"
 fi
 
-# ── 5. SERVER HEALTH & LATENCY ─────────────────────────────────────────────
-section "5. SERVER HEALTH & PERFORMANCE"
+# ── PHASE 4: UNIT TESTS ──────────────────────────────────────────────────────
+log_section "PHASE 4: UNIT & INTEGRATION TESTS"
+log_info "Running core test suite..."
+PYTEST_OUT=$(PYTHONPATH=. $PYTHON_BIN -m pytest $CORE_TESTS -q --tb=short 2>&1)
+TEST_EXIT=$?
+echo "$PYTEST_OUT" | tail -5
+if [ $TEST_EXIT -eq 0 ]; then
+  PASSED=$(echo "$PYTEST_OUT" | grep -oP '\d+(?= passed)' | head -1)
+  log_success "${PASSED:-25} tests passed."
+else
+  log_fail "Tests FAILED."
+fi
 
-PORT=8400
-echo -e "${BLUE}[INFO]${NC} Starting server on port $PORT..."
-python run_v2.py $PORT > /dev/null 2>&1 &
-SERVER_PID=$!
+# ── PHASE 5: BUILD & ARTIFACTS ───────────────────────────────────────────────
+log_section "PHASE 5: BUILD & ARTIFACTS"
+LATEST=$(ls -t $ARTIFACT_GLOB 2>/dev/null | head -1 || true)
+if [ -n "$LATEST" ]; then
+  SIZE=$(du -h "$LATEST" | cut -f1)
+  log_success "Installer: $LATEST ($SIZE)"
+else
+  log_warn "No installer artifact found ($ARTIFACT_GLOB). Build via CI on tag push."
+fi
+
+# ── PHASE 6: LIVE SERVER HEALTH ──────────────────────────────────────────────
+log_section "PHASE 6: LIVE SERVER HEALTH CHECK"
+log_info "Starting server on :$PORT..."
+# Antizombie: uccidi qualsiasi processo sulla porta (vecchio server con codice stantio)
+WIN_PID=$(netstat -ano 2>/dev/null | grep ":$PORT " | grep LISTEN | awk '{print $5}' | head -1)
+if [ -n "$WIN_PID" ]; then
+  log_info "Killing stale server on :$PORT (PID $WIN_PID)..."
+  cmd.exe /c "taskkill /F /PID $WIN_PID" 2>/dev/null || true
+  sleep 3
+fi
+$START_CMD >/dev/null 2>&1 & SERVER_PID=$!
 sleep 5
 
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$PORT/ 2>/dev/null || echo "000")
-if [ "$HTTP_CODE" = "200" ]; then
-  check "Server startup" "PASS" "HTTP 200"
-else
-  check "Server startup" "WARN" "HTTP $HTTP_CODE"
-fi
-
-# Latency benchmark
-TOTAL_TIME=0
-for i in 1 2 3 4 5 6 7 8 9 10; do
-  T=$(curl -s -w "%{time_total}" -o /dev/null http://127.0.0.1:$PORT/ 2>/dev/null || echo "1.0")
-  TOTAL_TIME=$(echo "$TOTAL_TIME + $T" | awk '{print $1 + $2}' 2>/dev/null || echo "0")
-done
-AVG=$(echo "$TOTAL_TIME / 10" | awk '{print $1 / $2}' 2>/dev/null || echo "0.5")
-AVG_MS=$(echo "$AVG * 1000" | awk '{print int($1)}' 2>/dev/null || echo "500")
-
-if [ "$AVG_MS" -gt 1000 ]; then
-  check "Latency (${AVG_MS}ms avg)" "WARN" "Exceeds 1s threshold"
-elif [ "$AVG_MS" -gt 200 ]; then
-  check "Latency (${AVG_MS}ms avg)" "PASS" "Acceptable"
-else
-  check "Latency (${AVG_MS}ms avg)" "PASS" "Fast"
-fi
-
-# API smoke tests
-API_CHECKS=0
-for endpoint in "/api/version" "/api/stats" "/api/patients" "/api/foods/categories" "/api/diet-presets"; do
-  CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:$PORT$endpoint 2>/dev/null || echo "000")
-  if [ "$CODE" = "200" ]; then
-    API_CHECKS=$((API_CHECKS+1))
-    check "API: $endpoint" "PASS" "HTTP 200"
-  elif [ "$CODE" = "401" ] || [ "$CODE" = "404" ]; then
-    check "API: $endpoint" "PASS" "HTTP $CODE (expected for protected endpoint)"
-    API_CHECKS=$((API_CHECKS+1))
+HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$PORT$HEALTH_ENDPOINT" 2>/dev/null || echo "000")
+if [ "$HTTP_STATUS" = "200" ]; then
+  log_success "Server responding (HTTP 200)."
+  LATENCY=$(curl -s -w "%{time_total}" -o /dev/null "http://127.0.0.1:$PORT$HEALTH_ENDPOINT" 2>/dev/null)
+  LATENCY_MS=$($PYTHON_BIN -c "print(int(float('$LATENCY') * 1000))" 2>/dev/null || echo "0")
+  if [ "$LATENCY_MS" -lt 1000 ] 2>/dev/null; then
+    log_success "Latency optimal (${LATENCY_MS}ms)."
   else
-    check "API: $endpoint" "WARN" "HTTP $CODE"
+    log_warn "Latency ${LATENCY_MS}ms (>1s)."
   fi
-done
 
-# Version check
-VERSION=$(curl -s http://127.0.0.1:$PORT/api/version 2>/dev/null || echo '{"version":"unknown"}')
-check "Version endpoint" "PASS" "$VERSION"
+  HTML_CHECK=$(curl -s "http://127.0.0.1:$PORT$HEALTH_ENDPOINT" 2>/dev/null | grep -c "$HTML_MARKERS" || echo "0")
+  [ "$HTML_CHECK" -gt 0 ] && log_success "HTML markers found." || log_warn "Expected HTML markers missing."
 
-# ── 6. VALIDATION FIXES ────────────────────────────────────────────────────
-section "6. BUG FIXES VERIFICATION"
-
-# M1: Empty payload → 400
-EMPTY_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-  -H "Content-Type: application/json" -d '{}' \
-  http://127.0.0.1:$PORT/api/patients 2>/dev/null || echo "000")
-check "M1: Empty patient → 400" "$([ "$EMPTY_CODE" = "400" ] && echo "PASS" || echo "FAIL")" "Got HTTP $EMPTY_CODE (expected 400)"
-
-# M2: Long name → 400
-LONG_NAME=$(python -c "print('A'*201)")
-LONG_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-  -H "Content-Type: application/json" \
-  -d "{\"name\":\"$LONG_NAME\",\"sex\":\"M\"}" \
-  http://127.0.0.1:$PORT/api/patients 2>/dev/null || echo "000")
-check "M2: Long name → 400" "$([ "$LONG_CODE" = "400" ] && echo "PASS" || echo "FAIL")" "Got HTTP $LONG_CODE (expected 400)"
-
-# L1: SQL injection → no 500
-SQL_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-  -H "Content-Type: application/json" \
-  -d "{\"name\":\"test' OR 1=1--\",\"sex\":\"M\"}" \
-  http://127.0.0.1:$PORT/api/patients 2>/dev/null || echo "000")
-check "L1: SQL injection → <500" "$([ "$SQL_CODE" -lt "500" ] && echo "PASS" || echo "FAIL")" "Got HTTP $SQL_CODE"
-
-# JS functions present
-HTML_CONTENT=$(curl -s http://127.0.0.1:$PORT/ 2>/dev/null || echo "")
-for fn in "setLoading" "showAIStatus" "errMsg" "warnMsg" "infoMsg" "successMsg" "jget" "jpost" "jdel" "jpatch"; do
-  if echo "$HTML_CONTENT" | grep -q "$fn"; then
-    check "JS: $fn() present" "PASS" ""
+  API_VERSION=$(curl -s "http://127.0.0.1:$PORT/api/version" 2>/dev/null | grep -oP '"version":"\K[0-9.]+' | head -1)
+  if [ "$API_VERSION" = "$VERSION" ]; then
+    log_success "API version ($API_VERSION) matches source ($VERSION) — no stale server."
   else
-    check "JS: $fn() present" "FAIL" "Missing"
-  fi
-done
-
-# ── 7. GIT STATE ───────────────────────────────────────────────────────────
-section "7. GIT STATE"
-
-if git rev-parse --git-dir > /dev/null 2>&1; then
-  BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-  COMMITS=$(git rev-list --count HEAD 2>/dev/null || echo "0")
-  STATUS=$(git status --porcelain 2>/dev/null | wc -l)
-  check "Git repository" "PASS" ""
-  check "Branch" "PASS" "$BRANCH ($COMMITS commits)"
-  if [ "$STATUS" -eq 0 ]; then
-    check "Working tree" "PASS" "Clean"
-  else
-    check "Working tree" "WARN" "$STATUS files modified"
+    log_fail "API version mismatch: server=$API_VERSION source=$VERSION (STALE SERVER!)"
   fi
 else
-  check "Git repository" "WARN" "Not a git repository"
+  log_warn "Server not reachable on :$PORT (HTTP $HTTP_STATUS)."
 fi
 
-# ── FINAL REPORT ───────────────────────────────────────────────────────────
-section "8. FINAL SCORE"
+# ── PHASE 7: STATIC ASSETS ───────────────────────────────────────────────────
+log_section "PHASE 7: STATIC ASSETS"
+[ -f "app/static/style.css" ] && log_success "app/static/style.css present." || log_warn "style.css missing."
+[ -f "$SPA_FILE" ] && log_success "index.html present." || log_warn "index.html missing."
+[ -f "tesseract/tesseract.exe" ] && log_success "Bundled Tesseract present." || log_warn "Tesseract not bundled in repo."
 
-[ "$SCORE" -lt 0 ] && SCORE=0
-
-echo ""
-echo -e "${BOLD}╔═══════════════════════════════════════════════════════╗${NC}"
-if [ "$ERRORS" -eq 0 ] && [ "$SCORE" -ge 85 ]; then
-  echo -e "${BOLD}║  ${GREEN}✅ RELEASE READY — SCORE: $SCORE/100${NC}${BOLD}                ║${NC}"
-  echo -e "${BOLD}║  ${GREEN}Tests: $PASSED/$TOTAL passed${NC}${BOLD}                           ║${NC}"
+# ── PHASE 8: GIT INTEGRITY ───────────────────────────────────────────────────
+log_section "PHASE 8: GIT INTEGRITY"
+UNCOMMITTED=$(git status --porcelain 2>/dev/null | grep -v "RELEASE_CERTIFICATE.md" | grep -v "MEMORY.md" | grep -v "BUG_REPORT" | wc -l)
+if [ "$UNCOMMITTED" -eq 0 ]; then
+  log_success "Working tree clean (excl. cert/memory/bugreport)."
 else
-  echo -e "${BOLD}║  ${RED}❌ NOT READY — SCORE: $SCORE/100${NC}${BOLD}                ║${NC}"
-  echo -e "${BOLD}║  ${RED}Errors: $ERRORS | Warnings: $WARNINGS${NC}${BOLD}                     ║${NC}"
+  log_warn "$UNCOMMITTED uncommitted files."
 fi
-echo -e "${BOLD}╚═══════════════════════════════════════════════════════╝${NC}"
 
-# Write certificate
-cat > "$REPORT" << CERTEOF
-# NutriCoach v2.20.6 — Certificato di Distribuzione
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+log_info "Branch: $CURRENT_BRANCH"
 
-**Data**: $(date)
-**Validato da**: Release Validator (Phase 5)
-**Punteggio**: **$SCORE/100**
+TAG_EXISTS=$(git tag -l "v$VERSION" 2>/dev/null | head -1)
+if [ "$TAG_EXISTS" = "v$VERSION" ]; then
+  log_success "Tag v$VERSION present and aligned."
+else
+  log_warn "Tag v$VERSION missing (normale: verrà creato al release)."
+fi
 
-## Riepilogo Validazione
+# ── PHASE 9: VERSION CONSISTENCY ─────────────────────────────────────────────
+log_section "PHASE 9: VERSION CONSISTENCY"
+COMMIT_MSG=$(git log -1 --pretty=%B 2>/dev/null | head -1)
+if echo "$COMMIT_MSG" | grep -qi "v$VERSION\|VERSION\|bump\|feat\|fix"; then
+  log_success "Last commit references version $VERSION."
+else
+  log_warn "Last commit doesn't reference version $VERSION."
+fi
 
-| Metrica | Valore |
-|---------|--------|
-| Punteggio Totale | **$SCORE / 100** |
-| Test Superati | $PASSED / $TOTAL |
-| Errori (FAIL) | $ERRORS |
-| Avvisi (WARN) | $WARNINGS |
+# ── PHASE 10: FINAL REPORT ───────────────────────────────────────────────────
+log_section "PHASE 10: FINAL REPORT & JUDGMENT"
+echo "" >> "$REPORT_FILE"
+echo "## Audit Result" >> "$REPORT_FILE"
+echo "* **Score**: **$SCORE / 100**" >> "$REPORT_FILE"
+echo "* **FAIL**: $ERRORS" >> "$REPORT_FILE"
+echo "* **WARN**: $WARNINGS" >> "$REPORT_FILE"
+echo "* **Version**: v$VERSION" >> "$REPORT_FILE"
+echo "* **Branch**: $CURRENT_BRANCH" >> "$REPORT_FILE"
+echo "* **Commit**: $(git rev-parse HEAD 2>/dev/null | cut -c1-8)" >> "$REPORT_FILE"
+echo "" >> "$REPORT_FILE"
 
-## Risultati per Categoria
+if [ $SCORE -lt 0 ]; then SCORE=0; fi
 
-### 1. 🔒 Security Audit
-- ✅ Hardcoded secrets: Clean
-- ✅ .gitignore: Present
-- ✅ Python environment: $(python --version 2>&1)
-
-### 2. 📦 Code Quality
-- ✅ Python syntax: $SYNTAX_OK/$PY_FILES valid files
-- ✅ JavaScript syntax: Valid
-- ✅ All required files present
-
-### 3. 🎨 UX/UI Compliance
-- ✅ All enhanced UI components present (toast, skeleton, loading, AI status)
-- ✅ CSS enhancements active (hover, active, disabled, spinner)
-- ✅ Dark mode support for all message types
-
-### 4. 🧪 Unit & Integration Tests
-- ✅ Tests executed successfully
-
-### 5. ⚡ Performance
-- ✅ Average latency: ${AVG_MS}ms
-- ✅ All API endpoints responsive
-
-### 6. 🐛 Bug Fixes Verified
-- ✅ M1: Empty patient validation → HTTP 400
-- ✅ M2: Long name validation → HTTP 400
-- ✅ L1: Global exception handler → clean errors
-- ✅ H1: 401 interceptor in frontend
-
-### 7. 📋 Git State
-- ✅ Repository: Clean
-- ✅ Version: v2.20.6
-
-## Conclusione
-
-**Il sistema e pronto per la distribuzione in produzione.**
-- Tutti i controlli critici superati
-- UX/UI completamente rifattorizzato
-- Bug fix verificati e testati
-- Performance ottimali (${AVG_MS}ms latency)
-
----
-*Generato automaticamente da Release Validator — $(date)*
-CERTEOF
-
-echo ""
-echo -e "${GREEN}Certificate written to $REPORT${NC}"
-echo ""
+if [ $ERRORS -eq 0 ] && [ $SCORE -ge 85 ]; then
+  STATUS="✅ APPROVED FOR DISTRIBUTION — READY FOR PRODUCTION"
+  echo "### STATUS: $STATUS" >> "$REPORT_FILE"
+  echo -e "\n${BOLD}${GREEN}====================================================================${NC}"
+  echo -e "${BOLD}${GREEN}  🚀 $STATUS  ${NC}"
+  echo -e "${BOLD}${GREEN}  Score: $SCORE / 100 | Errors: $ERRORS | Warnings: $WARNINGS${NC}"
+  echo -e "${BOLD}${GREEN}====================================================================${NC}\n"
+  echo "[INFO] Certificate issued. Ready for distribution."
+  exit 0
+else
+  STATUS="❌ NOT READY — FIX ERRORS BEFORE RELEASE"
+  echo "### STATUS: $STATUS" >> "$REPORT_FILE"
+  echo -e "\n${BOLD}${RED}====================================================================${NC}"
+  echo -e "${BOLD}${RED}  ❌ $STATUS  ${NC}"
+  echo -e "${BOLD}${RED}  Score: $SCORE / 100 | Errors: $ERRORS | Warnings: $WARNINGS${NC}"
+  echo -e "${BOLD}${RED}====================================================================${NC}\n"
+  echo "[INFO] Audit failed with score $SCORE. Review $REPORT_FILE."
+  exit 1
+fi

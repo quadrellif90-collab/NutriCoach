@@ -1,14 +1,14 @@
 /* NutriCoach v2 — Dietowin-style CSS */
-:root{--bg:#f0f4f8;--card:#fff;--primary:#0d9488;--primary-hover:#0f766e;--primary-light:#ccfbf1;--sidebar:#d5ede8;--sidebar-hover:#b8e0d8;--sidebar-text:#1e3a34;--sidebar-active:#0d9488;--text:#1e293b;--text2:#64748b;--border:#e2e8f0;--danger:#ef4444;--warn:#f59e0b;--success:#22c55e;--radius:8px;--shadow:0 1px 3px rgba(0,0,0,.08)}
-[data-theme=dark]{--bg:#0f172a;--card:#1e293b;--primary:#14b8a6;--primary-hover:#0d9488;--primary-light:#134e4a;--sidebar:#1e293b;--sidebar-hover:#334155;--sidebar-text:#f1f5f9;--sidebar-active:#fff;--text:#e2e8f0;--text2:#94a3b8;--border:#334155;--danger:#f87171;--warn:#fbbf24;--success:#4ade80;--shadow:0 1px 3px rgba(0,0,0,.4)}
+:root{--bg:#f0f4f8;--card:#fff;--primary:#0d9488;--primary-hover:#0f766e;--primary-light:#ccfbf1;--sidebar:#d5ede8;--sidebar-hover:#b8e0d8;--sidebar-text:#1e3a34;--sidebar-active:#0d9488;--text:#1e293b;--text2:#64748b;--border:#e2e8f0;--danger:#ef4444;--warn:#f59e0b;--success:#22c55e;--radius:8px;--shadow:0 1px 3px rgba(0,0,0,.08);--bg2:#f1f5f9;--surface2:#e2e8f0}
+[data-theme=dark]{--bg:#0f172a;--card:#1e293b;--primary:#14b8a6;--primary-hover:#0d9488;--primary-light:#134e4a;--sidebar:#1e293b;--sidebar-hover:#334155;--sidebar-text:#f1f5f9;--sidebar-active:#fff;--text:#e2e8f0;--text2:#94a3b8;--border:#334155;--danger:#f87171;--warn:#fbbf24;--success:#4ade80;--shadow:0 1px 3px rgba(0,0,0,.4);--bg2:#16202e;--surface2:#273449}
 *{margin:0;padding:0;box-sizing:border-box}
 html{height:100%}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px;color:var(--text);background:var(--bg);display:flex;min-height:100vh;transition:background .2s,color .2s}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:clamp(12px,0.8vw+4px,15px);color:var(--text);background:var(--bg);display:flex;min-height:100vh;transition:background .2s,color .2s}
 /* SIDEBAR */
 .sidebar{width:220px;background:var(--sidebar);color:var(--sidebar-text);display:flex;flex-direction:column;flex-shrink:0;position:fixed;height:100vh;z-index:100}
 .sidebar .logo{padding:18px;font-size:16px;font-weight:700;color:var(--sidebar-text);border-bottom:1px solid rgba(0,0,0,.08);display:flex;align-items:center;gap:8px}
 .nav-item{padding:10px 18px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:.15s;font-size:13px;border-left:3px solid transparent}
-.nav-item:hover{background:var(--sidebar-hover);color:#fff}
+.nav-item:hover{background:var(--sidebar-hover);color:var(--sidebar-text)}
 .nav-item.active{background:rgba(13,148,136,.15);color:var(--sidebar-active);border-left-color:var(--primary);font-weight:600}
 .sidebar .spacer{flex:1}
 .sidebar .version{padding:12px 18px;font-size:10px;color:var(--text2);border-top:1px solid rgba(0,0,0,.08)}
@@ -43,7 +43,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-seri
 table{width:100%;border-collapse:collapse;font-size:12px}
 th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)}
 th{font-weight:600;color:var(--text2);font-size:11px;background:var(--bg)}
-tr:hover{background:#f8fafc}
+tr:hover{background:var(--bg)}
 /* BUTTONS — enhanced with active, disabled, loading states */
 .btn{padding:6px 14px;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;font-weight:500;transition:all .12s;display:inline-flex;align-items:center;gap:5px;background:var(--card);color:var(--text);user-select:none;position:relative}
 .btn:hover{background:var(--bg)}
@@ -70,6 +70,25 @@ tr:hover{background:#f8fafc}
 .btn-danger:hover{background:#fef2f2}
 .btn-danger:active{transform:scale(.96)}
 .btn-xs{padding:2px 6px;font-size:9px}
+/* Accessibilità: focus visibile per navigazione da tastiera */
+.btn:focus-visible,.tab-btn:focus-visible,.nav-item:focus-visible,.patient-card:focus-visible,.card:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+/* Card cliccabili: feedback hover + active */
+.card{cursor:default}
+.card.clickable,.patient-card,[onclick]{cursor:pointer}
+[onclick]:active{transform:scale(.985)}
+.card:hover{box-shadow:var(--shadow)}
+/* Overlay di attesa globale per operazioni AI/lunghe */
+#ai-overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:2000;display:none;align-items:center;justify-content:center;backdrop-filter:blur(2px)}
+#ai-overlay.on{display:flex}
+#ai-overlay .box{background:var(--card);border-radius:12px;padding:22px 28px;text-align:center;box-shadow:0 12px 48px rgba(0,0,0,.25);max-width:340px}
+#ai-overlay .box .spinner{margin:0 auto 10px}
+#ai-overlay .box .ai-msg{font-size:13px;color:var(--text);font-weight:600}
+#ai-overlay .box .ai-sub{font-size:11px;color:var(--text2);margin-top:4px}
+#ai-overlay .box .ai-dots{display:inline-flex;gap:4px;margin-left:6px}
+#ai-overlay .box .ai-dots i{width:5px;height:5px;border-radius:50%;background:var(--primary);animation:aiPulse 1s infinite}
+#ai-overlay .box .ai-dots i:nth-child(2){animation-delay:.2s}
+#ai-overlay .box .ai-dots i:nth-child(3){animation-delay:.4s}
+@keyframes aiPulse{0%,100%{opacity:.3}50%{opacity:1}}
 /* DIET GRID */
 .diet-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:8px}
 .diet-day{background:var(--card);border-radius:6px;padding:8px;box-shadow:var(--shadow);font-size:11px}
@@ -136,17 +155,24 @@ textarea{resize:vertical;min-height:50px}
   #view{padding:16px}
 }
 @media (max-width:900px){
-  .sidebar{width:100%}
+  /* C1 fix: la sidebar fixed a tutta larghezza copriva il contenuto. 
+     Diventa barra orizzontale in-flow sopra il contenuto. */
+  .sidebar{position:static;width:100%;height:auto;flex-direction:row;align-items:center;overflow-x:auto;z-index:100;flex-wrap:wrap}
+  .sidebar .logo{padding:10px 14px;border-bottom:none}
+  .sidebar .spacer{display:none}
+  .sidebar .version{display:none}
+  .nav-item{padding:10px 12px;white-space:nowrap}
+  .main{margin-left:0;width:100%}
   .topbar{flex-wrap:wrap;padding:10px 14px}
   .topbar input{width:100%}
   .diet-grid{grid-template-columns:repeat(2,1fr)}
   .cmp-table{font-size:11px}
 }
 @media (max-width:768px){
-  .sidebar{width:64px;overflow:hidden}
+  .sidebar{width:100%;overflow-x:auto;height:auto;position:static}
   .sidebar .logo span,.nav-item span:not(.ico),.sidebar .version,.sidebar .spacer{display:none}
   .nav-item{justify-content:center;padding:10px}
-  .main{margin-left:64px;width:100%}
+  .main{margin-left:0;width:100%}
   .diet-grid{grid-template-columns:1fr}
   #view{padding:14px}
   .card{padding:14px}
@@ -178,7 +204,7 @@ textarea{resize:vertical;min-height:50px}
 .panel-widget .val{font-size:15px;font-weight:700}
 .panel-widget .mini{font-size:10px;color:var(--text2);margin-top:2px}
 @media(max-width:900px){#side-panel{position:fixed;right:0;top:0;bottom:0;width:80vw;max-width:320px;box-shadow:-8px 0 24px rgba(0,0,0,.15);z-index:1000}#side-panel.hidden{display:flex;transform:translateX(100%);transition:transform .2s}}
-@media(max-width:768px){#main-body{flex-direction:column}#side-panel{width:100%;max-width:none;border-left:none;border-top:1px solid var(--border);max-height:38vh}}
+@media(max-width:768px){#main-body{flex-direction:column}#side-panel{position:static;top:auto;bottom:auto;right:auto;width:100%;max-width:none;max-height:38vh;border-left:none;border-top:1px solid var(--border);box-shadow:none;transform:none}#side-panel.hidden{display:none}}
 /* SCROLLBAR */
 ::-webkit-scrollbar{width:6px}
 ::-webkit-scrollbar-track{background:transparent}

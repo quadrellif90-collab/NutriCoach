@@ -1,7 +1,7 @@
-# AUTO MEMORIES INDEX — NutriCoach v2.20.6
+# AUTO MEMORIES INDEX — NutriCoach v2.20.16
 
-> **Generated**: 2026-07-29 | **Branch**: `talkcody-pool-0` | **Version**: 2.20.5 (app) / 2.20.6 (git tag)
-> **Status**: 🟢 Production-ready — all 22 features completed, 4 QA rounds passed, 100/100 validated
+> **Generated**: 2026-08-05 | **Branch**: `master` | **Version**: 2.20.16 (app/git tag allineati)
+> **Repo**: `quadrellif90-collab/NutriCoach` | **Status**: 🟢 Production-ready — release v2.20.16 pubblicata
 
 ---
 
@@ -9,270 +9,150 @@
 
 ```
 NutriCoach/
-├── app/                          # FastAPI backend package
-│   ├── __init__.py               # Empty
-│   ├── main.py                   # 🎯 96 REST endpoints (51KB)
-│   ├── database.py               # SQLite schema + CRUD (64KB, 22 tables)
-│   ├── bia_parser_v2.py          # BIA OCR parsing v2 (17KB)
-│   ├── diet_pdf.py               # PDF report generation (11KB)
-│   ├── energy_calc.py            # Calorie/BMR/TDEE calculator (2.7KB)
-│   ├── ocr_engine.py             # Windows OCR + Tesseract fallback (13KB)
-│   ├── ocr_pdf.py                # PDF OCR pipeline (4KB)
+├── app/                          # FastAPI backend package (V2)
+│   ├── main.py                   # 🎯 124 REST endpoints + global exception handler
+│   ├── database.py               # SQLite schema + CRUD (24 tables)
+│   ├── bia_parser_v2.py          # BIA OCR parsing v2
+│   ├── diet_pdf.py               # PDF report generation
+│   ├── energy_calc.py            # Calorie/BMR/TDEE (age_from_birth, bmr_mifflin)
+│   ├── ocr_engine.py             # Windows OCR + Tesseract fallback (parse_bia_pdf: testo nativo → OCR)
+│   ├── ocr_pdf.py                # PDF OCR pipeline
+│   ├── zai_ocr.py                # z.ai OCR (import da main)
 │   ├── static/
-│   │   └── style.css             # SPA stylesheet (10KB, 250+ rules)
+│   │   └── style.css             # SPA stylesheet (breakpoint 1100/900/768, modal fit-content)
 │   └── templates/
-│       ├── index.html            # 📄 SPA — all UI + JS (81KB, 1089 lines, 119 functions)
-│       └── portal.html           # Patient portal (3.8KB)
+│       ├── index.html            # 📄 SPA — all UI + JS (1726 lines, vanilla JS, 0 CDN)
+│       └── portal.html           # Patient portal
 ├── tests/
-│   └── test_nutricoach.py        # 25 test cases (20KB)
-├── docs/
-│   ├── AGGIORNAMENTO.md          # Update guide
-│   └── COSA-FA.md               # Feature documentation
-├── templates/
-│   └── dashboard.html            # Old dashboard template (63KB)
-├── assets/
-│   ├── icon.ico / .icns / .png / .svg
-├── tesseract/
-│   ├── tesseract.exe             # Bundled Tesseract OCR
-│   └── tessdata/
-│       ├── ita.traineddata       # Italian language model
-│       └── eng.traineddata       # English language model
+│   └── test_nutricoach.py        # 25 test cases
+├── templates/                    # Legacy dashboard.html (v1)
+├── assets/                       # icon.ico / .icns / .png / .svg
+├── tesseract/                    # Bundled Tesseract + tessdata (ita, eng)
 ├── .github/workflows/
-│   └── build.yml                 # CI build pipeline (7KB)
-├── version.py                    # Version: 1.7.1  ← needs update to 2.20.6
-├── run.py                        # Dev runner (port 8090)
-├── run_v2.py                     # Explicit runner (port 8400)
+│   └── build.yml                 # CI: build+release su tag v* (~22min, Windows+macOS, Tesseract bundled)
+├── requirements.txt              # fastapi, uvicorn, python-multipart, PyMuPDF, reportlab, pytesseract, Pillow, pywebview, pyinstaller
+├── version.py                    # Versione
+├── run.py                        # Dev runner (porta 8090)
+├── run_v2.py                     # Runner esplicito (porta 8400)
 ├── launcher.py / launcher_v2.py  # Desktop native window launcher
-├── requirements.txt              # pip dependencies
-├── release_validator.sh          # Basic release validator
-├── validate.sh                   # Comprehensive validation suite (13KB)
-├── RELEASE_CERTIFICATE.md        # Latest certificate (100/100)
-├── BUG_REPORT_LATEST.md          # QA round 4 results
-├── MEMORY.md                     # This file
-├── CHANGELOG.md                  # Full changelog v2.0→v2.20.0
-├── README.md                     # Project README
-├── PRESENTAZIONE.md              # Italian presentation deck
-└── *.py (root modules)           # Legacy modules (nutrition engine, etc.)
+├── release_validator.sh          # Release validator
+├── RELEASE_CERTIFICATE.md        # Certificato release
+├── BUG_REPORT_LATEST.md          # Bug report QA
+├── MEMORY.md                     # Questo file
+├── CHANGELOG.md                  # Changelog completo
+└── *.py (root)                   # Moduli legacy (clinical_nutrition, meal_planner, bia_analysis, etc.)
 ```
 
 ---
 
 ## ⚙️ CORE ARCHITECTURE
 
-### FastAPI Backend (`app/main.py`)
-
 | Aspect | Detail |
 |--------|--------|
-| **Framework** | FastAPI 0.133+ |
-| **Host** | `127.0.0.1:8090` (dev) / `8400` (v2 runner) |
-| **API Base** | `/api/` |
-| **Auth** | JWT token in `localStorage.token`, SHA-256 hashed |
-| **CORS** | Restricted to localhost |
-| **Total Routes** | **96** (GET: 48, POST: 33, PUT: 2, PATCH: 2, DELETE: 11) |
+| **Framework** | FastAPI + uvicorn |
+| **Host/Port** | `127.0.0.1:8400` (v2 runner) / `8090` (legacy) |
+| **API Base** | `/api/` — **124 route** (GET ~50, POST ~55, PUT, PATCH, DELETE) |
+| **Auth** | Auto-login all'avvio (main.py ~1448), niente login richiesto; Setup Wizard silenzioso (cartella predefinita) |
 | **Static Mount** | `/static` → `app/static/` |
-| **License** | MIT |
+| **DB** | SQLite in `~/.nutricoach/nutricoach.db` — ⚠️ WAL non checkpointato: si svuota tra riavvii uvicorn se non si fa checkpoint |
 
-### API Route Map (by module)
-
-| Module | Routes | Function |
-|--------|--------|----------|
-| **Auth** | `POST /api/login`, `POST /api/logout`, `GET /api/session` | JWT auth |
-| **Patients** | `GET/POST/PUT /api/patients`, `GET/PUT/DELETE /api/patients/{pid}` | Crud pazienti |
-| **BIA** | `GET/POST /api/patients/{pid}/bia`, `POST /api/patients/{pid}/bia/upload`, `DELETE /api/bia/{bid}` | Body composition |
-| **BIA Scale** | `GET/POST /api/patients/{pid}/scale`, `DELETE /api/scale/{sid}` | Scale measurements |
-| **DIY** | `GET/POST /api/patients/{pid}/diary`, `PATCH /api/diary/{eid}` | Meal diary |
-| **Diet** | `GET /api/patients/{pid}/diet-plans`, `POST /api/patients/{pid}/plan/generate`, `POST /api/patients/{pid}/diet-items`, `DELETE /api/diet-items/{iid}`, `POST /api/patients/{pid}/diet/clear` | Diet plans |
-| **Diet Presets** | `GET /api/diet-presets`, `POST /api/diet-presets/targets` | Templates |
-| **Food DB** | `GET /api/foods`, `GET /api/foods/categories`, `GET /api/foods/{fid}`, `GET /api/foods/{fid}/swaps` | Food catalog |
-| **Recipes** | `GET/POST/DELETE /api/recipes/{rid}`, `POST /api/recipes/{rid}/apply` | Recipe book |
-| **Measurements** | `GET/POST /api/patients/{pid}/measurements` | Anthropometry |
-| **Diary** | `GET/POST /api/patients/{pid}/diary`, `PATCH /api/diary/{eid}` | Food diary |
-| **Chat** | `GET/POST /api/patients/{pid}/messages`, `POST /api/patients/{pid}/messages/read`, `GET /api/patients/{pid}/messages/unread` | Patient chat |
-| **Notifications** | `GET /api/notifications`, `POST /api/notifications/{nid}/read`, `POST /api/notifications/read-all` | In-app + desktop |
-| **Appointments** | `GET/POST /api/appointments` | Calendar |
-| **Adherence** | `GET /api/patients/{pid}/adherence` | Compliance tracking |
-| **Analytics** | `GET /api/stats`, `GET /api/patients/{pid}/body-composition`, `GET /api/patients/{pid}/radar` | Dashboard charts |
-| **Export** | `GET /api/patients/{pid}/diet/pdf`, `GET /api/patients/{pid}/shopping-list/pdf`, `GET /api/patients/{pid}/bia-trend/pdf` | PDF reports |
-| **Backup** | `POST /api/backup`, `GET /api/backup/auto` | Auto/manual backup |
-| **Import/Export** | `GET /api/export/patients`, `GET /api/export/patient/{pid}`, `POST /api/import/patient` | Data migration |
-| **Portal** | `GET /portal/{token}`, `GET /api/portal/{token}/data`, `GET /api/portal/{token}/pdf` | Patient portal |
-| **Settings** | `GET/POST /api/settings` | Brand/theme |
-| **Drugs** | `GET /api/drugs`, `GET /api/drugs/all` | Drug-nutrient interactions |
-| **Questionnaires** | `GET /api/questionnaires`, `GET/POST /api/patients/{pid}/questionnaires` | Clinical quizzes |
-| **Symptoms** | `GET/POST /api/patients/{pid}/symptoms`, `DELETE /api/symptoms/{sid}`, `GET /api/patients/{pid}/symptoms/summary` | Symptom tracking |
-| **Progress Notes** | `GET/POST /api/patients/{pid}/progress-notes`, `DELETE /api/progress-notes/{nid}` | Clinical notes |
-| **Wearable** | `GET/POST /api/patients/{pid}/wearable`, `DELETE /api/wearable/{wid}` | Garmin/Fitbit sync |
-| **Fitness** | `GET/POST /api/patients/{pid}/fitness`, `DELETE /api/fitness/{fid}` | Strava/TrainingPeaks |
-| **Version** | `GET /api/version` | Health check |
+### API Route Highlights (v2.20.16)
+| Modulo | Route principali |
+|--------|------------------|
+| **Import BIA** | `POST /api/patients/{pid}/import`, `POST /api/patients/{pid}/import/confirm`, `POST /api/ocr/local/process` (OCR locale: testo nativo → Windows OCR/Tesseract, asyncio.to_thread), `/api/ocr/zai/*` (z.ai cloud) |
+| **Plan** | `POST /api/patients/{pid}/plan/generate` (piani su misura, patologie) |
+| **BIA/Radar** | `GET /api/patients/{pid}/body-composition`, `/radar`, `/bia-trend`, `/energy-needs` |
+| **Dieta** | `/api/patients/{pid}/diet-macros/{day}`, `/diet/pdf`, `/shopping-list`, `/diet-templates` |
+| **Foods** | `/api/foods`, `/api/foods/categories`, `/api/foods/{fid}/swaps` |
+| **Recipes** | `/api/recipes` CRUD + `/apply` |
+| **Portal** | `/portal/{token}`, `/api/portal/{token}/data|pdf`, `POST /api/patients/{pid}/portal-token` |
+| **Scale/Wearable/Fitness** | CRUD `/api/patients/{pid}/scale|wearable|fitness` |
+| **Export/Backup** | `/api/export/patients`, `/api/export/patient/{pid}`, `/api/import/patient`, `/api/backup`, `/api/backup/auto` |
+| **Version** | `GET /api/version` → `{"version":"2.20.16","platform":"win32"}` |
 
 ---
 
-## 🗄️ DATABASE SCHEMA (`app/database.py`)
+## 🗄️ DATABASE SCHEMA (app/database.py)
 
-| Table | Purpose | Key Fields |
-|-------|---------|-----------|
-| `patients` | Patient profiles | id, name, sex, birth_date, goal, sport, pathologies, language |
-| `categories` | Patient grouping | id, name, color |
-| `food_catalog` | Food nutrition DB | id, name, category, kcal, protein, fat, carbs, fiber, sugars, salt |
-| `recipes` | Recipe book | id, name, ingredients (JSON), instructions |
-| `diet_plans` | Generated diet plans | id, patient_id, date, macros, condition |
-| `diet_items` | Detailed meal items | id, plan_id, day, meal, food, grams |
-| `diet_templates` | Preset templates | id, name, type, config (JSON) |
-| `bia_readings` | BIA measurements | id, patient_id, date, weight, bodyFat, pha, hydration, muscle, bmr |
-| `scale_measurements` | Impedance scale | id, patient_id, date, weight, bf_pct, muscle_pct, water_pct |
-| `wearable_data` | Wearable device data | id, patient_id, date, steps, hr_avg, hr_rest, sleep, stress |
-| `fitness_imports` | Fitness activity import | id, patient_id, date, activity_type, duration, calories |
-| `measurements` | Anthropometry | id, patient_id, date, weight_kg, waist_cm, hip_cm, skinfolds |
-| `appointments` | Appointments | id, patient_id, date, time, type, notes |
-| `notifications` | In-app notifications | id, patient_id, title, body, read, created |
-| `app_notifications` | System notifications | id, user_id, title, message, type, is_read |
-| `meal_diary` | Meal consumption log | id, patient_id, date, meal, food, consumed, mood |
-| `messages` | Patient chat | id, patient_id, sender, text, created, is_read |
-| `medications` | Drug management | id, name, dosage, interactions (JSON) |
-| `quiz_questions` | Clinical questionnaires | id, question, type, options (JSON) |
-| `quiz_answers` | Questionnaire responses | id, quiz_id, patient_id, answers (JSON) |
-| `documents` | File uploads | id, patient_id, filename, type, data (BLOB) |
-| `symptoms` | Symptom tracking | id, patient_id, date, symptom, severity |
-| `progress_notes` | Clinical progress | id, patient_id, date, note |
+| Table | Purpose |
+|-------|---------|
+| `patients` | Profili (name, sex, birth_date, goal, sport, pathologies, language, height) |
+| `bia_readings` | Misurazioni BIA (weight, pha, hydration, muscle, bmr, tbw, ecw, icw, ffm, smm, asmm, bcm, bf_pct…) |
+| `measurements` | Antropometria (weight_kg, waist_cm, hip_cm, skinfolds) |
+| `anthropometry` | Antropometria v2 |
+| `diet_plans` / `diet_items` | Piani alimentari + item |
+| `diet_templates` | Template preset |
+| `food_catalog` | Database alimenti (kcal, protein, fat, carbs, fiber, sugars, salt) |
+| `recipes` | Ricettario (ingredients JSON) |
+| `appointments` | Appuntamenti |
+| `notifications` / `app_notifications` | Notifiche |
+| `documents` | File upload (BLOB) |
+| `symptoms` / `progress_notes` | Clinico |
+| `categories` / `groups_t` / `patient_groups` | Grouping |
+| `_app_version` | Version tracker |
 
 ---
 
-## 🎨 FRONTEND SPA (`app/templates/index.html`)
+## 🎨 FRONTEND SPA (app/templates/index.html)
 
-### Stats
-- **1089 lines**, 79,684 chars
-- **119 JavaScript functions** in inline `<script>`
-- **344** `<div>` elements, **115** `<button>` elements, **74** `<input>` elements
-- **37** onclick handlers, **132** unique IDs, **334** class references
-- **0** external JS/CDN dependencies — 100% vanilla JS
-
-### UI Module Map
-
-| Module | Functions | Description |
-|--------|-----------|-------------|
-| **Core** | `qs`, `qsa`, `toast`, `jget`, `jpost`, `jdel`, `jpatch`, `esc` | DOM helpers + HTTP + sanitize |
-| **Auth** | `init`, `doLogin`, `doLogout`, `clr` | Session management, login overlay |
-| **Navigation** | `nav`, `render`, `returnToDashboard` | SPA routing, view switching |
-| **Theme** | `toggleTheme`, `setupBrand` | Dark/light mode, brand customization |
-| **Dashboard** | `loadDashboard`, `showAdherence`, `showStats`, `doBackup`, `exportPatients` | KPI cards, charts, backup |
-| **Patients** | `loadPazienti`, `showNewPatient`, `saveNewPatient`, `openPatient`, `deletePatient`, `onSearch` | Patient CRUD + search |
-| **Patient Tabs** | `switchTab`, `loadAnamnesi`, `showAnamnesiForm`, `saveAnamnesi` | 19 patient sub-tabs |
-| **BIA** | `loadPatientBIA`, `showBIAForm`, `saveBIA`, `loadBIA`, `loadBIAReading`, `showBIAHubForm`, `saveBIAHub`, `uploadBIAHub`, `deleteBIARow` | BIA CRUD + OCR upload |
-| **Diet** | `loadPatientDieta`, `showAddFood`, `onFoodSearch`, `showSwaps`, `selectFood`, `saveAddFood`, `showGenPlan`, `genPlan`, `savePlanTemplate`, `doSavePlanTemplate`, `calcEnergy`, `onPresetChange`, `loadDieta` | Diet plan generation |
-| **Food Database** | `searchDrugs` | Drug-nutrient interaction search |
-| **Recipes** | `loadRicettario`, `showAddRecipe`, `saveRecipe`, `delRecipe`, `applyRecipe`, `doApplyRecipe` | Recipe CRUD |
-| **Diary** | `loadDiario`, `setMood`, `saveSelfReport`, `markMeal`, `addDiaryEntry` | Meal diary + self-report |
-| **Chat** | `loadChat`, `sendChatMsg` | Patient messaging |
-| **Questionnaires** | `loadQuestionari`, `showQuestionnaire`, `saveQuestionnaire` | Clinical quizzes |
-| **Appointments** | `loadAgenda`, `showGlobalAppt`, `saveGlobalAppt`, `loadAppuntamenti`, `showApptForm`, `saveAppt` | Calendar |
-| **Notifications** | `loadNotifiche`, `showNotificaForm`, `saveNotifica`, `startNotifPoll`, `pollNotifs`, `toggleNotifDropdown`, `closeNotifDropdown`, `markNotifRead`, `markAllNotifRead` | Bell + dropdown + polling |
-| **Scale** | `loadBilancia`, `addBilancia`, `saveBilancia` | Impedance scale CRUD |
-| **Wearable** | `loadWearable`, `addWearable`, `saveWearable` | Device data CRUD |
-| **Fitness** | `loadFitness`, `addFitness`, `saveFitness` | Activity imports |
-| **Archive** | `loadArchivio`, `showCompare`, `runCompare` | Patient comparison |
-| **Charts** | `showRadar`, `trendSVG`, `int`, `float`, `biaLastVal` | SVG charts + helpers |
-| **Settings** | `showSettings`, `saveSettings` | Brand, theme, profile |
-| **Onboarding** | `startOnboarding` | 3-step interactive tour |
-| **Modals** | `modal`, `closeModal`, `showConfirm` | Reusable overlay system |
-
----
-
-## 🔧 UI/UX COMPONENTS (Refactored)
-
-| Component | Status | Description |
-|-----------|--------|-------------|
-| `toast()` | ✅ | 4 types: success, error, warn, info — with icons + auto-dismiss |
-| `showConfirm()` | ✅ | Custom confirm dialog with danger mode |
-| `modal()` | ✅ | Reusable overlay with backdrop click-to-close |
-| Skeleton loader | ✅ | Loading states during diet generation, BIA form |
-| Onboarding tour | ✅ | 3-step overlay for first-time users |
-| Tooltips | ✅ | 10 `title` attributes on nav + buttons |
-| Brand customization | ✅ | Logo, clinic name, theme color |
-| Empty states | ✅ | Descriptive messages when no data |
-| Theme toggle | ✅ | Dark/light mode with localStorage persistence |
-| maxLength=60 | ✅ | Name input constraint |
-| Hover/active states | ✅ | CSS transitions on buttons + cards |
+- **1726 righe**, vanilla JS inline (0 CDN), Chart.js NON usato (SVG custom)
+- **Functions core**: `qs/qsa/toast/jget/jpost/jdel/jpatch/esc`, `modal/closeModal/showConfirm`
+- **UI scale**: `ncApplyZoom` — scala automatica in base alla larghezza finestra (w/1440, clamp 0.8–1.2), resize listener `ncOnResize`; NIENTE zoom manuale a percentuali (rimosso in v2.20.16)
+- **Modali**: `width:fit-content` + `max-width:min(94vw,640px)` + `overflow-wrap:anywhere` (auto-size al testo, word-wrap testi lunghi); su ≤768px fullscreen + `min-width:0!important`
+- **Sidebar**: divisore trascinabile (`sidebar-resizer`, persistito localStorage)
+- **Side panel**: `#side-panel` paziente fisso + toggle (`toggleSidePanel`/`refreshSidePanel`, localStorage `nc-side-panel`)
+- **Dashboard widget**: personalizzabili (Ultimi pazienti/Trend/Statistiche)
+- **Import OCR locale**: `localOCRSubmit(file)` → POST multipart → anteprima DIRECT (bypass testo intermedio — fix v2.20.16: prima passava da testo→import e perdeva campi)
+- **Setup Wizard**: silenzioso (backup dir predefinita, nessuna UI)
+- **pccConfirm-style**: `showConfirm` per conferme
 
 ---
 
 ## 🔌 CRITICAL MODULES (root *.py)
 
-| Module | Lines | Purpose |
-|--------|-------|---------|
-| `clinical_nutrition.py` | 122,933 | Clinical condition knowledge base + recommendations |
-| `nutrition_db.py` | 52,698 | Food nutrition database (212+ Italian foods) |
-| `meal_planner.py` | 42,924 | Automatic meal plan generator |
-| `db.py` | 43,678 | Legacy database (v1) |
-| `nutrition_engine.py` | 5,879 | Macro/micro computation engine |
-| `diet_parser.py` | 7,606 | Diet PDF parser (group alternatives) |
-| `bia_parser.py` | 7,011 | BIA text parser (regex-based) |
-| `charts.py` | 3,167 | SVG chart generation |
-| `followup.py` | 4,711 | Follow-up analysis engine |
-| `auth.py` | 2,539 | Authentication module |
-| `pdf_export.py` | 12,386 | PDF report builder |
-| `anthropometry.py` | 5,729 | Anthropometric computations |
-| `sport_science.py` | 13,007 | Sports science engine |
-| `diet_presets.py` | 4,364 | Preset macros (cut, bulk, maintenance) |
-| `notifications.py` | 4,337 | Notification engine |
-| `ocr.py` | 6,153 | OCR image processing |
+| Module | Purpose |
+|--------|---------|
+| `clinical_nutrition.py` | Knowledge base condizioni cliniche + raccomandazioni |
+| `nutrition_db.py` | DB alimenti italiani |
+| `meal_planner.py` | Generatore piani |
+| `bia_analysis.py` | Analisi BIA — espone `calculate(d, info)` (dict diretto) e `summarize()` |
+| `bia_parser.py` / `app/bia_parser_v2.py` | Parser testo BIA |
+| `charts.py` | SVG chart |
+| `pdf_export.py` / `pdf_sport_science.py` | PDF report |
+| `auth.py` | Auth legacy |
+| `ocr.py` / `app/ocr_engine.py` | OCR pipeline |
+
+---
+
+## 🧪 TEST & VERIFICA
+
+| Tipo | Comando | Note |
+|------|---------|------|
+| Unit | `PYTHONPATH=. pytest tests/ -q` | 25 test (brace balance, node --check JS, parser) |
+| JS | `python -c "import re; ...extract <script>..." + node --check` | Estrarre script inline da index.html |
+| E2E OCR | POST `/api/ocr/local/process` con PDF Bodygram | 14 campi: peso 71.4, PhA 7.4, TBW 43.0, BF% 20.4 |
+| HTTP | `curl -s http://127.0.0.1:8400/api/version` | Health check |
 
 ---
 
 ## 🔐 SECURITY & CONFORMANCE
 
-- **Auth**: JWT in `localStorage` (no cookies), SHA-256 password hashing
-- **CORS**: Restricted to localhost only (`127.0.0.1`)
-- **XSS**: `esc()` function sanitizes all user output
-- **Secrets**: No hardcoded API keys or secrets in source
-- **Data**: 100% offline — SQLite in `~/.nutricoach/`
+- Auth: auto-login (overlay nascosto), SHA-256 hash
+- CORS: localhost only
+- XSS: `esc()` su tutto l'output utente
+- Nessun secret hardcoded
+- Dati 100% offline (SQLite locale)
 
 ---
 
-## 📊 TEST SUITE (`tests/test_nutricoach.py`)
+## 🏷️ VERSION HISTORY (recenti)
 
-- **25 tests**: diet parser, BIA parser, nutrition DB, meal planner, anthropometry, charts, PDF export, auth, notifications, UI JS validation
-- **Critical test**: `test_ui_script_brace_balance` — prevents UI-deadly JS syntax errors
-- **Critical test**: `test_ui_script_node_check` — `node --check` on inline JS
-- **Critical test**: `test_ui_script_has_no_literal_backslash_n_corruption` — prevents encoding issues
-
----
-
-## 🚀 DEPLOYMENT
-
-| Method | Command | Port |
-|--------|---------|------|
-| Dev server | `python run.py` | 8090 |
-| V2 runner | `python run_v2.py` | 8400 |
-| Desktop app | `python launcher.py` | 8090 (native window) |
-| PyInstaller | `pyinstaller NutriCoach.spec` | Standalone EXE |
-| Validation | `bash release_validator.sh` | Audit + certificate |
+| Tag | Descrizione |
+|-----|-------------|
+| `v2.20.16` | OCR locale fix (bypass testo intermedio, 14 campi), PDF testo nativo pre-OCR, auto-scale UI, modal fit-content |
+| `v2.20.15` | UX fase 2: wizard silenzioso, zoom font (poi rimosso), responsive, modali resize, widget pannello+dashboard |
+| `v2.20.14` | Import BIA Bodygram OCR locale + finestra dati mancanti (BMR Mifflin), radar verificato |
 
 ---
 
-## 📝 FIXES APPLIED IN v2.20.5→v2.20.6
-
-| Bug | Fix | Impact |
-|-----|-----|--------|
-| M1 — Login overlay invisible | Null guard in boot code | 🔑 User can re-login after token removal |
-| M2 — maxLength nome | `maxlength=60` on input | 📝 Client-side validation |
-| L1 — Color default | `#6366f1` → `#0d9488` | 🎨 Theme consistency |
-| L2 — Loading genPlan | Skeleton context | ⏳ Visual feedback |
-| Version alignment | `version.py` updated to match `app/main.py` | 📋 Consistency |
-
----
-
-## 🏷️ VERSION HISTORY (Git)
-
-| Tag | Date | Description |
-|-----|------|-------------|
-| `v2.20.6` | 2026-07-29 | Auto push — current |
-| `v2.20.5` | 2026-07-29 | Version/UI coherence |
-| `v2.20.4` | 2026-07-29 | Version bump + BIA fix |
-| `v2.20.3` | 2026-07-29 | Batch bugfix QA round 2 |
-| `v2.20.2` | 2026-07-29 | Batch bugfix QA round 1 |
-| `v2.20.1` | 2026-07-29 | JS syntax regression fix |
-| `v2.20.0` | 2026-07-28 | All 22/22 features complete |
-
----
-
-*Last updated: 2026-07-29 by Universal Skills Agent*
+*Aggiornato: 2026-08-05 — release master v2.20.16*

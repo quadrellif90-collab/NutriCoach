@@ -12,19 +12,54 @@ import app.database as db
 from app import energy_calc
 import clinical_nutrition, meal_planner, bia_parser, diet_presets, anthropometry, ocr, bia_analysis
 
-app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.20.16")
+app = FastAPI(title="NutriCoach v2 — Dietowin", version="2.20.17")
 
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 
 # Global exception handler — converts unhandled errors to clean JSON responses
+import logging as _logging
+_logger = _logging.getLogger("nutricoach")
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    # Mantiene lo status reale (400/404/413...) e il messaggio originale
+    return JSONResponse(status_code=exc.status_code, content={"ok": False, "error": exc.detail})
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    if isinstance(exc, HTTPException):
-        return JSONResponse(status_code=exc.status_code, content={"ok": False, "error": exc.detail})
+    # B1/B2/B3 fix: errori interni → 500 (non 400 mascherato), loggati, senza leak di dettagli
+    _logger.exception("Errore interno su %s %s: %s", request.method, request.url.path, exc)
     return JSONResponse(
-        status_code=400,
-        content={"ok": False, "error": "Richiesta non valida", "detail": str(exc)[:200]}
+        status_code=500,
+        content={"ok": False, "error": "Errore interno del server. Riprova o contatta l'assistenza."}
     )
+
+# M17/B11 fix: errori di validazione FastAPI (422) → messaggi italiani
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    _first = exc.errors()[0] if exc.errors() else {}
+    _loc = _first.get("loc", [])
+    _field = str(_loc[-1]) if _loc else "campo"
+    _msg = "Dati non validi"
+    if _first.get("type") == "int_parsing":
+        _msg = f"Il campo '{_field}' deve essere un numero intero"
+    elif _first.get("type") == "float_parsing":
+        _msg = f"Il campo '{_field}' deve essere un numero"
+    elif _first.get("type") == "missing":
+        _msg = f"Il campo '{_field}' è obbligatorio"
+    elif _first.get("type") == "string_type":
+        _msg = f"Il campo '{_field}' deve essere testo"
+    return JSONResponse(status_code=422, content={"ok": False, "error": _msg})
+
+# B10 fix: 404 degli endpoint inesistenti → messaggio italiano uniforme
+@app.exception_handler(StarletteHTTPException)
+async def not_found_handler(request: Request, exc: StarletteHTTPException):
+    if exc.status_code == 404:
+        return JSONResponse(status_code=404, content={"ok": False, "error": "Endpoint non trovato"})
+    return JSONResponse(status_code=exc.status_code, content={"ok": False, "error": exc.detail})
 
 # Servi file statici (CSS)
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
@@ -101,11 +136,36 @@ async def api_check_preset_compatibility(request: Request):
 
 @app.post("/api/patients/{pid}/plan/generate")
 async def api_generate_plan(pid: int, request: Request):
-    b = await request.json()
+    try:
+        b = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Il corpo della richiesta deve essere JSON valido")
     targets = b.get("targets", {}) or {}
     options = b.get("options", {}) or {}
     preset = b.get("preset") or options.get("preset")
-    client = db.get_patient(pid) or {}
+    client = db.get_patient(pid)
+    if not client:
+        raise HTTPException(status_code=404, detail="Paziente non trovato")
+    # M13 fix: check esistenza paziente fatto sopra → 404 invece di FK constraint
+    # M11/M12 fix: range kcal validi
+    kcal_raw = targets.get("kcal", 2000)
+    try:
+        kcal = float(kcal_raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Il target calorico deve essere un numero")
+    if kcal <= 0:
+        raise HTTPException(status_code=400, detail="Il target calorico deve essere maggiore di zero")
+    if kcal > 10000:
+        raise HTTPException(status_code=400, detail="Il target calorico non può superare 10000 kcal")
+    targets["kcal"] = kcal
+    # M14 fix: conditions deve essere una lista
+    req_conds = options.get("conditions")
+    if req_conds is not None and not isinstance(req_conds, list):
+        raise HTTPException(status_code=400, detail="Le condizioni cliniche devono essere una lista")
+    # M10 fix: preset sconosciuto → 400
+    _KNOWN_PRESETS = set(diet_presets.PRESETS.keys()) if hasattr(diet_presets, "PRESETS") else set()
+    if preset and preset not in ("personalizzato", "none", "") and _KNOWN_PRESETS and preset not in _KNOWN_PRESETS:
+        raise HTTPException(status_code=400, detail=f"Preset '{preset}' non valido")
     parsed = clinical_nutrition.parse_pathologies(client.get("pathologies"))
     conditions = list(parsed["conditions"])
     req_conds = options.get("conditions") or []
@@ -117,7 +177,6 @@ async def api_generate_plan(pid: int, request: Request):
     if parsed["allergies"]:
         allergies = (allergies + "," + ",".join(parsed["allergies"])).strip(",")
     if preset and preset not in ("personalizzato", "none", ""):
-        kcal = float(targets.get("kcal", 2000))
         w = client.get("weight_kg")
         w = float(w) if w else None
         pt = diet_presets.preset_targets(preset, kcal, w)
@@ -544,15 +603,25 @@ async def api_smart_import(pid: int, request: Request):
     Rileva automaticamente il tipo (BIA, Antropometria, Dieta, Alimenti) e restituisce
     l'anteprima mappata per conferma utente.
     """
-    b = await request.json()
+    # M9 fix: paziente inesistente → 404 (prima rispondeva 200 in anteprima)
+    if not db.get_patient(pid):
+        raise HTTPException(status_code=404, detail="Paziente non trovato")
+    try:
+        b = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Il corpo della richiesta deve essere JSON valido")
+    if not isinstance(b, dict):
+        raise HTTPException(status_code=400, detail="Il corpo della richiesta deve essere un oggetto JSON")
     text = b.get("text", "")
+    if not isinstance(text, str):
+        raise HTTPException(status_code=400, detail="Il testo da importare deve essere una stringa")
     if not text or not text.strip():
         raise HTTPException(400, "Testo vuoto")
 
     parsed = _parse_import_text(text)
 
-    # Se bassa confidenza o unknown, restituisci per review manuale
-    if parsed["type"] in ("unknown", "json") and parsed.get("confidence", 0) < 0.6:
+    # M8 fix: soglia di revisione per TUTTI i tipi (prima solo unknown/json)
+    if parsed.get("confidence", 0) < 0.6:
         return {
             "ok": True,
             "needs_review": True,
@@ -743,15 +812,21 @@ async def api_zai_process(pid: int, file: UploadFile = File(...)):
         fname = f"zai_{_timestamp()}_{file.filename or 'upload'}"
         path = os.path.join(UPLOAD_DIR, fname)
         total = 0
-        with open(path, "wb") as out:
-            while True:
-                chunk = await file.read(1024 * 1024)
-                if not chunk:
-                    break
-                total += len(chunk)
-                if total > MAX_UPLOAD_SIZE:
-                    raise HTTPException(413, "File troppo grande (max 10 MB)")
-                out.write(chunk)
+        try:
+            with open(path, "wb") as out:
+                while True:
+                    chunk = await file.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > MAX_UPLOAD_SIZE:
+                        raise HTTPException(413, "File troppo grande (max 10 MB)")
+                    out.write(chunk)
+        except HTTPException:
+            # B5 fix: rimuovi il file parziale orfano
+            try: os.remove(path)
+            except OSError: pass
+            raise
         dati = zai_ocr.carica_e_estrai(path)
         md, tables = zai_ocr.estrai_testo_e_tabelle(dati)
         return {"ok": True, "markdown": (md or "")[:20000], "tables": tables[:5],
@@ -776,15 +851,21 @@ async def api_ocr_local_process(pid: int, file: UploadFile = File(...)):
         fname = f"local_{_timestamp()}_{file.filename or 'upload'}"
         path = os.path.join(UPLOAD_DIR, fname)
         total = 0
-        with open(path, "wb") as out:
-            while True:
-                chunk = await file.read(1024 * 1024)
-                if not chunk:
-                    break
-                total += len(chunk)
-                if total > MAX_UPLOAD_SIZE:
-                    raise HTTPException(413, "File troppo grande (max 10 MB)")
-                out.write(chunk)
+        try:
+            with open(path, "wb") as out:
+                while True:
+                    chunk = await file.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > MAX_UPLOAD_SIZE:
+                        raise HTTPException(413, "File troppo grande (max 10 MB)")
+                    out.write(chunk)
+        except HTTPException:
+            # B5 fix: rimuovi il file parziale orfano
+            try: os.remove(path)
+            except OSError: pass
+            raise
         with open(path, "rb") as f:
             _pre_bytes = f.read()
         # Windows OCR usa asyncio.run(): esegui in un thread fuori dall'event loop
@@ -849,18 +930,23 @@ def api_food_swaps(fid: int, limit: int = 5):
 @app.get("/api/patients/{pid}/body-composition")
 def api_body_comp(pid: int):
     """Calcola FFMI, FMI, WHR, BMI per il paziente."""
+    if not db.get_patient(pid):
+        raise HTTPException(404, "Paziente non trovato")
     results = db.get_body_composition_data(pid)
     if not results:
-        raise HTTPException(404, "Dati insufficienti (servono peso + altezza + BF%)")
+        return {"metrics": [], "patient_id": pid}
     return results
 
 
 @app.get("/api/patients/{pid}/radar")
 def api_radar(pid: int):
     """Dati per radar chart confronto metriche BIA (valore, min, max)."""
+    # B9 fix: distingue paziente inesistente (404) da paziente senza dati BIA (200 vuoto)
+    if not db.get_patient(pid):
+        raise HTTPException(404, "Paziente non trovato")
     comp = db.get_body_composition_data(pid)
     if not comp:
-        raise HTTPException(404, "Dati insufficienti")
+        return {"metrics": [], "patient_name": "", "patient_id": pid}
     radar = {
         "metrics": [],
         "patient_name": comp.get("name", ""),
@@ -946,11 +1032,34 @@ def api_get_recipe(rid: int):
 
 @app.post("/api/recipes")
 async def api_create_recipe(request: Request):
-    b = await request.json()
+    try:
+        b = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Il corpo della richiesta deve essere JSON valido")
+    if not isinstance(b, dict):
+        raise HTTPException(status_code=400, detail="Il corpo della richiesta deve essere un oggetto JSON")
+    # M16 fix: validazione body ricetta
+    name = (b.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Il nome della ricetta è richiesto")
+    if len(name) > 120:
+        raise HTTPException(status_code=400, detail="Il nome della ricetta non può superare 120 caratteri")
+    ingredients = b.get("ingredients", [])
+    if not isinstance(ingredients, list):
+        raise HTTPException(status_code=400, detail="Gli ingredienti devono essere una lista")
+    instructions = b.get("instructions", "")
+    if not isinstance(instructions, str):
+        instructions = str(instructions)
+    try:
+        servings = int(b.get("servings", 4))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Le porzioni devono essere un numero")
+    macros = b.get("macros")
+    if macros is not None and not isinstance(macros, dict):
+        raise HTTPException(status_code=400, detail="I macro devono essere un oggetto")
     rid = db.create_recipe(
-        b.get("name", "Ricetta"), b.get("ingredients", []),
-        b.get("instructions", ""), b.get("servings", 4),
-        b.get("category", ""), b.get("macros")
+        name, ingredients, instructions, servings,
+        b.get("category", ""), macros
     )
     return {"ok": True, "id": rid}
 
@@ -1375,25 +1484,54 @@ def api_get_patient(pid: int):
 
 @app.post("/api/patients")
 async def api_create_patient(request: Request):
-    b = await request.json()
+    try:
+        b = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Il corpo della richiesta deve essere JSON valido")
+    if not isinstance(b, dict):
+        raise HTTPException(status_code=400, detail="Il corpo della richiesta deve essere un oggetto JSON")
     name = (b.get("name") or "").strip()
     if not name:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=400, detail="Il nome del paziente e richiesto")
+        raise HTTPException(status_code=400, detail="Il nome del paziente è richiesto")
     if len(name) > 200:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=400, detail="Il nome del paziente non puo superare 200 caratteri")
-    pid = db.add_patient(name, b.get("sex","M"), b.get("phone",""), b.get("email",""),
+        raise HTTPException(status_code=400, detail="Il nome del paziente non può superare 200 caratteri")
+    sex = b.get("sex", "M")
+    if sex not in ("M", "F", "Maschile", "Femminile", "Altro"):
+        raise HTTPException(status_code=400, detail="Il sesso deve essere M, F o Altro")
+    # Validazione preventiva di tutti i campi PRIMA dell'insert (B6: niente side effect)
+    mpd = b.get("meals_per_day")
+    if mpd is not None:
+        try:
+            mpd = int(mpd)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="meals_per_day deve essere un numero")
+        if mpd < 3 or mpd > 7:
+            raise HTTPException(status_code=400, detail="Il numero di pasti deve essere tra 3 e 7")
+    birth_date = b.get("birth_date")
+    if birth_date:
+        import datetime as _dt
+        try:
+            _dt.datetime.strptime(birth_date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="La data di nascita deve essere nel formato AAAA-MM-GG")
+    # Sanitizzazione base anti-XSS (H8): rimuove i tag HTML dal nome
+    import re as _re
+    name = _re.sub(r"<[^>]+>", "", name).strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Il nome del paziente è richiesto")
+    pid = db.add_patient(name, sex, b.get("phone",""), b.get("email",""),
                          b.get("goal",""), b.get("sport",""), b.get("notes",""), b.get("allergies",""),
                          b.get("category_id"))
     # language can be updated separately
     lang = b.get("language")
     if lang:
         db.update_patient(pid, language=lang)
-    # meals_per_day can be updated separately
-    mpd = b.get("meals_per_day")
+    # meals_per_day can be updated separately (già validato)
     if mpd is not None:
-        db.update_patient(pid, meals_per_day=int(mpd))
+        db.update_patient(pid, meals_per_day=mpd)
+    # H1 fix: birth_date ora salvata (prima veniva scartata in silenzio)
+    if birth_date:
+        db.update_patient(pid, birth_date=birth_date)
     return {"ok": True, "id": pid}
 @app.put("/api/patients/{pid}")
 async def api_update_patient(pid: int, request: Request):
@@ -1975,7 +2113,7 @@ def api_delete_progress(nid: int):
 
 @app.get("/api/version")
 def api_version():
-    _, V = os.path.dirname(__file__), "2.20.16"
+    _, V = os.path.dirname(__file__), "2.20.17"
     return {"version": V, "platform": sys.platform}
 
 # ─── UPDATE CHECK (GitHub Releases) ──────────────────────────────────────
@@ -2000,7 +2138,7 @@ def _write_update_cache(data):
 def _cache_fresh(cache):
     if not cache:
         return False
-    if cache.get("current") != "2.20.16":
+    if cache.get("current") != "2.20.17":
         return False
     try:
         from datetime import datetime, timezone
@@ -2021,8 +2159,8 @@ def api_update_check(force: int = 0):
 
     if not force and _cache_fresh(cache):
         cache["cached"] = True
-        cache["current"] = "2.20.16"
-        cache["update_available"] = cache.get("latest", "0") > "2.20.16"
+        cache["current"] = "2.20.17"
+        cache["update_available"] = cache.get("latest", "0") > "2.20.17"
         return cache
 
     try:
@@ -2049,9 +2187,9 @@ def api_update_check(force: int = 0):
                 break
 
         payload = {
-            "current": "2.20.16",
+            "current": "2.20.17",
             "latest": tag,
-            "update_available": "2.20.16" < tag,
+            "update_available": "2.20.17" < tag,
             "release_url": rel.get("html_url", ""),
             "download_url": download_url,
             "asset_name": asset_name,
@@ -2068,10 +2206,10 @@ def api_update_check(force: int = 0):
         if cache:
             cache["cached"] = True
             cache["error"] = str(e)
-            cache["current"] = "2.20.16"
-            cache["update_available"] = cache.get("latest", "0") > "2.20.16"
+            cache["current"] = "2.20.17"
+            cache["update_available"] = cache.get("latest", "0") > "2.20.17"
             return cache
-        return {"current": "2.20.16", "latest": None, "update_available": False,
+        return {"current": "2.20.17", "latest": None, "update_available": False,
                 "release_url": None, "download_url": None, "asset_name": None,
                 "platform": plat, "checked_at": now, "cached": False,
                 "error": str(e), "release_body": None}
