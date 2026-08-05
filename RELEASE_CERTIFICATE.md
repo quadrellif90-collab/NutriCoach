@@ -1,16 +1,16 @@
 # 🛡️ CERTIFICATO DI IDONEITÀ ALLA DISTRIBUZIONE
-Data Validazione: mer  5 ago 2026 10:30:51
-Versione: 2.20.16
+Data Validazione: mer  5 ago 2026 10:39:00
+Versione: 2.20.17
 Branch: master
-Commit: e4e765f2
+Commit: 157ac43b
 ---
 
 ## Audit Result
-* **Score**: **85 / 100**
+* **Score**: **100 / 100**
 * **FAIL**: 0
-* **WARN**: 3
-* **Version**: v2.20.16
+* **WARN**: 0
+* **Version**: v2.20.17
 * **Branch**: master
-* **Commit**: e4e765f2
+* **Commit**: 157ac43b
 
 ### STATUS: ✅ APPROVED FOR DISTRIBUTION — READY FOR PRODUCTION
